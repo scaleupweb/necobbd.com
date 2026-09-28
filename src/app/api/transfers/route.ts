@@ -1,36 +1,31 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { TransferRequestSchema } from "@/lib/validation";
+import { ok, fail, handle, parseBody, limit } from "@/lib/api";
 
-export async function GET() {
-  const listings = db.getTransferListings();
-  const history = db.getTransferHistory();
-  return NextResponse.json({
-    success: true,
-    data: {
-      listings,
-      history,
-      windowStatus: {
-        isOpen: true,
-        name: "eFCOB Summer 2026 Transfer Window",
-        daysRemaining: 42,
-        closesAt: "2026-10-31T23:59:59Z",
-      },
-    },
+export const dynamic = "force-dynamic";
+
+export const GET = handle(async () => {
+  const [listings, history, settings] = await Promise.all([db.getTransferListings(), db.getTransferHistory(), db.getSiteSettings()]);
+  return ok({
+    listings,
+    history,
+    windowStatus: { isOpen: settings.sections.transfers.show, name: settings.sections.transfers.title },
   });
-}
+});
 
-export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "Login required" } }, { status: 401 });
+/** Club managers make offers for players on behalf of their own club. */
+export const POST = handle(async (req: NextRequest) => {
+  const session = await requireAuth();
+  limit(req, `transfer:${session.id}`, 20, 60 * 60 * 1000);
+  const data = await parseBody(req, TransferRequestSchema);
+
+  const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
+  if (!isAdmin && !(session.role === "CLUB_MANAGER" && session.clubId === data.targetClubId)) {
+    return fail("Only the manager of the bidding club can make an offer", 403, "FORBIDDEN");
   }
 
-  const body = await req.json();
-  const request = db.createTransferRequest({
-    ...body,
-    requesterUserId: session.id,
-  });
-
-  return NextResponse.json({ success: true, data: request }, { status: 201 });
-}
+  const request = await db.createTransferRequest({ ...data, requesterUserId: session.id });
+  return ok(request, 201);
+});

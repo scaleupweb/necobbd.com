@@ -32,49 +32,37 @@ Built with Next.js 15 App Router, TypeScript, Tailwind CSS, Prisma ORM, Framer M
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Next.js 15 (App Router)
+- **Framework**: Next.js 16 (App Router, `proxy.ts` route guards)
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS, Vanilla CSS Design System
-- **Database & ORM**: Prisma ORM
-- **Icons & Motion**: Lucide React, Framer Motion, Canvas Confetti
+- **Database**: MongoDB (Mongoose) — MongoDB Atlas recommended
+- **Auth**: JWT in httpOnly cookie, checked against the database on every request (bans, role changes and password resets apply instantly), bcrypt, login lockout, rate limiting
+- **Styling**: Tailwind CSS · Lucide icons
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Clone & Install
-```bash
-git clone https://github.com/EasinArafatDeveloper/efootball-tournaments.git
-cd efootball-tournaments
-npm install
-```
+1. `npm install`
+2. Copy `.env.example` to `.env` and fill in:
+   - `DATABASE_URL` — your MongoDB Atlas connection string
+   - `AUTH_SECRET` — a long random string
+   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — the first super admin (password: 12+ chars, upper, lower, number)
+   - SMTP settings (optional) for password-reset emails; without them the reset link is printed in the server log
+3. `npm run db:seed` — creates the super admin (no demo data)
+4. `npm run dev` and sign in at `/login` → you land in the admin panel at `/admin`
 
-### 2. Environment Setup
-Create a `.env` file based on `.env.example`:
-```env
-DATABASE_URL="your-database-connection-string"
-AUTH_SECRET="your-jwt-auth-secret"
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-```
+## 🔒 Admin panel (`/admin`)
 
-### 3. Run Development Server
-```bash
-npm run dev
-```
+- **Homepage & Site Content** — every heading, button, image, section on/off, announcement bar, footer, socials, About & Rules text
+- **Registration Countdown** — link a tournament, set a deadline, start/stop with one click (opens/closes registration)
+- **Tournaments / Events** — create, change status, see and export participants, remove players, crown champions
+- **Fixtures & Results / Live Desk** — schedule matches, go live, update live score, approve results (ratings and stats update automatically)
+- **Users & Roles / Players / Clubs / Match Officials** — roles, suspend/ban, reset passwords, verify players, assign clubs
+- **Transfers, Disciplinary, News, Partners & Team, Audit Log**
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-## 🔑 Demo Accounts
-
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **Super Admin** | `admin@necob.com` | `Admin@Password2026!` |
-| **Club Manager** | `manager.dhaka@efcobbd.com` | `Admin@Password2026!` |
-| **Player Athlete** | `mahim@efcobbd.com` | `Admin@Password2026!` |
+Images can be uploaded directly (stored in MongoDB) or pasted as https URLs.
 
 ---
 
 ## 📄 License
-MIT License. © 2025 NEXA Football / eFCOB. All rights reserved.
+MIT License.

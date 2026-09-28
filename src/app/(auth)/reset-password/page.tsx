@@ -8,11 +8,35 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === confirmPassword) {
+    setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    const token = new URLSearchParams(window.location.search).get("token") || "";
+    if (!token) {
+      setError("This reset link is missing its token. Request a new one.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Reset failed");
       setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -21,7 +45,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-black text-slate-950">Create New Password</h1>
-          <p className="text-xs text-slate-500">Secure your eFCOB athlete credentials</p>
+          <p className="text-xs text-slate-500">Use 8+ characters with uppercase, lowercase and a number</p>
         </div>
 
         <div className="rounded-3xl bg-white border border-slate-200 p-8 shadow-sm space-y-5">
@@ -40,6 +64,12 @@ export default function ResetPasswordPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              {error && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold">
+                  {error}{" "}
+                  <Link href="/forgot-password" className="underline">Request a new link</Link>
+                </div>
+              )}
               <div>
                 <label className="block text-slate-700 font-bold mb-1">New Password</label>
                 <div className="relative">
@@ -74,9 +104,10 @@ export default function ResetPasswordPage() {
 
               <button
                 type="submit"
+                disabled={loading}
                 className="w-full py-3 rounded-xl bg-black text-white font-bold text-xs hover:bg-zinc-800 shadow-sm flex items-center justify-center space-x-2 transition-all"
               >
-                <span>Update Password</span>
+                <span>{loading ? "Updating..." : "Update Password"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>

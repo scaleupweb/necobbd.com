@@ -1,167 +1,268 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Search, Plus, ShieldAlert, CheckCircle2, Download, Edit2, Ban } from "lucide-react";
+import { Search, BadgeCheck, Pencil, Loader2, ExternalLink, Tag } from "lucide-react";
+import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle } from "@/components/admin/ui";
+import { ImageInput } from "@/components/ui/ImageInput";
 import { formatCurrency } from "@/lib/utils";
+import { PLAYER_POSITIONS } from "@/lib/constants";
+
+const STATUSES = ["ACTIVE", "PENDING_VERIFICATION", "SUSPENDED", "BANNED", "INACTIVE"];
 
 export default function AdminPlayersPage() {
   const [players, setPlayers] = useState<any[]>([]);
+  const [clubs, setClubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [actionSuccess, setActionSuccess] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [editing, setEditing] = useState<any>(null);
+  const [me, setMe] = useState<any>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [p, c] = await Promise.all([
+        fetch(`/api/players?search=${encodeURIComponent(search)}&status=ALL`, { cache: "no-store" }).then((r) => r.json()),
+        api<any[]>("/api/clubs"),
+      ]);
+      setPlayers(p.data || []);
+      setClubs(c);
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
 
   useEffect(() => {
-    async function loadPlayers() {
-      try {
-        const res = await fetch("/api/players");
-        const json = await res.json();
-        if (json.success) setPlayers(json.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadPlayers();
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+  }, [load]);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => r.json()).then((j) => j.success && setMe(j.data));
   }, []);
 
-  const handleToggleStatus = (p: any) => {
-    const newStatus = p.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
-    setPlayers(
-      players.map((item) => (item.id === p.id ? { ...item, status: newStatus } : item))
-    );
-    setActionSuccess(`Updated ${p.fullName} status to ${newStatus}`);
-    setTimeout(() => setActionSuccess(""), 3000);
-  };
+  const isAdmin = me?.role === "ADMIN" || me?.role === "SUPER_ADMIN";
 
-  const handleExportCSV = () => {
-    const header = "ID,Full Name,Username,Konami UID,Device,Position,Rating,Market Value,Status\n";
-    const rows = players
-      .map(
-        (p) =>
-          `"${p.id}","${p.fullName}","${p.username}","${p.konamiId}","${p.deviceModel}","${p.preferredPosition}",${p.rating},${p.marketValue},"${p.status}"`
-      )
-      .join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `efcob_athletes_export_${Date.now()}.csv`;
-    a.click();
-  };
-
-  const filtered = players.filter((p) => {
-    if (search) {
-      const q = search.toLowerCase();
-      return p.fullName.toLowerCase().includes(q) || p.username.toLowerCase().includes(q) || p.konamiId.toLowerCase().includes(q);
+  const patch = async (p: any, body: any, label: string) => {
+    setMsg(null);
+    try {
+      await api(`/api/admin/players/${p.id}`, { method: "PATCH", json: body });
+      setMsg({ ok: true, text: `${p.fullName}: ${label}` });
+      load();
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
     }
-    return true;
-  });
+  };
+
+  const listForTransfer = async (p: any) => {
+    const price = prompt(`Asking price for ${p.fullName} in $M`, String(p.marketValue));
+    if (!price) return;
+    try {
+      await api("/api/admin/transfers", { method: "POST", json: { action: "LIST", playerId: p.id, askingPrice: Number(price) } });
+      setMsg({ ok: true, text: `${p.fullName} is now on the transfer list.` });
+      load();
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    }
+  };
 
   return (
-    <div className="space-y-8">
-      
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
-        <div>
-          <h1 className="text-2xl font-black text-slate-950">Athlete Database Administration</h1>
-          <p className="text-xs text-slate-600 mt-1">Manage verified players, review Konami UIDs, issue status updates, and export rosters.</p>
-        </div>
+    <div className="space-y-5">
+      <PageHeader title="Players" subtitle="Verify players, set their club, adjust ratings and manage status. Player accounts are created when people sign up." />
 
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-bold text-slate-900 flex items-center space-x-1.5 transition-colors shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
-          </button>
-        </div>
-      </div>
-
-      {actionSuccess && (
-        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center space-x-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{actionSuccess}</span>
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="relative max-w-md">
+      <div className="relative max-w-sm">
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Search athlete by name, UID, username..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black shadow-sm"
-        />
+        <input className={`${inputCls} pl-9`} placeholder="Search name, username, Konami ID…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {/* Table */}
+      {msg && <Notice kind={msg.ok ? "ok" : "err"}>{msg.text}</Notice>}
+
       {loading ? (
-        <div className="text-center py-20 text-slate-600 font-bold animate-pulse">Loading athlete rosters...</div>
+        <div className="py-16 text-center">
+          <Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" />
+        </div>
+      ) : players.length === 0 ? (
+        <Empty>No players yet. They appear here when people register.</Empty>
       ) : (
-        <div className="overflow-x-auto rounded-3xl bg-white border border-slate-200 shadow-sm">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50">
-                <th className="py-4 px-5">Athlete</th>
-                <th className="py-4 px-5">Konami UID</th>
-                <th className="py-4 px-5">Club</th>
-                <th className="py-4 px-5 text-center">Elo Rating</th>
-                <th className="py-4 px-5 text-center">Market Value</th>
-                <th className="py-4 px-5 text-center">Status</th>
-                <th className="py-4 px-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="py-4 px-5">
-                    <div className="flex items-center space-x-3">
-                      <img src={p.avatar} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
-                      <div>
-                        <div className="font-bold text-slate-950">{p.fullName}</div>
-                        <div className="text-[10px] text-slate-500">@{p.username} • {p.preferredPosition}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-5 font-mono text-slate-900 font-bold">{p.konamiId}</td>
-                  <td className="py-4 px-5 text-slate-600">{p.club?.name || "Free Agent"}</td>
-                  <td className="py-4 px-5 text-center font-mono font-bold text-slate-950">{p.rating}</td>
-                  <td className="py-4 px-5 text-center font-mono text-emerald-700 font-bold">{formatCurrency(p.marketValue)}</td>
-                  <td className="py-4 px-5 text-center">
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
-                      p.status === "ACTIVE" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
-                    }`}>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5 text-right space-x-2">
-                    <button
-                      onClick={() => handleToggleStatus(p)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                        p.status === "ACTIVE" ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200" : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
-                      }`}
-                    >
-                      {p.status === "ACTIVE" ? "Suspend" : "Activate"}
-                    </button>
-                    <Link
-                      href={`/players/${p.username}`}
-                      className="px-3 py-1 rounded-lg bg-slate-100 text-slate-900 hover:bg-black hover:text-white inline-block border border-slate-200 transition-colors"
-                    >
-                      Profile
-                    </Link>
-                  </td>
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3">Player</th>
+                  <th className="py-2.5 px-3">Club</th>
+                  <th className="py-2.5 px-3">Rating</th>
+                  <th className="py-2.5 px-3">Value</th>
+                  <th className="py-2.5 px-3">Record</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {players.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-50/60">
+                    <td className="py-2.5 px-3 min-w-[220px]">
+                      <div className="flex items-center gap-2.5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.avatar} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                        <div>
+                          <div className="font-bold text-slate-950 flex items-center gap-1">
+                            {p.fullName} {p.isVerified && <BadgeCheck className="w-3.5 h-3.5 text-sky-600" />}
+                          </div>
+                          <div className="text-slate-500">@{p.username} · {p.preferredPosition} · UID {p.konamiId || "—"}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <select
+                        className="px-2 py-1 rounded-lg border border-slate-200 text-[11px] bg-white max-w-[160px] disabled:opacity-60"
+                        value={p.club?.id || ""}
+                        disabled={!isAdmin}
+                        onChange={(e) => patch(p, { clubId: e.target.value }, e.target.value ? "club updated" : "released to free agency")}
+                      >
+                        <option value="">Free agent</option>
+                        {clubs.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono">{p.rating}</td>
+                    <td className="py-2.5 px-3 font-mono">{formatCurrency(p.marketValue)}</td>
+                    <td className="py-2.5 px-3 font-mono">
+                      {p.stats.wins}-{p.stats.draws}-{p.stats.losses}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <select
+                        className={`px-2 py-1 rounded-lg border text-[11px] font-bold bg-white ${statusTone(p.status) === "red" ? "text-rose-700 border-rose-200" : "border-slate-200"}`}
+                        value={p.status}
+                        onChange={(e) => patch(p, { status: e.target.value }, `status → ${e.target.value}`)}
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {s.replace(/_/g, " ")}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex justify-end gap-1.5">
+                        <Button small variant={p.isVerified ? "secondary" : "success"} onClick={() => patch(p, { isVerified: !p.isVerified }, p.isVerified ? "unverified" : "verified")}>
+                          <BadgeCheck className="w-3.5 h-3.5" /> {p.isVerified ? "Unverify" : "Verify"}
+                        </Button>
+                        {isAdmin && (
+                          <Button small variant="secondary" onClick={() => listForTransfer(p)} title="List on transfer market">
+                            <Tag className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        <Button small variant="secondary" onClick={() => setEditing(p)} title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Link href={`/players/${p.username}`} target="_blank" className="inline-flex items-center px-2 py-1.5 text-slate-500 hover:text-black" title="Public profile">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
+      {editing && <EditPlayerModal player={editing} isAdmin={isAdmin} onClose={() => setEditing(null)} onSaved={load} />}
     </div>
+  );
+}
+
+function EditPlayerModal({ player, isAdmin, onClose, onSaved }: { player: any; isAdmin: boolean; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState({
+    fullName: player.fullName,
+    avatar: player.avatar?.startsWith("/images/placeholders") ? "" : player.avatar,
+    konamiId: player.konamiId,
+    deviceModel: player.deviceModel,
+    preferredPosition: player.preferredPosition,
+    bio: player.bio || "",
+    rating: String(player.rating),
+    marketValue: String(player.marketValue),
+    isVerified: !!player.isVerified,
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const body: any = { ...f };
+      if (!isAdmin) {
+        delete body.rating;
+        delete body.marketValue;
+      } else {
+        body.rating = Number(f.rating);
+        body.marketValue = Number(f.marketValue);
+      }
+      await api(`/api/admin/players/${player.id}`, { method: "PATCH", json: body });
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`Edit ${player.fullName}`} wide>
+      <form onSubmit={save} className="space-y-3">
+        {err && <Notice kind="err">{err}</Notice>}
+        <ImageInput label="Photo" value={f.avatar} onChange={(v) => setF({ ...f, avatar: v })} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Full name">
+            <input className={inputCls} value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} />
+          </Field>
+          <Field label="Konami ID">
+            <input className={inputCls} value={f.konamiId} onChange={(e) => setF({ ...f, konamiId: e.target.value })} />
+          </Field>
+          <Field label="Device">
+            <input className={inputCls} value={f.deviceModel} onChange={(e) => setF({ ...f, deviceModel: e.target.value })} />
+          </Field>
+          <Field label="Position">
+            <select className={inputCls} value={f.preferredPosition} onChange={(e) => setF({ ...f, preferredPosition: e.target.value })}>
+              {PLAYER_POSITIONS.map((p) => (
+                <option key={p}>{p}</option>
+              ))}
+            </select>
+          </Field>
+          {isAdmin && (
+            <>
+              <Field label="Rating" hint="Normally updated automatically from results">
+                <input type="number" className={inputCls} value={f.rating} onChange={(e) => setF({ ...f, rating: e.target.value })} />
+              </Field>
+              <Field label="Market value ($M)">
+                <input type="number" step="0.1" className={inputCls} value={f.marketValue} onChange={(e) => setF({ ...f, marketValue: e.target.value })} />
+              </Field>
+            </>
+          )}
+          <Field label="Bio" full>
+            <textarea className={inputCls} rows={3} value={f.bio} onChange={(e) => setF({ ...f, bio: e.target.value })} maxLength={300} />
+          </Field>
+          <Toggle checked={f.isVerified} onChange={(v) => setF({ ...f, isVerified: v })} label="Verified player" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy}>
+            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

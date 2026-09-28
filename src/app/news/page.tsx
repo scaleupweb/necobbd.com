@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function NewsPage() {
-  const articles = db.getNews();
+  const articles = await db.getNews();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -27,7 +27,10 @@ export default async function NewsPage() {
 
       {/* Articles Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {articles.map((art) => (
+        {articles.length === 0 && (
+          <div className="md:col-span-2 lg:col-span-3 rounded-3xl border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">No news published yet.</div>
+        )}
+        {articles.map((art: any) => (
           <div
             key={art.id}
             className="rounded-3xl bg-white border border-slate-200 overflow-hidden hover:border-black shadow-sm hover:shadow-md transition-all flex flex-col justify-between group"

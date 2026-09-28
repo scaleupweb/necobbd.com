@@ -1,58 +1,43 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireRole, ADMIN_ONLY } from "@/lib/auth";
+import { ok, handle, audit } from "@/lib/api";
 
-export async function GET() {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "SUPER_ADMIN")) {
-    return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Admin access required" } }, { status: 403 });
+export const dynamic = "force-dynamic";
+
+export const GET = handle(async () => {
+  await requireRole(ADMIN_ONLY);
+  const [listings, history, clubs, requests] = await Promise.all([
+    db.getTransferListings(),
+    db.getTransferHistory(),
+    db.getClubs(),
+    db.getTransferRequests(),
+  ]);
+  return ok({ listings, history, clubs, requests });
+});
+
+const ActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("APPROVE"), listingId: z.string(), buyerClubId: z.string() }),
+  z.object({ action: z.literal("LIST"), playerId: z.string(), askingPrice: z.coerce.number().min(0).max(100000) }),
+  z.object({ action: z.literal("CLOSE"), listingId: z.string() }),
+]);
+
+export const POST = handle(async (req: NextRequest) => {
+  const session = await requireRole(ADMIN_ONLY);
+  const body = ActionSchema.parse(await req.json());
+
+  if (body.action === "APPROVE") {
+    const record = await db.approveTransfer(body.listingId, body.buyerClubId, session.fullName);
+    await audit(req, session, "APPROVED_TRANSFER", record.playerName, `${record.previousClubName} -> ${record.newClubName}`);
+    return ok(record);
   }
-
-  const listings = db.getTransferListings();
-  const history = db.getTransferHistory();
-  const clubs = db.getClubs();
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      listings,
-      history,
-      clubs
-    }
-  });
-}
-
-export async function POST(req: Request) {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "SUPER_ADMIN")) {
-    return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Admin access required" } }, { status: 403 });
+  if (body.action === "LIST") {
+    const listing = await db.createTransferListing({ playerId: body.playerId, askingPrice: body.askingPrice, listedBy: session.id });
+    await audit(req, session, "LISTED_PLAYER", body.playerId, `$${body.askingPrice}M`);
+    return ok(listing);
   }
-
-  try {
-    const body = await req.json();
-    const { action, listingId, buyerClubId, playerId, askingPrice } = body;
-
-    if (action === "APPROVE") {
-      if (!listingId || !buyerClubId) {
-        return NextResponse.json({ success: false, error: { message: "Listing ID and Buyer Club ID are required" } }, { status: 400 });
-      }
-      const record = db.approveTransfer(listingId, buyerClubId);
-      if (!record) {
-        return NextResponse.json({ success: false, error: { message: "Transfer execution failed" } }, { status: 400 });
-      }
-      return NextResponse.json({ success: true, data: record });
-    }
-
-    if (action === "LIST") {
-      if (!playerId || !askingPrice) {
-        return NextResponse.json({ success: false, error: { message: "Player ID and asking price are required" } }, { status: 400 });
-      }
-      const listing = db.createTransferListing({ playerId, askingPrice: Number(askingPrice) });
-      return NextResponse.json({ success: true, data: listing });
-    }
-
-    return NextResponse.json({ success: false, error: { message: "Invalid action" } }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: { message: err.message || "Failed to process transfer action" } }, { status: 500 });
-  }
-}
+  await db.closeTransferListing(body.listingId);
+  await audit(req, session, "CLOSED_LISTING", body.listingId);
+  return ok({ closed: true });
+});

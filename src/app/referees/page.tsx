@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function RefereesPage() {
-  const referees = db.getReferees();
+  const referees = await db.getReferees();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -26,7 +26,7 @@ export default async function RefereesPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {referees.map((ref) => (
+        {referees.map((ref: any) => (
           <div
             key={ref.id}
             className="p-6 rounded-3xl bg-white border border-slate-200 hover:border-black shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5 group"

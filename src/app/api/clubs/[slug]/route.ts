@@ -1,28 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { ok, fail, handle } from "@/lib/api";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export const dynamic = "force-dynamic";
+
+export const GET = handle(async (_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params;
-  const club = db.getClubBySlug(slug);
-
-  if (!club) {
-    return NextResponse.json({ success: false, error: { code: "NOT_FOUND", message: "Club not found" } }, { status: 404 });
-  }
-
-  // Get club fixtures
-  const allFixtures = db.getFixtures();
-  const clubFixtures = allFixtures.filter(
-    (f) => f.homeClub?.id === club.id || f.awayClub?.id === club.id
-  );
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      ...club,
-      fixtures: clubFixtures,
-    },
-  });
-}
+  const club = await db.getClubBySlug(slug);
+  if (!club) return fail("Club not found", 404, "NOT_FOUND");
+  const fixtures = await db.getFixtures({ clubId: club.id, limit: 50 });
+  return ok({ ...club, fixtures });
+});

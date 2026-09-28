@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewsArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const article = db.getNewsBySlug(slug);
+  const article = await db.getNewsBySlug(slug);
 
   if (!article) {
     notFound();
@@ -49,10 +49,12 @@ export default async function NewsArticlePage({ params }: { params: Promise<{ sl
         <p className="text-lg text-slate-950 font-medium leading-relaxed">
           {article.excerpt}
         </p>
-        <p>{article.content}</p>
-        <p>
-          Official tournament adjudicators and club delegates were in attendance to review the tactical integrity and dispute protocols. As the competitive circuit expands across collegiate and regional hubs, verified Elo systems ensure fair advancement for emerging grassroots athletes.
-        </p>
+        {String(article.content || "")
+          .split(/\n{2,}/)
+          .filter(Boolean)
+          .map((para: string, i: number) => (
+            <p key={i} className="whitespace-pre-line">{para}</p>
+          ))}
       </div>
 
       {/* Tags & Footer */}

@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function DisciplinaryPage() {
-  const records = db.getDisciplinaryRecords();
+  const records = await db.getDisciplinaryRecords();
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -39,7 +39,7 @@ export default async function DisciplinaryPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-700">
-            {records.map((r) => (
+            {records.map((r: any) => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="py-4 px-5 font-bold text-slate-950">
                   {r.targetName}

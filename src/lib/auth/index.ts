@@ -1,55 +1,61 @@
-import { SignJWT, jwtVerify } from "jose";
+import "server-only";
+import { cache } from "react";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { UserSession, Role } from "@/types";
-
-const SECRET_KEY = process.env.AUTH_SECRET || "necob-super-secret-production-auth-key-2026-bangladesh-efootball";
-const key = new TextEncoder().encode(SECRET_KEY);
-const COOKIE_NAME = "efcob_session";
+import { connectDB } from "@/lib/db/mongo";
+import { User, Player } from "@/lib/db/models";
+import { COOKIE_NAME, SESSION_MAX_AGE, signToken, verifyToken } from "./token";
 
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, 12);
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
 
-export async function createSessionToken(payload: UserSession): Promise<string> {
-  return new SignJWT({ ...payload })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(key);
-}
-
-export async function verifySessionToken(token: string): Promise<UserSession | null> {
-  try {
-    const { payload } = await jwtVerify(token, key, {
-      algorithms: ["HS256"],
-    });
-    return payload as unknown as UserSession;
-  } catch {
-    return null;
-  }
-}
-
-export async function getSession(): Promise<UserSession | null> {
+/**
+ * Reads the session cookie and confirms it against the database, so banned
+ * users, role changes and password resets take effect immediately.
+ */
+export const getSession = cache(async (): Promise<UserSession | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
-}
+  const payload = await verifyToken(token);
+  if (!payload) return null;
 
-export async function setSessionCookie(session: UserSession) {
-  const token = await createSessionToken(session);
+  try {
+    await connectDB();
+    const user = await User.findById(payload.sub).lean<any>();
+    if (!user || user.status !== "ACTIVE" || (user.tokenVersion || 0) !== payload.v) return null;
+    const player = await Player.findOne({ userId: user._id }, { _id: 1, avatar: 1, clubId: 1 }).lean<any>();
+    return {
+      id: String(user._id),
+      email: user.email,
+      username: user.username,
+      fullName: user.fullName,
+      role: user.role,
+      avatar: player?.avatar || user.avatar,
+      playerProfileId: player ? String(player._id) : undefined,
+      clubId: user.clubId ? String(user.clubId) : player?.clubId ? String(player.clubId) : undefined,
+    };
+  } catch (err) {
+    console.error("Session lookup failed:", err);
+    return null;
+  }
+});
+
+export async function setSessionCookie(user: { _id: any; role: string; tokenVersion?: number }) {
+  const token = await signToken({ sub: String(user._id), role: user.role, v: user.tokenVersion || 0 });
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: SESSION_MAX_AGE,
   });
 }
 
@@ -58,18 +64,34 @@ export async function clearSessionCookie() {
   cookieStore.delete(COOKIE_NAME);
 }
 
+export class AuthError extends Error {
+  status: number;
+  constructor(message: "UNAUTHORIZED" | "FORBIDDEN") {
+    super(message);
+    this.status = message === "UNAUTHORIZED" ? 401 : 403;
+  }
+}
+
 export async function requireAuth(): Promise<UserSession> {
   const session = await getSession();
-  if (!session) {
-    throw new Error("UNAUTHORIZED");
-  }
+  if (!session) throw new AuthError("UNAUTHORIZED");
   return session;
 }
 
 export async function requireRole(allowedRoles: Role[]): Promise<UserSession> {
   const session = await requireAuth();
-  if (!allowedRoles.includes(session.role) && session.role !== "SUPER_ADMIN") {
-    throw new Error("FORBIDDEN");
+  if (session.role !== "SUPER_ADMIN" && !allowedRoles.includes(session.role)) {
+    throw new AuthError("FORBIDDEN");
   }
   return session;
+}
+
+export const STAFF_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE"];
+export const ADMIN_ONLY: Role[] = ["SUPER_ADMIN", "ADMIN"];
+export const MATCH_OFFICIALS: Role[] = ["SUPER_ADMIN", "ADMIN", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE"];
+export const TOURNAMENT_STAFF: Role[] = ["SUPER_ADMIN", "ADMIN", "TOURNAMENT_OFFICIAL"];
+export const DISCIPLINE_STAFF: Role[] = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "SENIOR_REFEREE"];
+
+export function isStaff(role?: string) {
+  return !!role && (STAFF_ROLES as string[]).includes(role);
 }

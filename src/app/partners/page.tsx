@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export default async function PartnersPage() {
-  const partners = db.getPartners();
-  const sponsors = db.getSponsors();
+  const partners = await db.getPartners();
+  const sponsors = await db.getSponsors();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
@@ -29,7 +29,7 @@ export default async function PartnersPage() {
       <div className="space-y-4">
         <h2 className="text-base font-bold text-slate-950 uppercase tracking-wider">Collegiate & Community Partners</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {partners.map((p) => (
+          {partners.map((p: any) => (
             <div
               key={p.id}
               className="p-6 rounded-3xl bg-white border border-slate-200 hover:border-black shadow-sm hover:shadow-md p-6 flex flex-col justify-between space-y-4 group transition-all"
@@ -62,7 +62,7 @@ export default async function PartnersPage() {
       <div className="space-y-4 pt-4">
         <h2 className="text-base font-bold text-slate-950 uppercase tracking-wider">Official Tournament Sponsors</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {sponsors.map((s) => (
+          {sponsors.map((s: any) => (
             <div
               key={s.id}
               className="p-6 rounded-3xl bg-white border border-slate-200 hover:border-black shadow-sm hover:shadow-md flex items-center space-x-4 group transition-all"

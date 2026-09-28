@@ -52,6 +52,11 @@ export default function TournamentsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {tournaments.length === 0 && (
+            <div className="md:col-span-2 lg:col-span-3 rounded-3xl border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">
+              No tournaments announced yet. Check back soon.
+            </div>
+          )}
           {tournaments.map((t) => (
             <div
               key={t.id}
@@ -102,13 +107,13 @@ export default function TournamentsPage() {
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 pt-1">
                     <div className="flex items-center space-x-1.5 font-medium">
                       <Calendar className="w-3.5 h-3.5 text-black" />
-                      <span>{formatDate(t.startDate)}</span>
+                      <span>{t.startDate ? formatDate(t.startDate) : "TBA"}</span>
                     </div>
                     <div className="flex items-center justify-end space-x-1.5">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        t.status === "ONGOING" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-slate-100 text-slate-800 border border-slate-200"
+                        t.status === "ONGOING" || t.status === "REGISTRATION_OPEN" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-slate-100 text-slate-800 border border-slate-200"
                       }`}>
-                        {t.status}
+                        {t.status.replace(/_/g, " ")}
                       </span>
                     </div>
                   </div>
@@ -122,7 +127,7 @@ export default function TournamentsPage() {
                   className="w-full py-3 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs text-center transition-all flex items-center justify-center space-x-2 shadow-sm"
                 >
                   <GitFork className="w-4 h-4" />
-                  <span>Dynamic Bracket & Overview</span>
+                  <span>{t.isRegistrationOpen ? `Join · ${t.currentParticipants}/${t.maxParticipants} spots` : "View bracket & details"}</span>
                 </Link>
               </div>
             </div>

@@ -1,48 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { ok, handle } from "@/lib/api";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const position = searchParams.get("position") || undefined;
-  const clubId = searchParams.get("clubId") || undefined;
-  const status = searchParams.get("status") || undefined;
-  const search = searchParams.get("search") || undefined;
-  const sortBy = searchParams.get("sortBy") || "rating"; // rating, goals, winRate, marketValue
+export const dynamic = "force-dynamic";
 
-  let players = db.getPlayers({ position, clubId, status, search });
-
-  // Sorting
-  players.sort((a, b) => {
-    if (sortBy === "goals") {
-      return (b.stats?.goalsScored || 0) - (a.stats?.goalsScored || 0);
-    }
-    if (sortBy === "winRate") {
-      return (b.stats?.winRate || 0) - (a.stats?.winRate || 0);
-    }
-    if (sortBy === "marketValue") {
-      return (b.marketValue || 0) - (a.marketValue || 0);
-    }
-    if (sortBy === "motm") {
-      return (b.motmCount || 0) - (a.motmCount || 0);
-    }
-    return (b.rating || 0) - (a.rating || 0);
+export const GET = handle(async (req: NextRequest) => {
+  const sp = req.nextUrl.searchParams;
+  const sortBy = sp.get("sortBy") || "rating";
+  const players = await db.getPlayers({
+    position: sp.get("position") || undefined,
+    clubId: sp.get("clubId") || undefined,
+    status: sp.get("status") || undefined,
+    search: sp.get("search") || undefined,
   });
 
-  return NextResponse.json({
-    success: true,
-    data: players,
-    count: players.length,
+  players.sort((a: any, b: any) => {
+    if (sortBy === "goals") return b.stats.goalsScored - a.stats.goalsScored;
+    if (sortBy === "winRate") return b.stats.winRate - a.stats.winRate;
+    if (sortBy === "marketValue") return b.marketValue - a.marketValue;
+    if (sortBy === "motm") return b.motmCount - a.motmCount;
+    return b.rating - a.rating;
   });
-}
 
-export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "SUPER_ADMIN")) {
-    return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Admin access required" } }, { status: 403 });
-  }
-
-  const body = await req.json();
-  const player = db.createPlayer(body);
-  return NextResponse.json({ success: true, data: player }, { status: 201 });
-}
+  // Public listing never exposes contact details.
+  const safe = players.map(({ phone, userId, ...p }: any) => p);
+  return ok(safe, 200, { count: safe.length });
+});

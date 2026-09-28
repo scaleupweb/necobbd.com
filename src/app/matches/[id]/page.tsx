@@ -29,6 +29,9 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
   const [motmPlayerId, setMotmPlayerId] = useState("");
   const [motmReason, setMotmReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [me, setMe] = useState<any>(null);
+  const isOfficial = ["SUPER_ADMIN", "ADMIN", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE"].includes(me?.role);
 
   useEffect(() => {
     async function fetchMatch() {
@@ -49,7 +52,19 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       }
     }
     fetchMatch();
+    fetch("/api/auth/me").then((r) => r.json()).then((j) => j.success && setMe(j.data)).catch(() => {});
   }, [id]);
+
+  // Keep live matches fresh.
+  useEffect(() => {
+    if (match?.status !== "LIVE") return;
+    const t = setInterval(async () => {
+      const res = await fetch(`/api/fixtures/${id}`, { cache: "no-store" });
+      const json = await res.json();
+      if (json.success) setMatch(json.data);
+    }, 15000);
+    return () => clearInterval(t);
+  }, [id, match?.status]);
 
   const handleScoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,6 +84,9 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       if (json.success) {
         setMatch(json.data);
         setScoreModalOpen(false);
+        setSubmitError("");
+      } else {
+        setSubmitError(json.error?.message || "Could not submit result");
       }
     } catch (err) {
       console.error(err);
@@ -131,20 +149,20 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="md:col-span-2 flex flex-col items-center md:items-end text-center md:text-right space-y-3">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-100 overflow-hidden border border-slate-300 shadow-md p-1">
               <img
-                src={match.homePlayer?.avatar || match.homeClub?.logo || "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=200"}
+                src={match.homePlayer?.avatar || match.homeClub?.logo || "/images/placeholders/club.svg"}
                 alt=""
                 className="w-full h-full object-cover rounded-xl"
               />
             </div>
             <div>
               <Link
-                href={match.homePlayer ? `/players/${match.homePlayer.username}` : `/clubs/${match.homeClub?.id}`}
+                href={match.homePlayer ? `/players/${match.homePlayer.username}` : `/clubs/${match.homeClub?.slug}`}
                 className="text-lg sm:text-2xl font-black text-black hover:underline transition-colors"
               >
                 {match.homePlayer?.fullName || match.homeClub?.name}
               </Link>
               <div className="text-xs text-slate-500 mt-0.5 font-medium">
-                {match.homeClub?.name || "Free Agent"} • {match.homePlayer?.rating ? `${match.homePlayer.rating} Elo OVR` : ""}
+                {match.homeClub?.name || "Free Agent"} • {match.homePlayer?.rating ? `${match.homePlayer.rating} rating` : ""}
               </div>
             </div>
           </div>
@@ -153,7 +171,8 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="md:col-span-1 flex flex-col items-center justify-center space-y-2 py-4">
             {match.status === "FINISHED" || match.status === "LIVE" ? (
               <div className="text-4xl sm:text-6xl font-black text-black px-5 py-2 rounded-2xl bg-slate-100 border border-slate-300 font-mono shadow-sm">
-                {match.result?.homeScore ?? 0} : {match.result?.awayScore ?? 0}
+                {match.status === "LIVE" ? match.liveScore?.home ?? 0 : match.result?.homeScore ?? 0} :{" "}
+                {match.status === "LIVE" ? match.liveScore?.away ?? 0 : match.result?.awayScore ?? 0}
               </div>
             ) : (
               <div className="text-2xl font-black text-slate-600 px-4 py-2 rounded-xl bg-slate-100 border border-slate-200">
@@ -163,14 +182,14 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
 
             {match.status === "LIVE" ? (
               <span className="px-3 py-0.5 rounded-full bg-rose-50 text-rose-700 text-xs font-bold border border-rose-200 animate-pulse">
-                75&apos; LIVE
+                {match.minute || ""} LIVE
               </span>
             ) : match.status === "FINISHED" ? (
               <span className="px-3 py-0.5 rounded bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
                 FINAL SCORE
               </span>
             ) : (
-              <span className="text-xs text-black font-mono font-bold">COUNTDOWN</span>
+              <span className="text-xs text-black font-mono font-bold">{match.status === "SCHEDULED" ? "UPCOMING" : match.status}</span>
             )}
           </div>
 
@@ -178,20 +197,20 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
           <div className="md:col-span-2 flex flex-col items-center md:items-start text-center md:text-left space-y-3">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-100 overflow-hidden border border-slate-300 shadow-md p-1">
               <img
-                src={match.awayPlayer?.avatar || match.awayClub?.logo || "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=200"}
+                src={match.awayPlayer?.avatar || match.awayClub?.logo || "/images/placeholders/club.svg"}
                 alt=""
                 className="w-full h-full object-cover rounded-xl"
               />
             </div>
             <div>
               <Link
-                href={match.awayPlayer ? `/players/${match.awayPlayer.username}` : `/clubs/${match.awayClub?.id}`}
+                href={match.awayPlayer ? `/players/${match.awayPlayer.username}` : `/clubs/${match.awayClub?.slug}`}
                 className="text-lg sm:text-2xl font-black text-black hover:underline transition-colors"
               >
                 {match.awayPlayer?.fullName || match.awayClub?.name}
               </Link>
               <div className="text-xs text-slate-500 mt-0.5 font-medium">
-                {match.awayClub?.name || "Free Agent"} • {match.awayPlayer?.rating ? `${match.awayPlayer.rating} Elo OVR` : ""}
+                {match.awayClub?.name || "Free Agent"} • {match.awayPlayer?.rating ? `${match.awayPlayer.rating} rating` : ""}
               </div>
             </div>
           </div>
@@ -215,7 +234,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
             <div className="text-xs text-amber-900 italic max-w-md text-center sm:text-right">
-              &quot;{match.result.motmReason}&quot;
+              {match.result.motmReason ? <>&quot;{match.result.motmReason}&quot;</> : null}
             </div>
           </div>
         )}
@@ -231,12 +250,14 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
 
-          <button
-            onClick={() => setScoreModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-black text-white font-bold text-xs shadow-sm hover:bg-zinc-800 transition-all"
-          >
-            Submit / Update Score Result
-          </button>
+          {me && match.status !== "FINISHED" && match.status !== "CANCELLED" && (
+            <button
+              onClick={() => setScoreModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-black text-white font-bold text-xs shadow-sm hover:bg-zinc-800 transition-all"
+            >
+              {isOfficial ? "Enter & approve final result" : "Report result"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -276,127 +297,26 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* Match Events Timeline & Statistics */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Timeline Events (6 cols) */}
-        <div className="lg:col-span-6 rounded-2xl bg-white border border-slate-200 p-6 space-y-6 shadow-sm">
+      {(match.result?.notes || match.result?.proofScreenshot || match.result?.status === "PENDING") && (
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 space-y-4 shadow-sm">
           <div className="flex items-center space-x-2 text-sm font-bold text-black uppercase tracking-wider border-b border-slate-100 pb-3">
             <Clock className="w-4 h-4 text-black" />
-            <span>Match Event Timeline</span>
+            <span>Result report</span>
           </div>
-
-          <div className="relative pl-6 space-y-6 border-l-2 border-slate-200">
-            <div className="relative">
-              <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-black border-2 border-white"></div>
-              <div className="text-xs font-mono font-bold text-black">00&apos; Kickoff</div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5">Match officially underway</div>
-              <div className="text-[11px] text-slate-500">{match.venue}</div>
+          {match.result?.status === "PENDING" && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900">
+              A score of {match.result.homeScore} - {match.result.awayScore} was reported and is waiting for an official to approve it.
             </div>
-
-            <div className="relative">
-              <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-600 border-2 border-white"></div>
-              <div className="text-xs font-mono font-bold text-emerald-700">34&apos; Goal (1 - 0)</div>
-              <div className="text-xs font-bold text-black mt-0.5">
-                {match.homePlayer?.fullName || match.homeClub?.shortName}
-              </div>
-              <div className="text-[11px] text-slate-500">Clinical bottom-corner finish following 1-2 counter pass.</div>
-            </div>
-
-            <div className="relative">
-              <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-600 border-2 border-white"></div>
-              <div className="text-xs font-mono font-bold text-emerald-700">52&apos; Goal (1 - 1)</div>
-              <div className="text-xs font-bold text-black mt-0.5">
-                {match.awayPlayer?.fullName || match.awayClub?.shortName}
-              </div>
-              <div className="text-[11px] text-slate-500">Equalizer scored with curl shot from edge of the penalty box.</div>
-            </div>
-
-            <div className="relative">
-              <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-600 border-2 border-white"></div>
-              <div className="text-xs font-mono font-bold text-emerald-700">68&apos; Goal (2 - 1)</div>
-              <div className="text-xs font-bold text-black mt-0.5">
-                {match.homePlayer?.fullName || match.homeClub?.shortName}
-              </div>
-              <div className="text-[11px] text-slate-500">Winning header into top right corner.</div>
-            </div>
-
-            <div className="relative">
-              <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-amber-500 border-2 border-white"></div>
-              <div className="text-xs font-mono font-bold text-amber-700">90&apos; Final Whistle</div>
-              <div className="text-xs font-bold text-black mt-0.5">Official result certified by Referee</div>
-            </div>
-          </div>
+          )}
+          {match.result?.notes && <p className="text-xs text-slate-700 whitespace-pre-line">{match.result.notes}</p>}
+          {match.result?.proofScreenshot && (
+            <a href={match.result.proofScreenshot} target="_blank" rel="noopener noreferrer" className="block max-w-md">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={match.result.proofScreenshot} alt="Result screenshot" className="rounded-xl border border-slate-200" />
+            </a>
+          )}
         </div>
-
-        {/* Match Statistics & Tactical Radar (6 cols) */}
-        <div className="lg:col-span-6 rounded-2xl bg-white border border-slate-200 p-6 space-y-6 shadow-sm">
-          <div className="flex items-center space-x-2 text-sm font-bold text-black uppercase tracking-wider border-b border-slate-100 pb-3">
-            <Flame className="w-4 h-4 text-rose-600" />
-            <span>Match Statistics</span>
-          </div>
-
-          <div className="space-y-4 text-xs">
-            {/* Possession */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-slate-800">
-                <span>56%</span>
-                <span className="text-slate-500 font-medium">Ball Possession</span>
-                <span>44%</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
-                <div className="bg-black h-full" style={{ width: "56%" }}></div>
-                <div className="bg-slate-400 h-full" style={{ width: "44%" }}></div>
-              </div>
-            </div>
-
-            {/* Total Shots */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-slate-800">
-                <span>8 (5)</span>
-                <span className="text-slate-500 font-medium">Total Shots (On Target)</span>
-                <span>5 (3)</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
-                <div className="bg-black h-full" style={{ width: "62%" }}></div>
-                <div className="bg-slate-400 h-full" style={{ width: "38%" }}></div>
-              </div>
-            </div>
-
-            {/* Pass Accuracy */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-slate-800">
-                <span>89%</span>
-                <span className="text-slate-500 font-medium">Pass Accuracy</span>
-                <span>84%</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
-                <div className="bg-black h-full" style={{ width: "52%" }}></div>
-                <div className="bg-slate-400 h-full" style={{ width: "48%" }}></div>
-              </div>
-            </div>
-
-            {/* Interceptions & Tackles */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-slate-800">
-                <span>14</span>
-                <span className="text-slate-500 font-medium">Tackles & Interceptions</span>
-                <span>11</span>
-              </div>
-              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
-                <div className="bg-black h-full" style={{ width: "56%" }}></div>
-                <div className="bg-slate-400 h-full" style={{ width: "44%" }}></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-            <div className="font-bold text-black">Referee Assessment Notes</div>
-            <div>&quot;Clean tactical match without connection lag or disciplinary violations. Proof screenshots logged into database.&quot;</div>
-          </div>
-        </div>
-
-      </div>
+      )}
 
       {/* Modal Dialog for Result Submission */}
       {scoreModalOpen && (
@@ -471,6 +391,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
                 />
               </div>
 
+              {submitError && <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold">{submitError}</div>}
               <div className="pt-3 border-t border-slate-200 flex justify-end space-x-3">
                 <button
                   type="button"
@@ -484,7 +405,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-sm"
                 >
-                  {submitting ? "Updating Database..." : "Save & Recalculate Ratings"}
+                  {submitting ? "Saving..." : isOfficial ? "Approve & update ratings" : "Submit for approval"}
                 </button>
               </div>
             </form>

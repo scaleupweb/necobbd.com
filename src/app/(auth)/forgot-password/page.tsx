@@ -7,10 +7,27 @@ import { Mail, CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Request failed");
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -35,6 +52,7 @@ export default function ForgotPasswordPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              {error && <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold">{error}</div>}
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Registered Email</label>
                 <div className="relative">
@@ -52,9 +70,10 @@ export default function ForgotPasswordPage() {
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-black text-white font-bold text-xs hover:bg-zinc-800 shadow-sm flex items-center justify-center space-x-2 transition-all"
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-black text-white font-bold text-xs hover:bg-zinc-800 shadow-sm flex items-center justify-center space-x-2 transition-all disabled:opacity-60"
               >
-                <span>Send Reset Link</span>
+                <span>{loading ? "Sending..." : "Send Reset Link"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 

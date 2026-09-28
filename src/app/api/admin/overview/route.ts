@@ -1,25 +1,28 @@
-import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireRole, STAFF_ROLES } from "@/lib/auth";
+import { ok, handle } from "@/lib/api";
 
-export async function GET() {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "SUPER_ADMIN")) {
-    return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Admin privileges required" } }, { status: 403 });
-  }
+export const dynamic = "force-dynamic";
 
-  const stats = db.getPlatformStats();
-  const auditLogs = db.getAuditLogs();
-  const pendingFixtures = db.getFixtures({ status: "SCHEDULED" }).slice(0, 8);
-  const liveFixtures = db.getFixtures({ status: "LIVE" });
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      stats,
-      auditLogs,
-      pendingFixtures,
-      liveFixtures,
-    },
+export const GET = handle(async () => {
+  const session = await requireRole(STAFF_ROLES);
+  const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
+  const [stats, auditLogs, upcoming, liveFixtures, pendingResults, settings, recentUsers] = await Promise.all([
+    db.getPlatformStats(),
+    isAdmin ? db.getAuditLogs(8) : [],
+    db.getFixtures({ status: "SCHEDULED", limit: 200 }),
+    db.getFixtures({ status: "LIVE" }),
+    db.getPendingResultClaims(),
+    db.getSiteSettings(),
+    isAdmin ? db.listUsers({}) : [],
+  ]);
+  return ok({
+    stats,
+    auditLogs,
+    pendingFixtures: upcoming.sort((a: any, b: any) => +new Date(a.scheduledDate) - +new Date(b.scheduledDate)).slice(0, 8),
+    liveFixtures,
+    pendingResults,
+    countdown: settings.countdown,
+    recentUsers: recentUsers.slice(0, 6),
   });
-}
+});

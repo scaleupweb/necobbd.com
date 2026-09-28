@@ -1,53 +1,36 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { ok, handle } from "@/lib/api";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const type = searchParams.get("type") || "players"; // players, clubs, scorers, assists, clean-sheets, motm, referees
+export const dynamic = "force-dynamic";
 
-  const allPlayers = db.getPlayers();
-  const allClubs = db.getClubs();
-  const allReferees = db.getReferees();
+export const GET = handle(async (req: NextRequest) => {
+  const type = req.nextUrl.searchParams.get("type") || "players";
 
   if (type === "clubs") {
-    const clubsSorted = [...allClubs].sort((a, b) => (b.points || 0) - (a.points || 0));
-    return NextResponse.json({ success: true, data: clubsSorted });
-  }
-
-  if (type === "scorers") {
-    const scorers = [...allPlayers]
-      .sort((a, b) => (b.stats?.goalsScored || 0) - (a.stats?.goalsScored || 0))
-      .slice(0, 50);
-    return NextResponse.json({ success: true, data: scorers });
-  }
-
-  if (type === "assists") {
-    const assists = [...allPlayers]
-      .sort((a, b) => (b.stats?.assists || 0) - (a.stats?.assists || 0))
-      .slice(0, 50);
-    return NextResponse.json({ success: true, data: assists });
-  }
-
-  if (type === "clean-sheets") {
-    const cleanSheets = [...allPlayers]
-      .sort((a, b) => (b.stats?.cleanSheets || 0) - (a.stats?.cleanSheets || 0))
-      .filter((p) => (p.stats?.cleanSheets || 0) > 0);
-    return NextResponse.json({ success: true, data: cleanSheets });
-  }
-
-  if (type === "motm") {
-    const motmList = [...allPlayers]
-      .sort((a, b) => (b.motmCount || 0) - (a.motmCount || 0))
-      .slice(0, 50);
-    return NextResponse.json({ success: true, data: motmList });
+    const clubs = await db.getClubs({ status: "ACTIVE" });
+    clubs.sort((a: any, b: any) => b.points - a.points || b.stats.goalsScored - b.stats.goalsConceded - (a.stats.goalsScored - a.stats.goalsConceded));
+    return ok(clubs);
   }
 
   if (type === "referees") {
-    const refs = [...allReferees].sort((a, b) => b.rating - a.rating);
-    return NextResponse.json({ success: true, data: refs });
+    const refs = await db.getReferees();
+    return ok(refs.sort((a: any, b: any) => b.rating - a.rating));
   }
 
-  // Default: overall players ranking by Elo rating
-  const playersSorted = [...allPlayers].sort((a, b) => b.rating - a.rating);
-  return NextResponse.json({ success: true, data: playersSorted });
-}
+  const players = (await db.getPlayers({ status: "ACTIVE" })).map(({ phone, userId, ...p }: any) => p);
+  const played = players.filter((p: any) => p.stats.matchesPlayed > 0);
+
+  switch (type) {
+    case "scorers":
+      return ok(played.sort((a: any, b: any) => b.stats.goalsScored - a.stats.goalsScored).slice(0, 50));
+    case "assists":
+      return ok(played.sort((a: any, b: any) => b.stats.assists - a.stats.assists).slice(0, 50));
+    case "clean-sheets":
+      return ok(played.filter((p: any) => p.stats.cleanSheets > 0).sort((a: any, b: any) => b.stats.cleanSheets - a.stats.cleanSheets));
+    case "motm":
+      return ok(players.filter((p: any) => p.motmCount > 0).sort((a: any, b: any) => b.motmCount - a.motmCount).slice(0, 50));
+    default:
+      return ok(players.sort((a: any, b: any) => b.rating - a.rating));
+  }
+});

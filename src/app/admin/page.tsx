@@ -1,179 +1,168 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Users,
-  Shield,
-  Trophy,
-  Swords,
-  Radio,
-  FileText,
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  TrendingUp,
-} from "lucide-react";
-import { formatDate, formatTime } from "@/lib/utils";
+import { Users, Shield, Trophy, Swords, Radio, AlertCircle, Timer, ArrowRight, UserPlus, Goal, ArrowRightLeft } from "lucide-react";
+import { api, Badge, Empty, Notice, PageHeader, statusTone } from "@/components/admin/ui";
+import { formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 
 export default function AdminOverviewPage() {
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    async function loadOverview() {
-      try {
-        const res = await fetch("/api/admin/overview");
-        const json = await res.json();
-        if (json.success) setData(json.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadOverview();
+    api("/api/admin/overview").then(setData).catch((e) => setError(e.message));
   }, []);
 
-  if (loading) {
-    return <div className="text-center py-20 text-slate-600 font-bold animate-pulse">Loading Admin Command Center...</div>;
-  }
+  if (error) return <Notice kind="err">{error}</Notice>;
+  if (!data) return <div className="py-20 text-center text-xs text-slate-500 animate-pulse">Loading dashboard…</div>;
 
-  const stats = data?.stats;
-  const liveMatches = data?.liveFixtures || [];
-  const auditLogs = data?.auditLogs || [];
+  const { stats, liveFixtures, pendingFixtures, pendingResults, countdown, auditLogs, recentUsers } = data;
+  const tiles = [
+    { label: "Players", value: stats.registeredPlayers, icon: Users, href: "/admin/players" },
+    { label: "User accounts", value: stats.registeredUsers, icon: UserPlus, href: "/admin/users" },
+    { label: "Active clubs", value: stats.activeClubs, icon: Shield, href: "/admin/clubs" },
+    { label: "Active tournaments", value: stats.activeTournaments, icon: Trophy, href: "/admin/tournaments" },
+    { label: "Matches played", value: stats.completedMatches, icon: Swords, href: "/admin/fixtures" },
+    { label: "Live now", value: stats.liveMatches, icon: Radio, href: "/admin/live" },
+    { label: "Goals recorded", value: stats.totalGoalsScored, icon: Goal },
+    { label: "Transfers", value: stats.totalTransfers, icon: ArrowRightLeft, href: "/admin/transfers" },
+  ];
+  const cdActive = countdown.enabled && countdown.targetDate && new Date(countdown.targetDate).getTime() > Date.now();
 
   return (
-    <div className="space-y-8">
-      
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-950">Super Admin Command Center</h1>
-          <p className="text-xs text-slate-600 mt-1">Platform analytics, competition operations, and governance oversight.</p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader title="Dashboard" subtitle="Everything happening on the platform at a glance." />
 
-        <div className="flex items-center space-x-3">
-          <Link
-            href="/admin/live"
-            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center space-x-2 animate-pulse shadow-sm"
-          >
-            <Radio className="w-4 h-4" />
-            <span>Open Live Match Ops ({liveMatches.length} Live)</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase">
-            <span>Total Athletes</span>
-            <Users className="w-4 h-4 text-black" />
-          </div>
-          <div className="text-3xl font-black text-slate-950 font-mono">{stats?.registeredPlayers || 50}</div>
-          <div className="text-[11px] text-emerald-700 font-semibold">+14 new this month</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase">
-            <span>Active Clubs</span>
-            <Shield className="w-4 h-4 text-black" />
-          </div>
-          <div className="text-3xl font-black text-slate-950 font-mono">{stats?.activeClubs || 10}</div>
-          <div className="text-[11px] text-slate-500">10 Premier Division</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase">
-            <span>Active Tournaments</span>
-            <Trophy className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="text-3xl font-black text-slate-950 font-mono">{stats?.activeTournaments || 3}</div>
-          <div className="text-[11px] text-amber-700 font-semibold">150,000+ BDT Pool</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase">
-            <span>Completed Matches</span>
-            <Swords className="w-4 h-4 text-emerald-700" />
-          </div>
-          <div className="text-3xl font-black text-slate-950 font-mono">{stats?.completedMatches || 24}</div>
-          <div className="text-[11px] text-slate-500">100% Score Verified</div>
-        </div>
-      </div>
-
-      {/* Live Operations & Audit Logs Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Live Match Desk Preview */}
-        <div className="lg:col-span-7 rounded-3xl bg-white border border-slate-200 shadow-sm p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider flex items-center">
-              <Radio className="w-4 h-4 text-rose-600 mr-2 animate-pulse" />
-              Real-Time Matchday Fixtures
-            </h2>
-            <Link href="/admin/fixtures" className="text-xs text-black font-bold hover:underline">
-              All Fixtures →
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {tiles.map((t) => {
+          const body = (
+            <>
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase">
+                {t.label} <t.icon className="w-4 h-4" />
+              </div>
+              <div className="text-2xl font-black text-slate-950 font-mono mt-1">{t.value}</div>
+            </>
+          );
+          return t.href ? (
+            <Link key={t.label} href={t.href} className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-black shadow-sm transition-colors">
+              {body}
             </Link>
-          </div>
+          ) : (
+            <div key={t.label} className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              {body}
+            </div>
+          );
+        })}
+      </div>
 
-          <div className="space-y-3">
-            {liveMatches.map((m: any) => (
-              <div
-                key={m.id}
-                className="p-4 rounded-2xl bg-slate-50 border border-rose-200 flex items-center justify-between shadow-sm"
-              >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Link href="/admin/countdown" className={`p-5 rounded-2xl border shadow-sm flex items-center justify-between gap-4 ${cdActive ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}>
+          <div className="flex items-center gap-3">
+            <Timer className={`w-8 h-8 ${cdActive ? "text-emerald-700" : "text-slate-400"}`} />
+            <div>
+              <div className="text-sm font-black text-slate-950">Registration countdown is {cdActive ? "ON" : "OFF"}</div>
+              <div className="text-xs text-slate-600">{cdActive ? `${countdown.title} · ends ${formatDate(countdown.targetDate)} ${formatTime(countdown.targetDate)}` : "Start a countdown to open tournament registration on the homepage."}</div>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 shrink-0" />
+        </Link>
+        <Link href="/admin/fixtures" className={`p-5 rounded-2xl border shadow-sm flex items-center justify-between gap-4 ${pendingResults.length ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"}`}>
+          <div className="flex items-center gap-3">
+            <AlertCircle className={`w-8 h-8 ${pendingResults.length ? "text-amber-600" : "text-slate-400"}`} />
+            <div>
+              <div className="text-sm font-black text-slate-950">{pendingResults.length} result(s) awaiting approval</div>
+              <div className="text-xs text-slate-600">Player-reported scores need an official to confirm them.</div>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 shrink-0" />
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-black text-slate-950">Live matches</h2>
+            <Link href="/admin/live" className="text-xs font-bold hover:underline">Open desk →</Link>
+          </div>
+          {liveFixtures.length ? (
+            liveFixtures.map((f: any) => <FixtureLine key={f.id} f={f} />)
+          ) : (
+            <Empty>No matches are live right now.</Empty>
+          )}
+        </section>
+
+        <section className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-black text-slate-950">Next scheduled</h2>
+            <Link href="/admin/fixtures" className="text-xs font-bold hover:underline">All fixtures →</Link>
+          </div>
+          {pendingFixtures.length ? (
+            pendingFixtures.map((f: any) => <FixtureLine key={f.id} f={f} />)
+          ) : (
+            <Empty>No upcoming fixtures. Create one from Fixtures & Results.</Empty>
+          )}
+        </section>
+
+        {recentUsers.length > 0 && (
+          <section className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-black text-slate-950">Newest sign-ups</h2>
+              <Link href="/admin/users" className="text-xs font-bold hover:underline">Manage →</Link>
+            </div>
+            {recentUsers.map((u: any) => (
+              <div key={u.id} className="flex items-center justify-between text-xs">
                 <div>
-                  <div className="text-xs font-bold text-rose-700 flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping"></span>
-                    <span>LIVE: {m.tournamentName}</span>
-                  </div>
-                  <div className="text-sm font-bold text-slate-950 mt-1">
-                    {m.homePlayer?.fullName || m.homeClub?.shortName} ({m.result?.homeScore || 2}) vs ({m.result?.awayScore || 1}) {m.awayPlayer?.fullName || m.awayClub?.shortName}
-                  </div>
-                  <div className="text-[11px] text-slate-500">{m.venue} • Referee: {m.referee?.name}</div>
+                  <div className="font-bold text-slate-950">{u.fullName}</div>
+                  <div className="text-slate-500">@{u.username} · {u.email}</div>
                 </div>
-
-                <Link
-                  href={`/matches/${m.id}`}
-                  className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs transition-colors shadow-sm"
-                >
-                  Arbitrate Score
-                </Link>
+                <div className="text-right space-y-0.5">
+                  <Badge tone={statusTone(u.status)}>{u.role.replace(/_/g, " ")}</Badge>
+                  <div className="text-[10px] text-slate-400">{formatRelativeTime(u.createdAt)}</div>
+                </div>
               </div>
             ))}
-          </div>
-        </div>
+          </section>
+        )}
 
-        {/* Audit Log Activity */}
-        <div className="lg:col-span-5 rounded-3xl bg-white border border-slate-200 shadow-sm p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider flex items-center">
-              <FileText className="w-4 h-4 text-slate-800 mr-2" />
-              Administrative Audit Log
-            </h2>
-            <Link href="/admin/audit-logs" className="text-xs text-black font-bold hover:underline">
-              Full Logs →
-            </Link>
-          </div>
-
-          <div className="space-y-3">
-            {auditLogs.map((log: any) => (
-              <div key={log.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 font-mono text-[10px]">{log.action}</span>
-                  <span className="text-[10px] text-slate-500 font-mono">{formatTime(log.createdAt)}</span>
-                </div>
-                <div className="text-slate-950 font-semibold">{log.target}</div>
-                <div className="text-[10px] text-slate-500">Admin: {log.adminName} • IP: {log.ipAddress}</div>
+        {auditLogs.length > 0 && (
+          <section className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-black text-slate-950">Recent admin actions</h2>
+              <Link href="/admin/audit-logs" className="text-xs font-bold hover:underline">Audit log →</Link>
+            </div>
+            {auditLogs.map((l: any) => (
+              <div key={l.id} className="text-xs">
+                <span className="font-bold text-slate-950">{l.adminName}</span> <span className="font-mono text-slate-600">{l.action}</span>{" "}
+                <span className="text-slate-700">{l.target}</span>
+                <div className="text-[10px] text-slate-400">{formatRelativeTime(l.createdAt)}</div>
               </div>
             ))}
-          </div>
-        </div>
-
+          </section>
+        )}
       </div>
+    </div>
+  );
+}
 
+function FixtureLine({ f }: { f: any }) {
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 text-xs">
+      <div className="min-w-0">
+        <div className="font-bold text-slate-950 truncate">
+          {f.homePlayer?.fullName || f.homeClub?.name} vs {f.awayPlayer?.fullName || f.awayClub?.name}
+        </div>
+        <div className="text-slate-500 truncate">
+          {[f.tournamentName, f.round].filter(Boolean).join(" · ")} · {formatDate(f.scheduledDate)} {formatTime(f.scheduledDate)}
+        </div>
+      </div>
+      {f.status === "LIVE" ? (
+        <span className="font-mono font-black">
+          {f.liveScore.home} - {f.liveScore.away} <Badge tone="red">{f.minute}</Badge>
+        </span>
+      ) : (
+        <Badge tone={statusTone(f.status)}>{f.status}</Badge>
+      )}
     </div>
   );
 }

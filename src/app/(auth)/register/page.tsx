@@ -19,13 +19,31 @@ export default function RegisterPage() {
     playStyle: "Quick Counter",
     facebookProfile: "",
     bio: "",
+    phone: "",
+    website: "",
   });
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const pw = formData.password;
+  const pwChecks = [
+    { ok: pw.length >= 8, label: "8+ characters" },
+    { ok: /[a-z]/.test(pw), label: "lowercase" },
+    { ok: /[A-Z]/.test(pw), label: "uppercase" },
+    { ok: /[0-9]/.test(pw), label: "number" },
+  ];
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!pwChecks.every((c) => c.ok)) {
+      setError("Password must have 8+ characters with uppercase, lowercase and a number.");
+      return;
+    }
+    if (formData.password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
     setLoading(true);
 
     try {
@@ -107,7 +125,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1">Password (min 8 chars) *</label>
+                <label className="block text-slate-700 font-bold mb-1">Password *</label>
                 <input
                   type="password"
                   placeholder="••••••••••••"
@@ -116,9 +134,54 @@ export default function RegisterPage() {
                   className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs"
                   required
                   minLength={8}
+                  autoComplete="new-password"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {pwChecks.map((c) => (
+                    <span key={c.label} className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.ok ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                      {c.ok ? "✓" : "•"} {c.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Confirm Password *</label>
+                <input
+                  type="password"
+                  placeholder="••••••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Phone (private)</label>
+                <input
+                  type="tel"
+                  placeholder="01XXXXXXXXX"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs"
                 />
               </div>
             </div>
+
+            {/* Honeypot for bots: hidden from people, left empty */}
+            <input
+              type="text"
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              value={formData.website}
+              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+              className="hidden"
+              aria-hidden="true"
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

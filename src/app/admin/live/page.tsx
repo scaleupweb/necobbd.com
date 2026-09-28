@@ -1,130 +1,127 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Radio, Play, Swords, CheckCircle2, AlertTriangle, ShieldCheck, Scale, ArrowRight } from "lucide-react";
-import { formatDate, formatTime } from "@/lib/utils";
+import { useCallback, useEffect, useState } from "react";
+import { Minus, Plus, Radio, Flag, Play } from "lucide-react";
+import { api, Badge, Button, Empty, Notice, PageHeader } from "@/components/admin/ui";
+import { ResultModal } from "@/components/admin/ResultModal";
+import { formatTime } from "@/lib/utils";
 
-export default function AdminLiveDeskPage() {
-  const [fixtures, setFixtures] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function LiveDeskPage() {
+  const [live, setLive] = useState<any[]>([]);
+  const [today, setToday] = useState<any[]>([]);
+  const [err, setErr] = useState("");
+  const [finishing, setFinishing] = useState<any>(null);
 
-  useEffect(() => {
-    async function loadFixtures() {
-      try {
-        const res = await fetch("/api/fixtures");
-        const json = await res.json();
-        if (json.success) setFixtures(json.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    try {
+      const [l, s] = await Promise.all([api<any[]>("/api/admin/fixtures?status=LIVE"), api<any[]>("/api/admin/fixtures?status=SCHEDULED")]);
+      setLive(l);
+      const end = Date.now() + 24 * 3600000;
+      setToday(s.filter((f) => new Date(f.scheduledDate).getTime() < end).sort((a, b) => +new Date(a.scheduledDate) - +new Date(b.scheduledDate)));
+    } catch (e: any) {
+      setErr(e.message);
     }
-    loadFixtures();
   }, []);
 
-  const liveFixtures = fixtures.filter((f) => f.status === "LIVE");
-  const upcomingFixtures = fixtures.filter((f) => f.status === "SCHEDULED");
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const score = async (f: any, side: "home" | "away", delta: number) => {
+    const next = { home: f.liveScore.home, away: f.liveScore.away };
+    next[side] = Math.max(0, next[side] + delta);
+    setLive((list) => list.map((x) => (x.id === f.id ? { ...x, liveScore: next } : x)));
+    try {
+      await api(`/api/admin/fixtures/${f.id}`, { method: "PATCH", json: { action: "SCORE", ...next } });
+    } catch (e: any) {
+      setErr(e.message);
+      load();
+    }
+  };
+
+  const start = async (f: any) => {
+    try {
+      await api(`/api/admin/fixtures/${f.id}`, { method: "PATCH", json: { action: "START" } });
+      load();
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  };
 
   return (
-    <div className="space-y-8">
-      
-      {/* Header */}
-      <div className="pb-6 border-b border-slate-200">
-        <div className="inline-flex items-center space-x-2 text-xs font-bold text-rose-600 uppercase tracking-widest mb-1">
-          <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping"></span>
-          <span>Competition Operations Control</span>
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-950">Live Match Operations Desk</h1>
-        <p className="text-xs text-slate-600 mt-1">Real-time score arbitration, stream link broadcast controls, and referee monitoring.</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader title="Live Match Desk" subtitle="Update live scores in real time. The public match pages refresh automatically." />
+      {err && <Notice kind="err">{err}</Notice>}
 
-      {/* Live Running Now Grid */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider flex items-center">
-          <Radio className="w-4 h-4 text-rose-600 mr-2 animate-pulse" />
-          Active Live Broadcast Ties ({liveFixtures.length})
+      <section className="space-y-3">
+        <h2 className="text-sm font-black text-slate-950 flex items-center gap-2">
+          <Radio className="w-4 h-4 text-rose-600" /> Live now ({live.length})
         </h2>
-
-        {liveFixtures.length === 0 ? (
-          <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm text-center text-slate-500 text-xs">
-            No live tournament ties currently active.
-          </div>
+        {live.length === 0 ? (
+          <Empty>No live matches. Start one below or from Fixtures.</Empty>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {liveFixtures.map((m) => (
-              <div
-                key={m.id}
-                className="p-6 rounded-3xl bg-white border-2 border-rose-500 shadow-sm space-y-4"
-              >
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {live.map((f) => (
+              <div key={f.id} className="rounded-2xl bg-white border-2 border-rose-200 p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-900 font-bold">{m.tournamentName} • {m.round}</span>
-                  <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-bold animate-pulse text-[10px] border border-rose-200">
-                    75' LIVE
-                  </span>
+                  <span className="font-bold text-slate-600">{[f.tournamentName, f.round].filter(Boolean).join(" · ")}</span>
+                  <Badge tone="red">LIVE {f.minute}</Badge>
                 </div>
-
-                <div className="grid grid-cols-5 items-center text-center py-2">
-                  <div className="col-span-2 text-center">
-                    <div className="text-sm font-bold text-slate-950">{m.homePlayer?.fullName || m.homeClub?.shortName}</div>
-                    <div className="text-[10px] text-slate-500">{m.homeClub?.shortName}</div>
-                  </div>
-                  <div className="col-span-1 text-2xl font-black text-slate-950 font-mono bg-slate-100 py-1 rounded-xl border border-slate-200">
-                    {m.result?.homeScore ?? 2} - {m.result?.awayScore ?? 1}
-                  </div>
-                  <div className="col-span-2 text-center">
-                    <div className="text-sm font-bold text-slate-950">{m.awayPlayer?.fullName || m.awayClub?.shortName}</div>
-                    <div className="text-[10px] text-slate-500">{m.awayClub?.shortName}</div>
+                <div className="grid grid-cols-3 items-center gap-2">
+                  {(["home", "away"] as const).map((side, i) => (
+                    <div key={side} className={`flex flex-col items-center gap-2 ${i === 1 ? "order-3" : ""}`}>
+                      <div className="text-xs font-bold text-center truncate w-full">{f[`${side}Player`]?.fullName || f[`${side}Club`]?.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <Button small variant="secondary" onClick={() => score(f, side, -1)}>
+                          <Minus className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button small onClick={() => score(f, side, 1)}>
+                          <Plus className="w-3.5 h-3.5" /> Goal
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="order-2 text-center text-4xl font-black font-mono tabular-nums">
+                    {f.liveScore.home} - {f.liveScore.away}
                   </div>
                 </div>
-
-                <div className="text-xs text-slate-500 flex items-center justify-between pt-3 border-t border-slate-100">
-                  <span>Server: {m.venue}</span>
-                  <span>Ref: {m.referee?.name}</span>
+                <div className="flex justify-end">
+                  <Button variant="success" onClick={() => setFinishing(f)}>
+                    <Flag className="w-4 h-4" /> Full time — confirm result
+                  </Button>
                 </div>
-
-                <Link
-                  href={`/matches/${m.id}`}
-                  className="w-full py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs text-center block transition-colors shadow-sm"
-                >
-                  Open Live Operations Scoreboard →
-                </Link>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Upcoming Scheduled Matches */}
-      <div className="space-y-4 pt-4">
-        <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">
-          Next Scheduled Ties ({upcomingFixtures.length})
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {upcomingFixtures.map((m) => (
-            <div
-              key={m.id}
-              className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between"
-            >
-              <div>
-                <div className="text-xs font-bold text-slate-900">{m.tournamentName}</div>
-                <div className="text-sm font-bold text-slate-950 mt-0.5">
-                  {m.homePlayer?.fullName || m.homeClub?.shortName} vs {m.awayPlayer?.fullName || m.awayClub?.shortName}
+      <section className="space-y-3">
+        <h2 className="text-sm font-black text-slate-950">Coming up in the next 24 hours</h2>
+        {today.length === 0 ? (
+          <Empty>Nothing scheduled in the next 24 hours.</Empty>
+        ) : (
+          <div className="space-y-2">
+            {today.map((f) => (
+              <div key={f.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white border border-slate-200 text-xs">
+                <div>
+                  <div className="font-bold">
+                    {f.homePlayer?.fullName || f.homeClub?.name} vs {f.awayPlayer?.fullName || f.awayClub?.name}
+                  </div>
+                  <div className="text-slate-500">{formatTime(f.scheduledDate)} · {f.tournamentName || f.round}</div>
                 </div>
-                <div className="text-[11px] text-slate-500">{formatDate(m.scheduledDate)} at {formatTime(m.scheduledDate)}</div>
+                <Button small variant="success" onClick={() => start(f)}>
+                  <Play className="w-3.5 h-3.5" /> Go live
+                </Button>
               </div>
-              <Link
-                href={`/matches/${m.id}`}
-                className="px-3 py-1.5 rounded-xl bg-black hover:bg-zinc-800 text-white font-bold text-xs shadow-sm transition-colors"
-              >
-                Manage Fixture
-              </Link>
-            </div>
-          ))}
-        </div>
-      </div>
+            ))}
+          </div>
+        )}
+      </section>
 
+      {finishing && <ResultModal fixture={finishing} onClose={() => setFinishing(null)} onDone={load} />}
     </div>
   );
 }

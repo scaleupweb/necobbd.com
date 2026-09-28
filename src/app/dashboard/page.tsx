@@ -1,227 +1,539 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  User,
-  Shield,
   Trophy,
   Swords,
-  Award,
-  ArrowRight,
-  Clock,
-  Flame,
   Calendar,
-  Settings,
   Bell,
+  ArrowRight,
+  User,
+  Lock,
+  LayoutDashboard,
   CheckCircle2,
+  Loader2,
+  ExternalLink,
 } from "lucide-react";
-import { formatCurrency, getFormColor, formatDate } from "@/lib/utils";
+import { formatCurrency, getFormColor, formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
+import { PLAYER_POSITIONS, PLAY_STYLES } from "@/lib/constants";
+import { ImageInput } from "@/components/ui/ImageInput";
+
+type Tab = "overview" | "profile" | "security";
+
+const input =
+  "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs";
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null);
-  const [player, setPlayer] = useState<any>(null);
-  const [fixtures, setFixtures] = useState<any[]>([]);
+  const [tab, setTab] = useState<Tab>("overview");
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function loadDashboard() {
-      try {
-        const authRes = await fetch("/api/auth/me");
-        const authJson = await authRes.json();
-        if (authJson.success && authJson.data) {
-          setUser(authJson.data);
-          const pRes = await fetch(`/api/players/${authJson.data.username}`);
-          const pJson = await pRes.json();
-          if (pJson.success) {
-            setPlayer(pJson.data);
-          }
-        }
-
-        const fixRes = await fetch("/api/fixtures");
-        const fixJson = await fixRes.json();
-        if (fixJson.success) {
-          setFixtures(fixJson.data.slice(0, 4));
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/me/overview", { cache: "no-store" });
+      const json = await res.json();
+      if (!json.success) {
+        if (res.status === 401) window.location.href = "/login?next=/dashboard";
+        throw new Error(json.error?.message || "Failed to load dashboard");
       }
+      setData(json.data);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
-    loadDashboard();
   }, []);
 
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "profile" || t === "security") setTab(t);
+    load();
+  }, [load]);
+
   if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-20 text-center text-slate-600 font-bold animate-pulse">
-        Loading Athlete Dashboard...
-      </div>
-    );
+    return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-slate-600 font-bold animate-pulse text-sm">Loading your dashboard…</div>;
+  }
+  if (error || !data) {
+    return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-rose-600 font-bold text-sm">{error || "Something went wrong"}</div>;
   }
 
+  const { user, player } = data;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      
-      {/* Welcome Hero Card */}
-      <div className="relative rounded-3xl overflow-hidden bg-white border border-slate-200 p-5 sm:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex flex-col xs:flex-row items-start xs:items-center gap-3.5">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
-              <img
-                src={player?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200"}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div>
-              <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-900 border border-slate-200 text-[10px] font-bold uppercase mb-1">
-                <span>Certified Athlete</span>
-                <span>•</span>
-                <span>{player?.preferredPosition || "CF"}</span>
-              </div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-950">
-                Welcome, {user?.fullName || "Athlete"}!
-              </h1>
-              <div className="text-xs text-slate-500 font-mono">
-                @{user?.username || "athlete"} • Konami UID: <strong className="text-slate-900">{player?.konamiId || "984-721-032"}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 w-full md:w-auto">
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-0.5">
-              <div className="text-[10px] text-slate-500 uppercase font-bold">Elo Rating</div>
-              <div className="text-xl sm:text-2xl font-black text-slate-950 font-mono">{player?.rating || 750}</div>
-              <div className="text-[10px] text-emerald-700 font-semibold">Tier 1 Rank #1</div>
-            </div>
-
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-0.5">
-              <div className="text-[10px] text-slate-500 uppercase font-bold">Market Value</div>
-              <div className="text-xl sm:text-2xl font-black text-emerald-700 font-mono">{formatCurrency(player?.marketValue || 50)}</div>
-              <div className="text-[10px] text-slate-500">{player?.contract?.status || "Free Agent"}</div>
-            </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Header */}
+      <div className="rounded-3xl bg-white border border-slate-200 p-5 sm:p-7 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="flex items-center gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={player?.avatar || user.avatar || "/images/placeholders/avatar.svg"} alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-slate-200" />
+          <div>
+            <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">{user.role.replace(/_/g, " ")}</div>
+            <h1 className="text-xl sm:text-3xl font-black text-slate-950">Hi, {user.fullName.split(" ")[0]}!</h1>
+            <div className="text-xs text-slate-500 font-mono">@{user.username}</div>
           </div>
         </div>
+        {player && (
+          <div className="grid grid-cols-3 gap-2.5 w-full md:w-auto">
+            <Kpi label="Rating" value={player.rating} />
+            <Kpi label="Value" value={formatCurrency(player.marketValue)} />
+            <Kpi label="Win rate" value={`${player.stats.winRate}%`} />
+          </div>
+        )}
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-1">
-          <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase">Matches Played</div>
-          <div className="text-xl sm:text-2xl font-black text-slate-950 font-mono">{player?.stats?.matchesPlayed || 48}</div>
-          <div className="text-[10px] sm:text-[11px] text-emerald-700 font-bold">{player?.stats?.winRate || 81.3}% Win Rate</div>
-        </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-1">
-          <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase">Goals Scored</div>
-          <div className="text-xl sm:text-2xl font-black text-slate-950 font-mono">{player?.stats?.goalsScored || 64}</div>
-          <div className="text-[10px] sm:text-[11px] text-slate-700 font-semibold">{player?.stats?.assists || 19} Assists</div>
-        </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-1">
-          <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase">MOTM Awards</div>
-          <div className="text-xl sm:text-2xl font-black text-amber-600 font-mono">{player?.motmCount || 14}</div>
-          <div className="text-[10px] sm:text-[11px] text-slate-500">Accredited Honors</div>
-        </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-1">
-          <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase">Current Club</div>
-          <div className="text-xs sm:text-sm font-black text-slate-950 truncate">{player?.club?.name || "Dhaka Dominators"}</div>
-          <div className="text-[10px] sm:text-[11px] text-slate-700 font-semibold">Active Starting XI</div>
-        </div>
+      {/* Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        {([
+          ["overview", "Overview", LayoutDashboard],
+          ["profile", "Edit Profile", User],
+          ["security", "Password & Security", Lock],
+        ] as const).map(([k, label, Icon]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              tab === k ? "bg-black text-white" : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+        {player && (
+          <Link href={`/players/${player.username}`} className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white border border-slate-200 hover:border-black whitespace-nowrap">
+            <ExternalLink className="w-3.5 h-3.5" /> View public profile
+          </Link>
+        )}
       </div>
 
-      {/* Upcoming Matches & Action Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
-        
-        {/* Scheduled Fixtures */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-950 uppercase tracking-wider flex items-center">
-              <Swords className="w-4 h-4 text-black mr-2" />
-              Your Upcoming Tournament Matches
-            </h2>
-            <Link href="/matches" className="text-xs text-black font-bold hover:underline">
-              Match Centre →
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:gap-4">
-            {fixtures.map((f) => (
-              <div
-                key={f.id}
-                className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col xs:flex-row xs:items-center justify-between gap-3 hover:border-black transition-all"
-              >
-                <div>
-                  <div className="text-xs font-bold text-slate-900">{f.tournamentName} • {f.round}</div>
-                  <div className="text-sm font-bold text-slate-950 mt-1">
-                    {f.homePlayer?.fullName || f.homeClub?.shortName} vs {f.awayPlayer?.fullName || f.awayClub?.shortName}
-                  </div>
-                  <div className="text-[11px] text-slate-500">{formatDate(f.scheduledDate)} at {f.venue}</div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                    f.status === "LIVE" ? "bg-rose-50 text-rose-700 border border-rose-200 animate-pulse" : "bg-slate-100 text-slate-700 border border-slate-200"
-                  }`}>
-                    {f.status}
-                  </span>
-                  <Link
-                    href={`/matches/${f.id}`}
-                    className="px-3.5 py-2 rounded-xl bg-black text-white font-bold text-xs hover:bg-zinc-800 transition-colors shadow-sm min-h-[44px] flex items-center justify-center"
-                  >
-                    Match Hub
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick Links & Shortcuts */}
-        <div className="lg:col-span-4 space-y-4">
-          <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">
-            Quick Actions
-          </h2>
-          <div className="space-y-3">
-            <Link
-              href={`/players/${user?.username || "mahim_striker"}`}
-              className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:border-black block space-y-1 transition-all"
-            >
-              <div className="text-xs font-bold text-slate-950 flex items-center justify-between">
-                <span>View Public Esports Athlete Profile</span>
-                <ArrowRight className="w-3.5 h-3.5 text-black" />
-              </div>
-              <div className="text-[11px] text-slate-500">See your public rating, match radar, and trophy cabinet</div>
-            </Link>
-
-            <Link
-              href="/transfer-market"
-              className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:border-black block space-y-1 transition-all"
-            >
-              <div className="text-xs font-bold text-slate-950 flex items-center justify-between">
-                <span>Transfer Market Negotiations</span>
-                <ArrowRight className="w-3.5 h-3.5 text-emerald-700" />
-              </div>
-              <div className="text-[11px] text-slate-500">Review incoming club contract offers and market value</div>
-            </Link>
-
-            <Link
-              href="/notifications"
-              className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:border-black block space-y-1 transition-all"
-            >
-              <div className="text-xs font-bold text-slate-950 flex items-center justify-between">
-                <span>Referee Result Alerts</span>
-                <ArrowRight className="w-3.5 h-3.5 text-black" />
-              </div>
-              <div className="text-[11px] text-slate-500">Check referee certifications and match score confirmations</div>
-            </Link>
-          </div>
-        </div>
-
-      </div>
-
+      {tab === "overview" && <Overview data={data} reload={load} />}
+      {tab === "profile" && <ProfileForm player={player} user={user} onSaved={load} />}
+      {tab === "security" && <SecurityForm />}
     </div>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+      <div className="text-[10px] text-slate-500 uppercase font-bold">{label}</div>
+      <div className="text-lg sm:text-xl font-black text-slate-950 font-mono">{value}</div>
+    </div>
+  );
+}
+
+function Card({ title, icon: Icon, action, children }: { title: string; icon: any; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs sm:text-sm font-black text-slate-950 uppercase tracking-wider flex items-center gap-2">
+          <Icon className="w-4 h-4" /> {title}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Overview({ data, reload }: { data: any; reload: () => void }) {
+  const { player, tournaments, events, fixtures, activity, notifications, openTournaments } = data;
+  const [joining, setJoining] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+  const upcoming = fixtures.filter((f: any) => f.status === "SCHEDULED" || f.status === "LIVE");
+  const recent = fixtures.filter((f: any) => f.status === "FINISHED").slice(0, 5);
+
+  const join = async (slug: string) => {
+    setJoining(slug);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/tournaments/${slug}/join`, { method: "POST" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message);
+      setMsg("You're in! Good luck.");
+      reload();
+    } catch (e: any) {
+      setMsg(e.message || "Could not join");
+    } finally {
+      setJoining(null);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="lg:col-span-8 space-y-6">
+        {openTournaments.length > 0 && (
+          <Card title="Open for registration" icon={Trophy} action={<Link href="/tournaments" className="text-xs font-bold hover:underline">All →</Link>}>
+            {msg && <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold">{msg}</div>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {openTournaments.map((t: any) => (
+                <div key={t.id} className="p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <Link href={`/tournaments/${t.slug}`} className="text-sm font-bold text-black hover:underline line-clamp-1">{t.name}</Link>
+                  <div className="text-[11px] text-slate-500">
+                    {t.currentParticipants}/{t.maxParticipants} joined
+                    {t.registrationDeadline && ` · closes ${formatDate(t.registrationDeadline)}`}
+                    {t.prizePool && ` · ${t.prizePool}`}
+                  </div>
+                  <button
+                    onClick={() => join(t.slug)}
+                    disabled={joining === t.slug || !player}
+                    className="w-full py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-zinc-800 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {joining === t.slug && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {player ? "Join tournament" : "Player profile required"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        <Card title="My matches" icon={Swords} action={<Link href="/matches" className="text-xs font-bold hover:underline">Match centre →</Link>}>
+          {upcoming.length === 0 && recent.length === 0 && <p className="text-xs text-slate-500">No matches scheduled for you yet. Join a tournament to get fixtures.</p>}
+          {upcoming.map((f: any) => (
+            <MatchCard key={f.id} f={f} playerId={player?.id} onReported={reload} />
+          ))}
+          {recent.length > 0 && <div className="text-[11px] font-bold text-slate-500 uppercase pt-2">Recent results</div>}
+          {recent.map((f: any) => (
+            <MatchCard key={f.id} f={f} playerId={player?.id} onReported={reload} />
+          ))}
+        </Card>
+
+        <Card title={`My tournaments (${tournaments.length})`} icon={Trophy}>
+          {tournaments.length ? (
+            <div className="divide-y divide-slate-100">
+              {tournaments.map((t: any) => (
+                <Link key={t.id} href={`/tournaments/${t.slug}`} className="flex items-center justify-between py-3 first:pt-0 last:pb-0 gap-3 group">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-black truncate group-hover:underline">{t.name}</div>
+                    <div className="text-[11px] text-slate-500">
+                      {t.status.replace(/_/g, " ").toLowerCase()} · {t.currentParticipants}/{t.maxParticipants} players
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">You haven&apos;t joined any tournaments yet.</p>
+          )}
+        </Card>
+
+        {events.length > 0 && (
+          <Card title={`My events (${events.length})`} icon={Calendar}>
+            <div className="divide-y divide-slate-100">
+              {events.map((e: any) => (
+                <Link key={e.id} href={`/events#${e.slug}`} className="flex items-center justify-between py-3 first:pt-0 last:pb-0 gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-black truncate">{e.name}</div>
+                    <div className="text-[11px] text-slate-500 truncate">{e.venue}</div>
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-600 shrink-0">{formatDate(e.eventDate)}</span>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <div className="lg:col-span-4 space-y-6">
+        {player && (
+          <Card title="Form & stats" icon={LayoutDashboard}>
+            <div className="flex gap-1.5">
+              {player.form.length ? (
+                player.form.map((r: string, i: number) => (
+                  <span key={i} className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center border ${getFormColor(r)}`}>{r}</span>
+                ))
+              ) : (
+                <span className="text-xs text-slate-500">No matches played yet</span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <Kpi label="Played" value={player.stats.matchesPlayed} />
+              <Kpi label="Goals" value={player.stats.goalsScored} />
+              <Kpi label="MOTM" value={player.motmCount} />
+            </div>
+            <div className="text-xs text-slate-600">
+              Club: <strong className="text-black">{player.club?.name || "Free agent"}</strong>
+            </div>
+          </Card>
+        )}
+
+        <Card title="Notifications" icon={Bell} action={<Link href="/notifications" className="text-xs font-bold hover:underline">All →</Link>}>
+          {notifications.length ? (
+            <div className="space-y-3">
+              {notifications.slice(0, 6).map((n: any) => (
+                <div key={n.id} className="text-xs">
+                  <div className={`font-bold ${n.read ? "text-slate-600" : "text-black"}`}>{n.title}</div>
+                  {n.message && <div className="text-slate-500">{n.message}</div>}
+                  <div className="text-[10px] text-slate-400">{formatRelativeTime(n.createdAt)}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">You&apos;re all caught up.</p>
+          )}
+        </Card>
+
+        <Card title="Recent activity" icon={CheckCircle2}>
+          {activity.length ? (
+            <ul className="space-y-2.5">
+              {activity.slice(0, 8).map((a: any) => (
+                <li key={a.id} className="text-xs">
+                  <div className="font-semibold text-black">{a.title}</div>
+                  <div className="text-[10px] text-slate-400">{formatRelativeTime(a.createdAt)}</div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-slate-500">Nothing yet.</p>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({ f, playerId, onReported }: { f: any; playerId?: string; onReported: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [home, setHome] = useState("0");
+  const [away, setAway] = useState("0");
+  const [proof, setProof] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const pending = f.result?.status === "PENDING";
+  const canReport = (f.status === "LIVE" || f.status === "SCHEDULED") && !pending && playerId && (f.homePlayer?.id === playerId || f.awayPlayer?.id === playerId);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch(`/api/fixtures/${f.id}/result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ homeScore: Number(home), awayScore: Number(away), proofScreenshot: proof }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message);
+      setOpen(false);
+      onReported();
+    } catch (e: any) {
+      setErr(e.message || "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="p-4 rounded-2xl border border-slate-200 space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-bold text-slate-500">{[f.tournamentName, f.round].filter(Boolean).join(" · ")}</div>
+          <div className="text-sm font-bold text-black">
+            {f.homePlayer?.fullName || f.homeClub?.name} vs {f.awayPlayer?.fullName || f.awayClub?.name}
+          </div>
+          <div className="text-[11px] text-slate-500">
+            {formatDate(f.scheduledDate)} {formatTime(f.scheduledDate)} · {f.venue}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {f.status === "FINISHED" && f.result ? (
+            <span className="text-lg font-black font-mono">{f.result.homeScore} - {f.result.awayScore}</span>
+          ) : (
+            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${f.status === "LIVE" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-700"}`}>{f.status}</span>
+          )}
+          {pending && <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Result awaiting approval</span>}
+          {canReport && (
+            <button onClick={() => setOpen(!open)} className="px-3 py-1.5 rounded-lg bg-black text-white text-xs font-bold">
+              Report result
+            </button>
+          )}
+          <Link href={`/matches/${f.id}`} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold hover:border-black">
+            Details
+          </Link>
+        </div>
+      </div>
+      {open && (
+        <form onSubmit={submit} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="font-bold text-slate-700">{f.homePlayer?.fullName || "Home"} goals</span>
+              <input type="number" min={0} max={99} value={home} onChange={(e) => setHome(e.target.value)} className={input} required />
+            </label>
+            <label className="space-y-1">
+              <span className="font-bold text-slate-700">{f.awayPlayer?.fullName || "Away"} goals</span>
+              <input type="number" min={0} max={99} value={away} onChange={(e) => setAway(e.target.value)} className={input} required />
+            </label>
+          </div>
+          <ImageInput label="Screenshot proof (recommended)" value={proof} onChange={setProof} aspect="wide" />
+          {err && <p className="text-rose-600 font-semibold">{err}</p>}
+          <button disabled={busy} className="px-4 py-2 rounded-xl bg-black text-white font-bold disabled:opacity-60">
+            {busy ? "Submitting…" : "Submit for official approval"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function ProfileForm({ player, user, onSaved }: { player: any; user: any; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    fullName: player?.fullName || user.fullName || "",
+    avatar: player?.avatar?.startsWith("/images/placeholders") ? "" : player?.avatar || "",
+    coverImage: player?.coverImage || "",
+    konamiId: player?.konamiId || "",
+    deviceModel: player?.deviceModel || "",
+    preferredPosition: player?.preferredPosition || "CF",
+    playStyle: player?.playStyle || "Possession Game",
+    facebookProfile: player?.facebookProfile || "",
+    location: player?.location || "",
+    phone: player?.phone || "",
+    bio: player?.bio || "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const body: any = { ...form };
+      if (!player) {
+        // Staff accounts without a player profile can only change name/avatar.
+        for (const k of Object.keys(body)) if (!["fullName", "avatar"].includes(k)) delete body[k];
+      }
+      const res = await fetch("/api/me/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Save failed");
+      setMsg({ ok: true, text: "Profile saved." });
+      onSaved();
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={save} className="rounded-3xl bg-white border border-slate-200 p-5 sm:p-7 shadow-sm space-y-5 text-xs max-w-3xl">
+      {msg && <div className={`p-3 rounded-xl font-semibold ${msg.ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>{msg.text}</div>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <ImageInput label="Profile photo" value={form.avatar} onChange={(v) => set("avatar", v)} />
+        {player && <ImageInput label="Cover image" value={form.coverImage} onChange={(v) => set("coverImage", v)} aspect="wide" />}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Full name">
+          <input className={input} value={form.fullName} onChange={(e) => set("fullName", e.target.value)} required minLength={2} maxLength={60} />
+        </Field>
+        {player && (
+          <>
+            <Field label="Konami ID / UID">
+              <input className={input} value={form.konamiId} onChange={(e) => set("konamiId", e.target.value)} minLength={5} maxLength={40} />
+            </Field>
+            <Field label="Device">
+              <input className={input} value={form.deviceModel} onChange={(e) => set("deviceModel", e.target.value)} maxLength={60} />
+            </Field>
+            <Field label="Location">
+              <input className={input} value={form.location} onChange={(e) => set("location", e.target.value)} maxLength={80} placeholder="e.g. Dhaka" />
+            </Field>
+            <Field label="Position">
+              <select className={input} value={form.preferredPosition} onChange={(e) => set("preferredPosition", e.target.value)}>
+                {PLAYER_POSITIONS.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Play style">
+              <select className={input} value={form.playStyle} onChange={(e) => set("playStyle", e.target.value)}>
+                {PLAY_STYLES.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Facebook profile URL">
+              <input className={input} value={form.facebookProfile} onChange={(e) => set("facebookProfile", e.target.value)} placeholder="https://facebook.com/…" />
+            </Field>
+            <Field label="Phone (only admins can see this)">
+              <input className={input} value={form.phone} onChange={(e) => set("phone", e.target.value)} maxLength={30} />
+            </Field>
+          </>
+        )}
+      </div>
+      {player && (
+        <Field label={`Bio (${form.bio.length}/300)`}>
+          <textarea className={input} rows={4} maxLength={300} value={form.bio} onChange={(e) => set("bio", e.target.value)} />
+        </Field>
+      )}
+      <button disabled={busy} className="px-5 py-2.5 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 disabled:opacity-60">
+        {busy ? "Saving…" : "Save profile"}
+      </button>
+    </form>
+  );
+}
+
+function SecurityForm() {
+  const [currentPassword, setCurrent] = useState("");
+  const [newPassword, setNew] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+    if (newPassword !== confirm) {
+      setMsg({ ok: false, text: "New passwords do not match." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message);
+      setMsg({ ok: true, text: json.data.message });
+      setCurrent("");
+      setNew("");
+      setConfirm("");
+    } catch (e: any) {
+      setMsg({ ok: false, text: e.message || "Failed" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="rounded-3xl bg-white border border-slate-200 p-5 sm:p-7 shadow-sm space-y-4 text-xs max-w-md">
+      <h2 className="text-sm font-black text-black">Change password</h2>
+      {msg && <div className={`p-3 rounded-xl font-semibold ${msg.ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>{msg.text}</div>}
+      <Field label="Current password">
+        <input type="password" autoComplete="current-password" className={input} value={currentPassword} onChange={(e) => setCurrent(e.target.value)} required />
+      </Field>
+      <Field label="New password (8+ chars, upper, lower, number)">
+        <input type="password" autoComplete="new-password" className={input} value={newPassword} onChange={(e) => setNew(e.target.value)} required minLength={8} />
+      </Field>
+      <Field label="Confirm new password">
+        <input type="password" autoComplete="new-password" className={input} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+      </Field>
+      <button disabled={busy} className="px-5 py-2.5 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 disabled:opacity-60">
+        {busy ? "Updating…" : "Update password"}
+      </button>
+      <p className="text-[11px] text-slate-500">Changing your password signs you out on every other device.</p>
+    </form>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="block text-slate-700 font-bold">{label}</span>
+      {children}
+    </label>
   );
 }

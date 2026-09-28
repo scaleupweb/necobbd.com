@@ -1,23 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireRole, DISCIPLINE_STAFF } from "@/lib/auth";
+import { DisciplinaryActionSchema } from "@/lib/validation";
+import { ok, handle, parseBody, audit } from "@/lib/api";
 
-export async function GET() {
-  const records = db.getDisciplinaryRecords();
-  return NextResponse.json({ success: true, data: records });
-}
+export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "SUPER_ADMIN" && session.role !== "SENIOR_REFEREE")) {
-    return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Admin/Senior Official privileges required" } }, { status: 403 });
-  }
+// Public register of sanctions (also shown on /disciplinary).
+export const GET = handle(async () => ok(await db.getDisciplinaryRecords()));
 
-  const body = await req.json();
-  const record = db.issueDisciplinaryAction({
-    ...body,
-    issuedBy: session.fullName,
-  });
-
-  return NextResponse.json({ success: true, data: record }, { status: 201 });
-}
+export const POST = handle(async (req: NextRequest) => {
+  const session = await requireRole(DISCIPLINE_STAFF);
+  const data = await parseBody(req, DisciplinaryActionSchema);
+  const record = await db.issueDisciplinaryAction({ ...data, issuedBy: session.fullName });
+  await audit(req, session, `ISSUED_${data.penalty}`, record.targetName, data.reason);
+  return ok(record, 201);
+});

@@ -1,97 +1,316 @@
 import { z } from "zod";
 
+// ---------- Shared field types ----------
+
+const trimmed = (max: number) => z.string().trim().max(max);
+
+/** Image: empty, site-relative path (e.g. uploaded /api/media/..), or http(s) URL. */
+export const imageUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((v) => v === "" || (v.startsWith("/") && !v.startsWith("//")) || /^https?:\/\//i.test(v), "Must be an uploaded image or an http(s) URL");
+
+/** Link target: empty, relative path, anchor, http(s) or mailto. Blocks javascript: etc. */
+export const safeLink = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((v) => v === "" || (v.startsWith("/") && !v.startsWith("//")) || v.startsWith("#") || /^(https?:\/\/|mailto:|tel:)/i.test(v), "Invalid link");
+
+const optionalUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => v === "" || /^https?:\/\//i.test(v), "Must be a valid http(s) URL")
+  .optional()
+  .default("");
+
+const dateInput = z
+  .union([z.string(), z.date()])
+  .transform((v, ctx) => {
+    if (v === "" || v === null) return undefined;
+    const d = new Date(v);
+    if (isNaN(d.getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid date" });
+      return z.NEVER;
+    }
+    return d;
+  });
+
+const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Invalid id");
+const optionalId = z.union([objectId, z.literal("")]).optional();
+
+export const password = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(128, "Password is too long")
+  .regex(/[a-z]/, "Password needs a lowercase letter")
+  .regex(/[A-Z]/, "Password needs an uppercase letter")
+  .regex(/[0-9]/, "Password needs a number");
+
+export const ROLES = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE", "CLUB_MANAGER", "PLAYER"] as const;
+
+// ---------- Auth ----------
+
 export const RegisterSchema = z.object({
-  fullName: z.string().min(2, "Full name must be at least 2 characters").max(60),
-  username: z.string().min(3, "Username must be at least 3 characters").max(30).regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, underscores and hyphens"),
-  email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  konamiId: z.string().min(5, "Konami ID / In-game UID is required"),
-  deviceModel: z.string().min(2, "Device model is required"),
-  facebookProfile: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  preferredPosition: z.string().default("CF"),
-  playStyle: z.string().default("Possession Game"),
-  phone: z.string().optional(),
-  bio: z.string().max(300).optional(),
+  fullName: trimmed(60).min(2, "Full name must be at least 2 characters"),
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(3, "Username must be at least 3 characters")
+    .max(30)
+    .regex(/^[a-z0-9_-]+$/, "Username can only contain letters, numbers, underscores and hyphens"),
+  email: z.string().trim().toLowerCase().email("Please enter a valid email address").max(120),
+  password,
+  konamiId: trimmed(40).min(5, "Konami ID / In-game UID is required"),
+  deviceModel: trimmed(60).min(2, "Device model is required"),
+  facebookProfile: optionalUrl,
+  preferredPosition: trimmed(10).default("CF"),
+  playStyle: trimmed(40).default("Possession Game"),
+  phone: trimmed(30).optional().default(""),
+  bio: trimmed(300).optional().default(""),
+  website: z.string().max(0).optional(), // honeypot: must stay empty
 });
 
 export const LoginSchema = z.object({
-  emailOrUsername: z.string().min(1, "Email or username is required"),
-  password: z.string().min(1, "Password is required"),
+  emailOrUsername: trimmed(120).min(1, "Email or username is required"),
+  password: z.string().min(1, "Password is required").max(128),
 });
 
-export const PlayerUpdateSchema = z.object({
-  fullName: z.string().min(2).max(60).optional(),
-  deviceModel: z.string().min(2).optional(),
-  facebookProfile: z.string().url().optional().or(z.literal("")),
-  preferredPosition: z.string().optional(),
-  playStyle: z.string().optional(),
-  bio: z.string().max(300).optional(),
-  phone: z.string().optional(),
+export const ForgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email"),
 });
 
-export const ClubCreateSchema = z.object({
-  name: z.string().min(3, "Club name is required").max(60),
-  shortName: z.string().min(2, "Short name is required").max(10),
-  location: z.string().default("Dhaka, Bangladesh"),
-  facebookPage: z.string().url().optional().or(z.literal("")),
-  description: z.string().max(500).optional(),
-  logo: z.string().optional(),
+export const ResetPasswordSchema = z.object({
+  token: z.string().min(20).max(200),
+  password,
 });
+
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: password,
+});
+
+// ---------- Players ----------
+
+export const PlayerSelfUpdateSchema = z.object({
+  fullName: trimmed(60).min(2).optional(),
+  avatar: imageUrl.optional(),
+  coverImage: imageUrl.optional(),
+  konamiId: trimmed(40).min(5).optional(),
+  deviceModel: trimmed(60).min(2).optional(),
+  facebookProfile: optionalUrl,
+  preferredPosition: trimmed(10).optional(),
+  playStyle: trimmed(40).optional(),
+  bio: trimmed(300).optional(),
+  phone: trimmed(30).optional(),
+  location: trimmed(80).optional(),
+});
+
+export const PlayerAdminUpdateSchema = PlayerSelfUpdateSchema.extend({
+  status: z.enum(["ACTIVE", "PENDING_VERIFICATION", "SUSPENDED", "BANNED", "INACTIVE"]).optional(),
+  isVerified: z.boolean().optional(),
+  clubId: optionalId,
+  rating: z.coerce.number().min(100).max(3000).optional(),
+  marketValue: z.coerce.number().min(0).max(100000).optional(),
+});
+
+export const UserAdminUpdateSchema = z.object({
+  fullName: trimmed(60).min(2).optional(),
+  email: z.string().trim().toLowerCase().email().optional(),
+  role: z.enum(ROLES).optional(),
+  status: z.enum(["ACTIVE", "PENDING", "SUSPENDED", "BANNED", "INACTIVE"]).optional(),
+  clubId: optionalId,
+});
+
+export const UserAdminCreateSchema = z.object({
+  fullName: trimmed(60).min(2),
+  username: z.string().trim().toLowerCase().min(3).max(30).regex(/^[a-z0-9_-]+$/),
+  email: z.string().trim().toLowerCase().email(),
+  password,
+  role: z.enum(ROLES).default("PLAYER"),
+  createPlayerProfile: z.boolean().default(true),
+  konamiId: trimmed(40).optional().default(""),
+});
+
+// ---------- Content resources (admin) ----------
+
+export const ClubSchema = z.object({
+  name: trimmed(60).min(3, "Club name is required"),
+  shortName: trimmed(6).min(2, "Short name is required").transform((s) => s.toUpperCase()),
+  location: trimmed(80).optional().default(""),
+  facebookPage: optionalUrl,
+  description: trimmed(1000).optional().default(""),
+  logo: imageUrl.optional().default(""),
+  banner: imageUrl.optional().default(""),
+  status: z.enum(["ACTIVE", "PENDING", "SUSPENDED", "INACTIVE"]).optional().default("ACTIVE"),
+  managerId: optionalId,
+  trophiesCount: z.coerce.number().int().min(0).max(1000).optional().default(0),
+  marketValue: z.coerce.number().min(0).max(100000).optional().default(0),
+});
+
+export const TournamentBaseSchema = z.object({
+    name: trimmed(100).min(3, "Tournament name is required"),
+    season: trimmed(40).optional().default(""),
+    description: trimmed(3000).optional().default(""),
+    rules: trimmed(10000).optional().default(""),
+    format: z.enum(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION", "LEAGUE_ROUND_ROBIN", "GROUP_AND_KNOCKOUT", "SWISS", "CLUB_BATTLE", "NATIONAL_TOURNAMENT"]).default("SINGLE_ELIMINATION"),
+    gameCategory: trimmed(60).optional().default("eFootball Mobile"),
+    platform: trimmed(40).optional().default("Mobile"),
+    startDate: dateInput.optional(),
+    endDate: dateInput.optional(),
+    registrationDeadline: dateInput.optional(),
+    maxParticipants: z.coerce.number().int().min(2).max(1024).default(32),
+    prizePool: trimmed(60).optional().default(""),
+    entryFee: trimmed(40).optional().default("Free"),
+    status: z.enum(["DRAFT", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED"]).default("DRAFT"),
+    isFeatured: z.boolean().optional().default(false),
+    banner: imageUrl.optional().default(""),
+    logo: imageUrl.optional().default(""),
+    winnerPlayerId: optionalId,
+});
+
+export const TournamentSchema = TournamentBaseSchema.refine((d) => !d.startDate || !d.endDate || d.endDate >= d.startDate, {
+  message: "End date must be after start date",
+  path: ["endDate"],
+});
+
+export const EventSchema = z.object({
+  name: trimmed(100).min(3, "Event name is required"),
+  description: trimmed(3000).optional().default(""),
+  eventType: trimmed(40).optional().default("Meetup"),
+  venue: trimmed(120).optional().default(""),
+  eventDate: dateInput,
+  registrationDeadline: dateInput.optional(),
+  capacity: z.coerce.number().int().min(1).max(100000).default(100),
+  prizePool: trimmed(60).optional().default(""),
+  status: z.enum(["DRAFT", "ACTIVE", "COMPLETED", "CANCELLED"]).default("ACTIVE"),
+  registrationOpen: z.boolean().optional().default(true),
+  banner: imageUrl.optional().default(""),
+});
+
+export const NewsSchema = z.object({
+  title: trimmed(160).min(3, "Title is required"),
+  excerpt: trimmed(400).optional().default(""),
+  content: trimmed(50000).optional().default(""),
+  featuredImage: imageUrl.optional().default(""),
+  author: trimmed(80).optional().default("Editorial Team"),
+  category: trimmed(40).optional().default("Announcement"),
+  tags: z
+    .union([z.array(trimmed(30)), z.string()])
+    .transform((v) => (Array.isArray(v) ? v : v.split(",").map((t) => t.trim()).filter(Boolean)))
+    .optional()
+    .default([]),
+  publishedDate: dateInput.optional(),
+  isFeatured: z.boolean().optional().default(false),
+  isPublished: z.boolean().optional().default(true),
+});
+
+export const PartnerSchema = z.object({
+  name: trimmed(80).min(2),
+  category: trimmed(40).optional().default("Partner"),
+  logo: imageUrl.optional().default(""),
+  website: optionalUrl,
+  description: trimmed(300).optional().default(""),
+  order: z.coerce.number().int().optional().default(0),
+});
+
+export const SponsorSchema = z.object({
+  name: trimmed(80).min(2),
+  logo: imageUrl.optional().default(""),
+  website: optionalUrl,
+  placement: trimmed(40).optional().default("Homepage"),
+  priority: z.coerce.number().int().optional().default(0),
+});
+
+export const LeaderSchema = z.object({
+  name: trimmed(80).min(2),
+  role: trimmed(80).optional().default(""),
+  category: trimmed(40).optional().default("Core Team"),
+  photo: imageUrl.optional().default(""),
+  period: trimmed(40).optional().default(""),
+  bio: trimmed(500).optional().default(""),
+  facebook: optionalUrl,
+  order: z.coerce.number().int().optional().default(0),
+});
+
+export const RefereeSchema = z.object({
+  name: trimmed(80).min(2),
+  officialId: trimmed(30).optional().default(""),
+  avatar: imageUrl.optional().default(""),
+  tier: z.enum(["TIER_1", "TIER_2", "TIER_3"]).default("TIER_2"),
+  role: trimmed(80).optional().default("Match Official"),
+  rating: z.coerce.number().min(0).max(5).optional().default(4.5),
+  matchesOfficiated: z.coerce.number().int().min(0).optional().default(0),
+  fairPlayScore: z.coerce.number().min(0).max(100).optional().default(95),
+  bio: trimmed(500).optional().default(""),
+  status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).optional().default("ACTIVE"),
+});
+
+// ---------- Fixtures / results ----------
 
 export const FixtureCreateSchema = z.object({
-  tournamentId: z.string().optional(),
-  homeClubId: z.string().optional(),
-  awayClubId: z.string().optional(),
-  homePlayerId: z.string().optional(),
-  awayPlayerId: z.string().optional(),
-  scheduledDate: z.string().min(1, "Date and time required"),
-  venue: z.string().default("Online / Konami Server 01"),
-  round: z.string().default("Regular Season"),
-  refereeId: z.string().optional(),
-  isOnStream: z.boolean().default(false),
-  streamUrl: z.string().url().optional().or(z.literal("")),
-  streamPlatform: z.string().optional(),
+  tournamentId: optionalId,
+  homeClubId: optionalId,
+  awayClubId: optionalId,
+  homePlayerId: optionalId,
+  awayPlayerId: optionalId,
+  refereeId: optionalId,
+  scheduledDate: dateInput,
+  venue: trimmed(120).optional().default("Online"),
+  round: trimmed(60).optional().default("Regular Season"),
+  isOnStream: z.boolean().optional().default(false),
+  streamUrl: optionalUrl,
+  streamPlatform: trimmed(40).optional().default(""),
 });
 
-export const MatchResultSubmitSchema = z.object({
-  fixtureId: z.string().min(1, "Fixture ID is required"),
-  homeScore: z.number().int().min(0),
-  awayScore: z.number().int().min(0),
-  homePenalties: z.number().int().min(0).optional(),
-  awayPenalties: z.number().int().min(0).optional(),
-  motmPlayerId: z.string().optional(),
-  motmReason: z.string().max(250).optional(),
-  proofScreenshot: z.string().optional(),
-  refereeNotes: z.string().max(500).optional(),
+export const FixtureUpdateSchema = z.object({
+  tournamentId: optionalId,
+  homeClubId: optionalId,
+  awayClubId: optionalId,
+  homePlayerId: optionalId,
+  awayPlayerId: optionalId,
+  refereeId: optionalId,
+  scheduledDate: dateInput.optional(),
+  venue: trimmed(120).optional(),
+  round: trimmed(60).optional(),
+  isOnStream: z.boolean().optional(),
+  streamUrl: optionalUrl.optional(),
+  streamPlatform: trimmed(40).optional(),
 });
 
-export const TournamentCreateSchema = z.object({
-  name: z.string().min(3, "Tournament name is required"),
-  format: z.string().default("SINGLE_ELIMINATION"),
-  gameCategory: z.string().default("eFootball Mobile"),
-  platform: z.string().default("Mobile"),
-  startDate: z.string(),
-  endDate: z.string(),
-  registrationDeadline: z.string(),
-  maxParticipants: z.number().int().min(4).max(256).default(32),
-  prizePool: z.string().default("50,000 BDT"),
-  description: z.string().optional(),
-  rules: z.string().optional(),
+const score = z.coerce.number().int().min(0).max(99);
+
+export const MatchResultSchema = z.object({
+  homeScore: score,
+  awayScore: score,
+  homePenalties: score.optional().nullable(),
+  awayPenalties: score.optional().nullable(),
+  motmPlayerId: optionalId,
+  motmReason: trimmed(250).optional().default(""),
+  proofScreenshot: imageUrl.optional().default(""),
+  notes: trimmed(500).optional().default(""),
 });
+
+export const LiveScoreSchema = z.object({ home: score, away: score });
+
+// ---------- Transfers & discipline ----------
 
 export const TransferRequestSchema = z.object({
-  playerId: z.string().min(1, "Player ID is required"),
-  targetClubId: z.string().min(1, "Target Club ID is required"),
-  offeredFee: z.number().min(0).default(50),
-  proposedSalary: z.number().min(0).optional(),
-  message: z.string().max(300).optional(),
+  playerId: objectId,
+  targetClubId: objectId,
+  offeredFee: z.coerce.number().min(0).max(100000).default(0),
+  proposedSalary: z.coerce.number().min(0).max(100000).optional(),
+  message: trimmed(300).optional().default(""),
 });
 
 export const DisciplinaryActionSchema = z.object({
   targetType: z.enum(["PLAYER", "CLUB"]),
-  targetId: z.string().min(1),
-  reason: z.string().min(5, "Reason is required"),
+  targetId: objectId,
+  reason: trimmed(500).min(5, "Reason is required"),
   penalty: z.enum(["WARNING", "SUSPENSION_1W", "SUSPENSION_1M", "BAN_SEASON", "PERMANENT_BAN"]),
-  evidence: z.string().optional(),
-  notes: z.string().optional(),
+  evidence: trimmed(1000).optional().default(""),
+  notes: trimmed(1000).optional().default(""),
 });

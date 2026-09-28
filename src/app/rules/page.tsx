@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { Scale, ShieldCheck, Swords, AlertTriangle } from "lucide-react";
+import { getSiteSettings } from "@/lib/settings";
 
-export default function RulesPage() {
+export const dynamic = "force-dynamic";
+
+export default async function RulesPage() {
+  const { pages } = await getSiteSettings();
+  const custom = pages.rulesContent.trim();
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       
@@ -19,7 +25,16 @@ export default function RulesPage() {
         </p>
       </div>
 
-      {/* Rules Sections */}
+      {custom && (
+        <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-700 text-sm leading-relaxed space-y-4">
+          {custom.split(/\n{2,}/).map((para, i) => (
+            <p key={i} className="whitespace-pre-line">{para}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Rules Sections (default rulebook, shown until the admin writes their own) */}
+      {!custom && (
       <div className="space-y-6 text-slate-700 text-xs sm:text-sm leading-relaxed">
         
         {/* Section 1 */}
@@ -67,6 +82,7 @@ export default function RulesPage() {
         </div>
 
       </div>
+      )}
 
     </div>
   );

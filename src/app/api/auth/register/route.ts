@@ -1,87 +1,60 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { RegisterSchema } from "@/lib/validation";
 import { db } from "@/lib/db";
 import { hashPassword, setSessionCookie } from "@/lib/auth";
+import { ok, fail, handle, parseBody, limit } from "@/lib/api";
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const validated = RegisterSchema.safeParse(body);
+const RESERVED = new Set(["admin", "administrator", "root", "support", "system", "moderator", "api", "login", "register", "dashboard"]);
 
-    if (!validated.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "VALIDATION_ERROR",
-            message: validated.error.errors[0]?.message || "Invalid registration fields",
-            details: validated.error.flatten(),
-          },
-        },
-        { status: 400 }
-      );
-    }
+export const POST = handle(async (req: NextRequest) => {
+  limit(req, "register", 5, 60 * 60 * 1000);
+  const data = await parseBody(req, RegisterSchema);
 
-    const data = validated.data;
+  // Bots fill the hidden "website" field; pretend success without creating anything.
+  if (data.website) return ok({ id: "" }, 201);
 
-    // Check existing
-    const existing = db.getUserByEmailOrUsername(data.email) || db.getUserByEmailOrUsername(data.username);
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: "CONFLICT", message: "Email or username is already registered" },
-        },
-        { status: 409 }
-      );
-    }
+  if (RESERVED.has(data.username)) return fail("That username is reserved", 409, "CONFLICT");
 
-    const passwordHash = await hashPassword(data.password);
-    const user = db.createUser({
-      email: data.email,
-      username: data.username,
-      fullName: data.fullName,
-      passwordHash,
-      role: "PLAYER",
-    });
+  const [byEmail, byUsername] = await Promise.all([db.getUserByEmailOrUsername(data.email), db.getUserByEmailOrUsername(data.username)]);
+  if (byEmail || byUsername) {
+    return fail(byEmail ? "An account with this email already exists" : "This username is taken", 409, "CONFLICT");
+  }
 
-    const player = db.createPlayer({
-      userId: user.id,
-      username: data.username,
-      fullName: data.fullName,
-      konamiId: data.konamiId,
-      deviceModel: data.deviceModel,
-      facebookProfile: data.facebookProfile,
-      preferredPosition: data.preferredPosition,
-      playStyle: data.playStyle,
-      bio: data.bio,
-      phone: data.phone,
-    });
+  const passwordHash = await hashPassword(data.password);
+  const user = await db.createUser({
+    email: data.email,
+    username: data.username,
+    fullName: data.fullName,
+    passwordHash,
+    role: "PLAYER",
+  });
 
-    const sessionPayload = {
-      id: user.id,
+  const player = await db.createPlayer({
+    userId: user._id,
+    username: data.username,
+    fullName: data.fullName,
+    konamiId: data.konamiId,
+    deviceModel: data.deviceModel,
+    facebookProfile: data.facebookProfile,
+    preferredPosition: data.preferredPosition,
+    playStyle: data.playStyle,
+    bio: data.bio,
+    phone: data.phone,
+  });
+
+  await db.notify(String(user._id), "Welcome aboard!", "Complete your profile and join an open tournament to get started.", "/dashboard");
+  await setSessionCookie(user);
+
+  return ok(
+    {
+      id: String(user._id),
       email: user.email,
       username: user.username,
       fullName: user.fullName,
       role: user.role,
       avatar: player.avatar,
       playerProfileId: player.id,
-    };
-
-    await setSessionCookie(sessionPayload);
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: sessionPayload,
-      },
-      { status: 201 }
-    );
-  } catch (err: any) {
-    console.error("Register error:", err);
-    return NextResponse.json(
-      { success: false, error: { code: "SERVER_ERROR", message: "Failed to complete registration" } },
-      { status: 500 }
-    );
-  }
-}
+    },
+    201
+  );
+});

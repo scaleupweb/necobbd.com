@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Calendar, MapPin, Users, Ticket, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
+import { JoinButton } from "@/components/ui/JoinButton";
 import { formatDate, formatTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function EventsPage() {
-  const events = db.getEvents();
+  const events = (await db.getEvents()).filter((e: any) => e.status !== "CANCELLED");
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -24,16 +25,20 @@ export default async function EventsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {events.map((ev) => (
+        {events.length === 0 && (
+          <div className="md:col-span-2 rounded-3xl border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">No events announced yet. Check back soon.</div>
+        )}
+        {events.map((ev: any) => (
           <div
             key={ev.id}
-            className="rounded-3xl bg-white border border-slate-200 overflow-hidden hover:border-black p-6 flex flex-col justify-between space-y-5 transition-all group shadow-sm hover:shadow-md"
+            id={ev.slug}
+            className="scroll-mt-24 rounded-3xl bg-white border border-slate-200 overflow-hidden hover:border-black p-6 flex flex-col justify-between space-y-5 transition-all group shadow-sm hover:shadow-md"
           >
             <div className="space-y-4">
               <div className="relative h-56 rounded-2xl overflow-hidden bg-slate-100">
                 <img src={ev.banner} alt={ev.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/90 text-white text-xs font-bold shadow-sm">
-                  {ev.capacity} Capacity Seats
+                  {ev.eventType || "Event"} · {ev.capacity} seats
                 </div>
               </div>
 
@@ -49,7 +54,7 @@ export default async function EventsPage() {
               <div className="space-y-1.5 text-xs text-slate-700 pt-2 border-t border-slate-100">
                 <div className="flex items-center space-x-2">
                   <MapPin className="w-4 h-4 text-slate-500" />
-                  <span>{ev.venue}</span>
+                  <span>{ev.venue || "TBA"}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Calendar className="w-4 h-4 text-slate-500" />
@@ -61,9 +66,14 @@ export default async function EventsPage() {
               </div>
             </div>
 
-            <button className="w-full py-3 rounded-xl bg-black text-white font-black text-xs hover:bg-zinc-800 shadow-sm transition-all">
-              RSVP & Reserve Free Spectator Pass
-            </button>
+            <JoinButton
+              endpoint={`/api/events/${ev.slug}/register`}
+              memberIds={ev.registeredUserIds}
+              isOpen={ev.isRegistrationOpen}
+              joinLabel="Register"
+              leaveLabel="Cancel my registration"
+              closedLabel={new Date(ev.eventDate) < new Date() ? "Event finished" : ev.registeredCount >= ev.capacity ? "Fully booked" : "Registration closed"}
+            />
           </div>
         ))}
       </div>

@@ -1,16 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { ok, fail, handle } from "@/lib/api";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export const dynamic = "force-dynamic";
+
+export const GET = handle(async (_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = await params;
-  const tourn = db.getTournamentBySlug(slug);
-
-  if (!tourn) {
-    return NextResponse.json({ success: false, error: { code: "NOT_FOUND", message: "Tournament not found" } }, { status: 404 });
-  }
-
-  return NextResponse.json({ success: true, data: tourn });
-}
+  const t = await db.getTournamentBySlug(slug);
+  if (!t) return fail("Tournament not found", 404, "NOT_FOUND");
+  const participants = (t.participants || []).map(({ phone, userId, ...p }: any) => p);
+  return ok({ ...t, participants });
+});

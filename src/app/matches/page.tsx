@@ -169,7 +169,7 @@ export default function MatchCentrePage() {
                 <div className="flex-1 flex items-center space-x-2.5 min-w-0">
                   <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 p-0.5 shrink-0 shadow-xs">
                     <img
-                      src={m.homePlayer?.avatar || m.homeClub?.logo || "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=100"}
+                      src={m.homePlayer?.avatar || m.homeClub?.logo || "/images/placeholders/club.svg"}
                       alt=""
                       className="w-full h-full object-cover rounded-lg"
                     />
@@ -214,7 +214,7 @@ export default function MatchCentrePage() {
                   </div>
                   <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 p-0.5 shrink-0 shadow-xs">
                     <img
-                      src={m.awayPlayer?.avatar || m.awayClub?.logo || "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=100"}
+                      src={m.awayPlayer?.avatar || m.awayClub?.logo || "/images/placeholders/club.svg"}
                       alt=""
                       className="w-full h-full object-cover rounded-lg"
                     />

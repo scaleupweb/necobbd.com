@@ -1,4 +1,5 @@
 import { Hero } from "@/components/home/Hero";
+import { CountdownBanner } from "@/components/home/CountdownBanner";
 import { LiveMatches } from "@/components/home/LiveMatches";
 import { OngoingTournamentsAndActivity } from "@/components/home/OngoingTournamentsAndActivity";
 import { WeeklyStarsSection } from "@/components/home/WeeklyStarsSection";
@@ -7,38 +8,85 @@ import { TransferMarketSection } from "@/components/home/TransferMarketSection";
 import { NewsAndEvents } from "@/components/home/NewsAndEvents";
 import { PartnersSection } from "@/components/home/PartnersSection";
 import { CommunityCTA } from "@/components/home/CommunityCta";
+import { getSiteSettings } from "@/lib/settings";
+import { getHomepageData } from "@/lib/homepage";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const settings = await getSiteSettings();
+  let data;
+  try {
+    data = await getHomepageData(settings);
+  } catch (err) {
+    console.error("Homepage data failed:", err);
+    data = null;
+  }
+  const s = settings.sections;
+
   return (
     <div className="w-full bg-[#FFFFFF] min-h-screen text-[#111111]">
-      {/* 1. HERO SECTION (Wide banner with attached image + Stats) */}
-      <Hero />
+      <Hero hero={settings.hero} stats={data?.stats || []} />
 
-      {/* 2. LIVE MATCHES (3 Horizontal Cards) */}
-      <LiveMatches />
+      {settings.countdown.enabled && settings.countdown.targetDate && (
+        <CountdownBanner countdown={settings.countdown} tournament={data?.countdownTournament || null} />
+      )}
 
-      {/* 3. ONGOING TOURNAMENTS + WHAT'S HAPPENING (Two-column section) */}
-      <OngoingTournamentsAndActivity />
+      {!data && (
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+            Live data is temporarily unavailable. Please check the database connection.
+          </div>
+        </div>
+      )}
 
-      {/* 4. WEEKLY STARS (6 Compact Category Cards) */}
-      <WeeklyStarsSection />
+      {data && s.liveMatches.show && data.matches.length > 0 && <LiveMatches title={s.liveMatches.title} matches={data.matches} />}
 
-      {/* 5. TOP SCORERS + CLUB RANKINGS (Two equal-width data table columns) */}
-      <TopScorersAndClubs />
+      {data && (s.tournaments.show || s.activity.show) && (
+        <OngoingTournamentsAndActivity
+          tournamentsTitle={s.tournaments.title}
+          activityTitle={s.activity.title}
+          showTournaments={s.tournaments.show}
+          showActivity={s.activity.show}
+          featured={data.featuredTournament}
+          tournaments={data.tournamentsList}
+          activities={data.activities}
+        />
+      )}
 
-      {/* 6. TRANSFER MARKET (Horizontal Player Cards + Find Next Star Promo) */}
-      <TransferMarketSection />
+      {data && s.weeklyStars.show && data.weeklyStars.length > 0 && (
+        <WeeklyStarsSection title={s.weeklyStars.title} subtitle={s.weeklyStars.subtitle} stars={data.weeklyStars} />
+      )}
 
-      {/* 7. LATEST NEWS + UPCOMING EVENTS (3 News Cards + Event Rows) */}
-      <NewsAndEvents />
+      {data && (s.topScorers.show || s.clubRankings.show) && (data.topScorers.length > 0 || data.clubRankings.length > 0) && (
+        <TopScorersAndClubs
+          scorersTitle={s.topScorers.title}
+          clubsTitle={s.clubRankings.title}
+          showScorers={s.topScorers.show}
+          showClubs={s.clubRankings.show}
+          topScorers={data.topScorers}
+          clubRankings={data.clubRankings}
+        />
+      )}
 
-      {/* 8. OUR PARTNERS (Horizontal Logo Cards) */}
-      <PartnersSection />
+      {data && s.transfers.show && <TransferMarketSection content={s.transfers} players={data.transferPlayers} />}
 
-      {/* 9. COMMUNITY CTA (Wide Dark Movement Banner) */}
-      <CommunityCTA />
+      {data && (s.news.show || s.events.show) && (data.news.length > 0 || data.events.length > 0) && (
+        <NewsAndEvents
+          newsTitle={s.news.title}
+          eventsTitle={s.events.title}
+          showNews={s.news.show}
+          showEvents={s.events.show}
+          news={data.news}
+          events={data.events}
+        />
+      )}
+
+      {data && s.partners.show && data.partners.length > 0 && (
+        <PartnersSection title={s.partners.title} subtitle={s.partners.subtitle} partners={data.partners} />
+      )}
+
+      {settings.cta.show && <CommunityCTA cta={settings.cta} />}
     </div>
   );
 }

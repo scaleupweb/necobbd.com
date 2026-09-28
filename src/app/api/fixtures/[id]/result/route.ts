@@ -1,55 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireAuth, MATCH_OFFICIALS } from "@/lib/auth";
+import { MatchResultSchema } from "@/lib/validation";
+import { ok, fail, handle, parseBody, audit, limit } from "@/lib/api";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+/**
+ * Match officials approve results directly. A player (or club manager) who took
+ * part in the match can only submit a claim, which stays PENDING until approved.
+ */
+export const POST = handle(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id } = await params;
-  const session = await getSession();
+  const session = await requireAuth();
+  limit(req, `result:${session.id}`, 20, 60 * 60 * 1000);
+  const data = await parseBody(req, MatchResultSchema);
 
-  if (!session) {
-    return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "Login required" } }, { status: 401 });
+  const fixture = await db.getFixtureById(id);
+  if (!fixture) return fail("Fixture not found", 404, "NOT_FOUND");
+
+  if ((MATCH_OFFICIALS as string[]).includes(session.role)) {
+    const updated = await db.approveMatchResult(id, data, session.id);
+    await audit(req, session, "APPROVED_MATCH_RESULT", `Fixture ${id}`, `${data.homeScore} - ${data.awayScore}`);
+    return ok(updated);
   }
 
-  const fixture = db.getFixtureById(id);
-  if (!fixture) {
-    return NextResponse.json({ success: false, error: { code: "NOT_FOUND", message: "Fixture not found" } }, { status: 404 });
-  }
+  const isParticipant =
+    (session.playerProfileId && (fixture.homePlayer?.id === session.playerProfileId || fixture.awayPlayer?.id === session.playerProfileId)) ||
+    (session.role === "CLUB_MANAGER" && session.clubId && (fixture.homeClub?.id === session.clubId || fixture.awayClub?.id === session.clubId));
+  if (!isParticipant) return fail("Only match participants or officials can report a result", 403, "FORBIDDEN");
+  if (fixture.status !== "LIVE" && fixture.status !== "SCHEDULED") return fail("This match can no longer accept results", 409);
 
-  const body = await req.json();
-
-  // If MOTM is provided, lookup player details
-  let motmPlayerName = body.motmPlayerName;
-  let motmPlayerAvatar = body.motmPlayerAvatar;
-  if (body.motmPlayerId) {
-    const p = db.getPlayerById(body.motmPlayerId);
-    if (p) {
-      motmPlayerName = p.fullName;
-      motmPlayerAvatar = p.avatar;
-    }
-  }
-
-  const updated = db.submitMatchResult(id, {
-    homeScore: Number(body.homeScore) || 0,
-    awayScore: Number(body.awayScore) || 0,
-    homePenalties: body.homePenalties ? Number(body.homePenalties) : undefined,
-    awayPenalties: body.awayPenalties ? Number(body.awayPenalties) : undefined,
-    motmPlayerId: body.motmPlayerId,
-    motmPlayerName,
-    motmPlayerAvatar,
-    motmReason: body.motmReason || "Outstanding match performance",
-  });
-
-  // Add audit log
-  db.addAuditLog({
-    adminId: session.id,
-    adminName: session.fullName,
-    action: "SUBMITTED_AND_APPROVED_RESULT",
-    target: `Fixture #${id}`,
-    details: `Score: ${body.homeScore} - ${body.awayScore}, MOTM: ${motmPlayerName || "None"}`
-  });
-
-  return NextResponse.json({ success: true, data: updated });
-}
+  const updated = await db.submitResultClaim(id, data, session.id);
+  return ok(updated);
+});

@@ -1,59 +1,29 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { ok, fail, handle } from "@/lib/api";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
-) {
+export const dynamic = "force-dynamic";
+
+/** Public player profile: stats, matches, tournaments, events and activity timeline. */
+export const GET = handle(async (_req: NextRequest, { params }: { params: Promise<{ username: string }> }) => {
   const { username } = await params;
-  const player = db.getPlayerByUsername(username);
+  const player = await db.getPlayerByUsername(username);
+  if (!player) return fail("Player not found", 404, "NOT_FOUND");
 
-  if (!player) {
-    return NextResponse.json({ success: false, error: { code: "NOT_FOUND", message: "Player not found" } }, { status: 404 });
-  }
+  const userId = player.userId ? String(player.userId) : "";
+  const [fixtures, tournaments, events, activity] = await Promise.all([
+    db.getFixtures({ playerId: player.id, limit: 50 }),
+    userId ? db.getTournamentsForUser(userId) : [],
+    userId ? db.getEventsForUser(userId) : [],
+    db.getActivityForUser(userId, player.id, 40),
+  ]);
 
-  // Get player fixtures
-  const allFixtures = db.getFixtures();
-  const playerFixtures = allFixtures.filter(
-    (f) => f.homePlayer?.id === player.id || f.awayPlayer?.id === player.id
-  );
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      ...player,
-      fixtures: playerFixtures,
-    },
+  const { phone, ...publicPlayer } = player as any;
+  return ok({
+    ...publicPlayer,
+    fixtures,
+    tournaments,
+    events: events.map((e: any) => ({ id: e.id, name: e.name, slug: e.slug, eventDate: e.eventDate, venue: e.venue, banner: e.banner, status: e.status })),
+    activity,
   });
-}
-
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
-) {
-  const { username } = await params;
-  const session = await getSession();
-
-  if (!session) {
-    return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "Login required" } }, { status: 401 });
-  }
-
-  const player = db.getPlayerByUsername(username);
-  if (!player) {
-    return NextResponse.json({ success: false, error: { code: "NOT_FOUND", message: "Player not found" } }, { status: 404 });
-  }
-
-  // Check ownership or admin
-  const isOwner = session.username.toLowerCase() === username.toLowerCase();
-  const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
-
-  if (!isOwner && !isAdmin) {
-    return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Cannot edit this player" } }, { status: 403 });
-  }
-
-  const body = await req.json();
-  const updated = db.updatePlayer(player.id, body);
-
-  return NextResponse.json({ success: true, data: updated });
-}
+});

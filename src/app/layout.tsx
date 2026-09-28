@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Outfit, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
-import { SITE_NAME, SITE_DESCRIPTION } from "@/lib/constants";
+import { getSiteSettings } from "@/lib/settings";
 
 const fontOutfit = Outfit({
   subsets: ["latin"],
@@ -27,51 +28,56 @@ const fontMono = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "NEXA Football — Bangladesh National eFootball Community & Championship",
-    template: "%s | NEXA Football Bangladesh",
-  },
-  description: SITE_DESCRIPTION,
-  keywords: [
-    "eFootball Bangladesh",
-    "NEXA Football",
-    "eFCOB",
-    "eFootball Tournament",
-    "Bangladesh Esports",
-    "Konami eFootball Mobile",
-    "Player Rankings",
-    "Esports Clubs Bangladesh",
-  ],
-  authors: [{ name: "NEXA Football Organization" }],
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "https://necobbd.com",
-    title: SITE_NAME,
-    description: SITE_DESCRIPTION,
-    siteName: "NEXA Football Bangladesh",
-  },
-};
+// Brand, navbar and footer come from admin-editable settings, so never bake them in at build time.
+export const dynamic = "force-dynamic";
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export async function generateMetadata(): Promise<Metadata> {
+  const { brand } = await getSiteSettings();
+  return {
+    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
+    title: {
+      default: `${brand.siteName} — ${brand.tagline}`,
+      template: `%s | ${brand.siteName}`,
+    },
+    description: brand.description,
+    openGraph: {
+      type: "website",
+      locale: "en_US",
+      title: brand.siteName,
+      description: brand.description,
+      siteName: brand.siteName,
+    },
+  };
+}
+
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const settings = await getSiteSettings();
+  const a = settings.announcement;
+
   return (
     <html lang="en" className="scroll-smooth">
-      <body className={`${fontOutfit.variable} ${fontJakarta.variable} ${fontMono.variable} font-sans bg-[#FFFFFF] text-[#111111] min-h-screen flex flex-col antialiased selection:bg-[#111111] selection:text-white`}>
-        {/* Global Desktop & Mobile Navigation */}
-        <Navbar />
+      <body
+        className={`${fontOutfit.variable} ${fontJakarta.variable} ${fontMono.variable} font-sans bg-[#FFFFFF] text-[#111111] min-h-screen flex flex-col antialiased selection:bg-[#111111] selection:text-white`}
+      >
+        <Navbar brand={settings.brand} socials={settings.footer.socials} />
 
-        {/* Main Content Area with Bottom Padding for Mobile Bottom Bar */}
-        <main className="flex-1 relative z-10 pt-16 pb-20 md:pb-0">{children}</main>
+        <main className="flex-1 relative z-10 pt-16 pb-20 md:pb-0">
+          {a.show && a.text && (
+            <div className="w-full bg-[#111111] text-white text-xs sm:text-sm">
+              <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
+                <span className="font-medium">{a.text}</span>
+                {a.linkLabel && a.linkHref && (
+                  <Link href={a.linkHref} className="font-bold text-[#FBBF24] hover:underline">
+                    {a.linkLabel} →
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+          {children}
+        </main>
 
-        {/* Global Footer */}
-        <Footer />
-
-        {/* Fixed Mobile Bottom Bar */}
+        <Footer brand={settings.brand} footer={settings.footer} />
         <MobileBottomNav />
       </body>
     </html>
