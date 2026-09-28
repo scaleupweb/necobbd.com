@@ -18,6 +18,7 @@ import {
   FileText,
   ArrowLeft,
   ShieldAlert,
+  LogOut,
   Palette,
   Timer,
   Newspaper,
@@ -87,11 +88,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .catch(() => {});
   }, []);
 
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
+
   const allowed = (i: Item) => !i.roles || (me && (me.role === "SUPER_ADMIN" || i.roles.includes(me.role)));
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col md:flex-row">
-      <aside className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 md:p-5 space-y-4 flex-shrink-0 md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:overflow-y-auto">
+      <aside className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 md:p-5 space-y-4 flex-shrink-0 md:sticky md:top-0 md:h-screen md:overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded-xl bg-black flex items-center justify-center">
@@ -102,9 +108,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="text-[10px] text-slate-500 font-mono font-bold uppercase">{me ? me.role.replace(/_/g, " ") : "…"}</div>
             </div>
           </div>
-          <Link href="/" className="md:hidden flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200">
-            <ArrowLeft className="w-3.5 h-3.5" /> Site
-          </Link>
+          <div className="md:hidden flex items-center gap-1.5">
+            <Link href="/" className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200">
+              <ArrowLeft className="w-3.5 h-3.5" /> Site
+            </Link>
+            <button onClick={logout} className="p-2 rounded-lg text-rose-600 bg-rose-50 border border-rose-100" aria-label="Sign out">
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible no-scrollbar pb-1 md:pb-0">
@@ -135,10 +146,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        <div className="hidden md:block pt-3 border-t border-slate-100">
+        <div className="hidden md:block pt-3 border-t border-slate-100 space-y-2">
+          {me && (
+            <div className="px-3 text-[11px] text-slate-500 truncate">
+              Signed in as <strong className="text-slate-900">{me.fullName}</strong>
+            </div>
+          )}
           <Link href="/" className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-black hover:bg-slate-100 border border-slate-200">
             <ArrowLeft className="w-4 h-4" /> Back to website
           </Link>
+          <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-100">
+            <LogOut className="w-4 h-4" /> Sign out
+          </button>
         </div>
       </aside>
 

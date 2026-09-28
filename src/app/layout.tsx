@@ -5,6 +5,7 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { SiteShell } from "@/components/layout/SiteShell";
 import { getSiteSettings } from "@/lib/settings";
 
 const fontOutfit = Outfit({
@@ -59,26 +60,27 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body
         className={`${fontOutfit.variable} ${fontJakarta.variable} ${fontMono.variable} font-sans bg-[#FFFFFF] text-[#111111] min-h-screen flex flex-col antialiased selection:bg-[#111111] selection:text-white`}
       >
-        <Navbar brand={settings.brand} socials={settings.footer.socials} />
-
-        <main className="flex-1 relative z-10 pt-16 pb-20 md:pb-0">
-          {a.show && a.text && (
-            <div className="w-full bg-[#111111] text-white text-xs sm:text-sm">
-              <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
-                <span className="font-medium">{a.text}</span>
-                {a.linkLabel && a.linkHref && (
-                  <Link href={a.linkHref} className="font-bold text-[#FBBF24] hover:underline">
-                    {a.linkLabel} →
-                  </Link>
-                )}
+        <SiteShell
+          navbar={<Navbar brand={settings.brand} socials={settings.footer.socials} />}
+          footer={<Footer brand={settings.brand} footer={settings.footer} />}
+          bottomNav={<MobileBottomNav />}
+          announcement={
+            a.show && a.text ? (
+              <div className="w-full bg-[#111111] text-white text-xs sm:text-sm">
+                <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
+                  <span className="font-medium">{a.text}</span>
+                  {a.linkLabel && a.linkHref && (
+                    <Link href={a.linkHref} className="font-bold text-[#FBBF24] hover:underline">
+                      {a.linkLabel} →
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            ) : null
+          }
+        >
           {children}
-        </main>
-
-        <Footer brand={settings.brand} footer={settings.footer} />
-        <MobileBottomNav />
+        </SiteShell>
       </body>
     </html>
   );
