@@ -35,3 +35,6 @@ next-env.d.ts
 
 # e2e test build
 /.next-e2e/
+
+# Netlify env copy helper (contains secrets)
+netlify-env.txt
