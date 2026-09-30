@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Trophy, Flame } from "lucide-react";
 import type { HomepageData } from "@/lib/homepage";
+import { SectionHeader } from "./SectionHeader";
 
 function RankBadge({ rank }: { rank: number }) {
   const styles: Record<number, string> = {
@@ -16,18 +17,16 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
-function Header({ icon, title, href }: { icon: React.ReactNode; title: string; href: string }) {
+function Header({ title, href }: { icon?: React.ReactNode; title: string; href: string }) {
+  const scorers = href.includes("scorers");
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center space-x-2">
-        {icon}
-        <h2 className="text-base sm:text-lg font-bold text-[#111111]">{title}</h2>
-      </div>
-      <Link href={href} className="inline-flex items-center space-x-1 text-xs font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors">
-        <span>View All</span>
-        <ArrowRight className="w-3.5 h-3.5" />
-      </Link>
-    </div>
+    <SectionHeader
+      icon={scorers ? Flame : Trophy}
+      title={title}
+      subtitle={scorers ? "Most goals in official matches" : "League points table"}
+      href={href}
+      accent={scorers ? "bg-rose-500 text-white" : "bg-black text-white"}
+    />
   );
 }
 

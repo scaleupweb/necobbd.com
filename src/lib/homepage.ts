@@ -166,7 +166,17 @@ export async function getHomepageData(settings: SiteSettings) {
     .sort((a: any, b: any) => b.stats.goalsScored - a.stats.goalsScored)
     .slice(0, 5);
 
-  const clubRank = [...clubs].sort((a: any, b: any) => b.points - a.points).slice(0, 5);
+  // Only rank clubs that have actually played; before that, show a club spotlight instead.
+  const clubRank = clubs
+    .filter((c: any) => c.stats.matches > 0)
+    .sort((a: any, b: any) => b.points - a.points || b.stats.goalsScored - b.stats.goalsConceded - (a.stats.goalsScored - a.stats.goalsConceded))
+    .slice(0, 5);
+  const spotlight = [...clubs].sort((a: any, b: any) => b.squadCount - a.squadCount || a.name.localeCompare(b.name)).slice(0, 12);
+  const clubPlayers = clubs.reduce((a: number, c: any) => a + (c.squadCount || 0), 0);
+  const newestPlayers = [...players]
+    .sort((a: any, b: any) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0))
+    .slice(0, 8)
+    .map((p: any) => ({ username: p.username, name: p.fullName, avatar: p.avatar, club: p.club?.shortName || "", position: p.preferredPosition }));
 
   let transferPlayers = listings.slice(0, 5).map((l: any) => ({
     id: l.player.id,
@@ -253,6 +263,12 @@ export async function getHomepageData(settings: SiteSettings) {
       points: c.points,
     })),
     transferPlayers,
+    clubsSpotlight: {
+      totalClubs: clubs.length,
+      clubPlayers,
+      clubs: spotlight.map((c: any) => ({ slug: c.slug, name: c.name, shortName: c.shortName, logo: c.logo, squadCount: c.squadCount, location: c.location, isAcademy: !!c.isAcademy })),
+    },
+    newestPlayers,
     news: news.map((n: any) => ({ slug: n.slug, title: n.title, date: formatDate(n.publishedDate), image: n.featuredImage })),
     events: upcomingEvents.map((e: any, i: number) => ({
       slug: e.slug,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight } from "lucide-react";
+import { Swords } from "lucide-react";
+import { SectionHeader } from "./SectionHeader";
 import type { HomeMatch } from "@/lib/homepage";
 
 export function LiveMatches({ title, matches }: { title: string; matches: HomeMatch[] }) {
@@ -9,16 +10,14 @@ export function LiveMatches({ title, matches }: { title: string; matches: HomeMa
   return (
     <section className="w-full py-4 sm:py-5">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between pb-3 sm:pb-4">
-          <div className="flex items-center space-x-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${anyLive ? "bg-red-600 animate-pulse" : "bg-zinc-400"}`}></span>
-            <h2 className="text-base sm:text-lg font-bold text-[#111111] tracking-tight">{anyLive ? title : "Matches"}</h2>
-          </div>
-          <Link href="/matches" className="inline-flex items-center space-x-1 text-xs font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors shrink-0 py-1">
-            <span>View All</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
+        <SectionHeader
+          icon={Swords}
+          title={anyLive ? title : "Matches"}
+          subtitle={anyLive ? "Happening right now" : "Upcoming and recent"}
+          href="/matches"
+          accent={anyLive ? "bg-red-600 text-white" : "bg-black text-white"}
+          badge={anyLive ? <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" /> : undefined}
+        />
 
         <div className="flex overflow-x-auto md:grid md:grid-cols-3 gap-3.5 sm:gap-4 no-scrollbar snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 pb-1">
           {matches.map((match) => (

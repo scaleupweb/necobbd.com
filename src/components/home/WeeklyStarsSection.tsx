@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Crown, Sparkles, Trophy, ShieldCheck, Award } from "lucide-react";
 import type { HomeStar } from "@/lib/homepage";
+import { SectionHeader } from "./SectionHeader";
 
 function CategoryIcon({ iconType }: { iconType?: string }) {
   switch (iconType) {
@@ -22,19 +23,7 @@ export function WeeklyStarsSection({ title, subtitle, stars }: { title: string; 
   return (
     <section className="w-full py-6">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between pb-4">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight flex items-center gap-1.5">
-              <span>{title}</span>
-              <span className="w-2 h-2 rounded-full bg-[#0284C7] inline-block"></span>
-            </h2>
-            {subtitle && <p className="text-xs sm:text-sm text-[#5F6368] font-medium mt-0.5">{subtitle}</p>}
-          </div>
-          <Link href="/rankings" className="inline-flex items-center space-x-1 text-xs sm:text-sm font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors shrink-0 py-1">
-            <span>View All</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
+        <SectionHeader icon={Crown} title={title} subtitle={subtitle} href="/rankings" accent="bg-[#C79A3B] text-black" />
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           {stars.map((star) => (

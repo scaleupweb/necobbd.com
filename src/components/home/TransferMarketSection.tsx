@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight, ArrowRightLeft, Zap } from "lucide-react";
+import { SectionHeader } from "./SectionHeader";
 import type { HomepageData } from "@/lib/homepage";
 import type { SiteSettings } from "@/lib/site-settings";
 
@@ -8,19 +9,18 @@ export function TransferMarketSection({ content, players }: { content: SiteSetti
   return (
     <section className="w-full py-6">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between pb-4">
-          <div className="flex items-center space-x-2.5">
-            <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">{content.title}</h2>
-            <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-[#E6F4EA] border border-[#CEEAD6] text-[#137333] text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-[#137333]"></span>
-              <span>Open Now</span>
-            </div>
-          </div>
-          <Link href="/transfer-market" className="inline-flex items-center space-x-1 text-xs sm:text-sm font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors">
-            <span>View All</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
+        <SectionHeader
+          icon={ArrowRightLeft}
+          title={content.title}
+          subtitle="Listed players and free agents"
+          href="/transfer-market"
+          accent="bg-violet-600 text-white"
+          badge={
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Open now
+            </span>
+          }
+        />
 
         <div className="flex overflow-x-auto lg:grid lg:grid-cols-7 gap-3.5 sm:gap-4 no-scrollbar snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 items-stretch">
           {players.map((player) => (

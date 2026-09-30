@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Trophy, Swords, Users } from "lucide-react";
+import { Trophy, Swords, Users, Newspaper, CalendarDays } from "lucide-react";
+import { SectionHeader as Header } from "./SectionHeader";
 import type { HomepageData } from "@/lib/homepage";
 
 function EventBadge({ badgeType }: { badgeType?: string }) {
@@ -24,14 +25,15 @@ function EventBadge({ badgeType }: { badgeType?: string }) {
 }
 
 function SectionHeader({ title, href }: { title: string; href: string }) {
+  const isNews = href === "/news";
   return (
-    <div className="flex items-center justify-between mb-3.5">
-      <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">{title}</h2>
-      <Link href={href} className="inline-flex items-center space-x-1 text-xs sm:text-sm font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors shrink-0">
-        <span>View All</span>
-        <ArrowRight className="w-3.5 h-3.5" />
-      </Link>
-    </div>
+    <Header
+      icon={isNews ? Newspaper : CalendarDays}
+      title={title}
+      subtitle={isNews ? "Stories, announcements and reports" : "Mark your calendar"}
+      href={href}
+      accent={isNews ? "bg-rose-500 text-white" : "bg-amber-400 text-black"}
+    />
   );
 }
 

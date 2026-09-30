@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Trophy, ChevronRight, Shield, Target, Crown, Swords, Users } from "lucide-react";
+import { ArrowRight, Trophy, ChevronRight, Shield, Target, Crown, Swords, Users, Activity } from "lucide-react";
+import { SectionHeader } from "./SectionHeader";
 import { formatRelativeTime } from "@/lib/utils";
 import type { HomepageData } from "@/lib/homepage";
 
@@ -60,13 +61,7 @@ export function OngoingTournamentsAndActivity({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {showT && featured && (
             <div className={`${showA ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col justify-between`}>
-              <div className="flex items-center justify-between mb-3.5">
-                <h2 className="text-base sm:text-lg font-bold text-[#111111]">{tournamentsTitle}</h2>
-                <Link href="/tournaments" className="inline-flex items-center space-x-1 text-xs font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors">
-                  <span>View All</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
+              <SectionHeader icon={Trophy} title={tournamentsTitle} subtitle="Competitions running now" href="/tournaments" accent="bg-[#C79A3B] text-black" />
 
               <div className={`grid grid-cols-1 ${tournaments.length ? "md:grid-cols-2" : ""} gap-3.5 flex-1 items-stretch`}>
                 <div className="relative overflow-hidden rounded-2xl bg-[#0F1012] text-white p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-white/10 min-h-[340px]">
@@ -135,14 +130,11 @@ export function OngoingTournamentsAndActivity({
 
           {showA && (
             <div className={`${showT ? "lg:col-span-5" : "lg:col-span-12"} flex flex-col justify-between`}>
-              <div className="flex items-center justify-between mb-3.5">
-                <h2 className="text-base sm:text-lg font-bold text-[#111111]">{activityTitle}</h2>
-                <Link href="/activity" className="inline-flex items-center space-x-1 text-xs font-semibold text-[#111111] hover:text-[#C79A3B] transition-colors">
-                  <span>View All</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-              <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 sm:p-5 shadow-sm divide-y divide-[#F1F3F5] flex-1 flex flex-col">
+              <SectionHeader icon={Activity} title={activityTitle} subtitle="Live from the community" href="/activity" accent="bg-sky-500 text-white" />
+              <div className="relative bg-white border border-[#E5E7EB] rounded-3xl p-4 sm:p-5 shadow-sm divide-y divide-[#F1F3F5] flex-1 flex flex-col">
+                <span className="absolute top-5 right-5 flex items-center gap-1.5 text-[10px] font-black text-rose-600">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" /> LIVE
+                </span>
                 {activities.map((act) => {
                   const body = (
                     <>

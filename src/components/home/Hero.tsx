@@ -22,7 +22,7 @@ export function Hero({ hero, stats }: { hero: SiteSettings["hero"]; stats: { val
             </div>
           )}
 
-          <div className="relative z-20 max-w-2xl px-4 py-8 sm:px-10 lg:px-14 space-y-4 sm:space-y-5">
+          <div className="relative z-20 max-w-2xl px-4 pt-8 pb-14 sm:px-10 sm:pb-16 lg:px-14 space-y-4 sm:space-y-5">
             {hero.eyebrow && (
               <div className="inline-flex items-center space-x-2">
                 <span className="w-2 h-2 rounded-full bg-[#C79A3B]"></span>
@@ -62,14 +62,12 @@ export function Hero({ hero, stats }: { hero: SiteSettings["hero"]; stats: { val
         </div>
 
         {hero.showStats && stats.length > 0 && (
-          <div className="mt-3 sm:mt-4 grid grid-cols-4 gap-2 sm:gap-3">
+          <div className="relative z-30 -mt-8 sm:-mt-10 mx-3 sm:mx-8 grid grid-cols-2 sm:grid-cols-4 rounded-2xl overflow-hidden bg-[#0B0C0F] text-white shadow-2xl ring-1 ring-white/10 divide-x divide-y sm:divide-y-0 divide-white/10">
             {stats.map((stat, idx) => (
-              <div
-                key={idx}
-                className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-xl p-2 sm:p-4 lg:p-5 flex flex-col justify-center items-center transition-all hover:border-[#111111] shadow-sm min-h-[64px] sm:min-h-[72px]"
-              >
-                <div className="text-base sm:text-2xl lg:text-3xl font-black text-[#111111] tracking-tight font-sans">{stat.value}</div>
-                <div className="text-[9px] sm:text-xs font-semibold text-[#5F6368] uppercase tracking-wider mt-0.5 text-center truncate w-full">{stat.label}</div>
+              <div key={idx} className="relative px-4 sm:px-6 py-4 sm:py-5">
+                <span className={`absolute left-0 top-4 bottom-4 w-1 rounded-r ${["bg-[#C79A3B]", "bg-emerald-400", "bg-sky-400", "bg-rose-400"][idx % 4]}`} />
+                <div className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight font-mono">{stat.value}</div>
+                <div className="text-[10px] sm:text-xs font-bold text-white/50 uppercase tracking-widest mt-0.5 truncate">{stat.label}</div>
               </div>
             ))}
           </div>

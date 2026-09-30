@@ -8,6 +8,8 @@ import { TransferMarketSection } from "@/components/home/TransferMarketSection";
 import { NewsAndEvents } from "@/components/home/NewsAndEvents";
 import { PartnersSection } from "@/components/home/PartnersSection";
 import { CommunityCTA } from "@/components/home/CommunityCta";
+import { ClubsSpotlight } from "@/components/home/ClubsSpotlight";
+import { NewestPlayers } from "@/components/home/NewestPlayers";
 import { getSiteSettings } from "@/lib/settings";
 import { getHomepageData } from "@/lib/homepage";
 
@@ -25,10 +27,11 @@ export default async function HomePage() {
   const s = settings.sections;
 
   return (
-    <div className="w-full bg-[#FFFFFF] min-h-screen text-[#111111]">
+    <div className="w-full bg-[#F6F7F9] min-h-screen text-[#111111]">
       <Hero hero={settings.hero} stats={data?.stats || []} />
 
-      {settings.countdown.enabled && settings.countdown.targetDate && (
+      {/* The banner disappears on its own once the deadline has passed. */}
+      {settings.countdown.enabled && settings.countdown.targetDate && new Date(settings.countdown.targetDate).getTime() > Date.now() && (
         <CountdownBanner countdown={settings.countdown} tournament={data?.countdownTournament || null} />
       )}
 
@@ -53,6 +56,10 @@ export default async function HomePage() {
           activities={data.activities}
         />
       )}
+
+      {data && s.clubRankings.show && data.clubRankings.length === 0 && <ClubsSpotlight title="Clubs" data={data.clubsSpotlight} />}
+
+      {data && <NewestPlayers players={data.newestPlayers} />}
 
       {data && s.weeklyStars.show && data.weeklyStars.length > 0 && (
         <WeeklyStarsSection title={s.weeklyStars.title} subtitle={s.weeklyStars.subtitle} stars={data.weeklyStars} />

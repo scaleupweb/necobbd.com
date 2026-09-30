@@ -10,13 +10,14 @@ export function PartnersSection({ title, subtitle, partners }: { title: string; 
     <section className="w-full py-8 overflow-hidden">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-xl mx-auto space-y-1 pb-6">
-          <h2 className="text-base sm:text-lg font-bold text-[#111111]">{title}</h2>
-          {subtitle && <p className="text-xs text-[#5F6368]">{subtitle}</p>}
+          <div className="text-[10px] font-black tracking-[0.3em] text-[#C79A3B]">TRUSTED BY</div>
+          <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">{title}</h2>
+          {subtitle && <p className="text-xs sm:text-sm text-[#5F6368]">{subtitle}</p>}
         </div>
 
         <div className="relative w-full overflow-hidden">
-          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 sm:w-20 bg-gradient-to-r from-white to-transparent z-10" />
-          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 sm:w-20 bg-gradient-to-l from-white to-transparent z-10" />
+          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 sm:w-20 bg-gradient-to-r from-[#F6F7F9] to-transparent z-10" />
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 sm:w-20 bg-gradient-to-l from-[#F6F7F9] to-transparent z-10" />
           <div className="animate-marquee flex items-center space-x-3 sm:space-x-4 py-1">
             {track.map((partner, idx) => {
               const card = (
