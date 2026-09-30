@@ -1,5 +1,63 @@
 // Small dependency-free SVG charts for the player profile (server-rendered).
 
+/** Half-circle meter, e.g. rating between min and max. */
+export function Gauge({ value, min, max, label, color = "#C79A3B" }: { value: number; min: number; max: number; label: string; color?: string }) {
+  const pct = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const r = 80;
+  const c = Math.PI * r;
+  return (
+    <svg viewBox="0 0 200 118" className="w-full max-w-[220px] mx-auto" role="img" aria-label={`${label} ${value}`}>
+      <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="currentColor" className="text-white/10" strokeWidth="14" strokeLinecap="round" />
+      <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke={color} strokeWidth="14" strokeLinecap="round" strokeDasharray={`${c * pct} ${c}`} />
+      <text x="100" y="88" textAnchor="middle" fontSize="34" fontWeight="900" fill="currentColor" fontFamily="ui-monospace, monospace">
+        {value}
+      </text>
+      <text x="100" y="110" textAnchor="middle" fontSize="11" fill="currentColor" opacity="0.6" fontWeight="700" letterSpacing="1.5">
+        {label.toUpperCase()}
+      </text>
+    </svg>
+  );
+}
+
+/** Win / draw / loss ring. */
+export function Donut({ parts, center, sub }: { parts: { value: number; color: string; label: string }[]; center: string; sub: string }) {
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="flex items-center gap-5">
+      <svg viewBox="0 0 140 140" className="w-32 h-32 shrink-0" role="img" aria-label={parts.map((p) => `${p.label} ${p.value}`).join(", ")}>
+        <circle cx="70" cy="70" r={r} fill="none" stroke="#F1F5F9" strokeWidth="16" />
+        <g transform="rotate(-90 70 70)">
+          {total > 0 &&
+            parts.map((p) => {
+              const len = (p.value / total) * c;
+              const el = <circle key={p.label} cx="70" cy="70" r={r} fill="none" stroke={p.color} strokeWidth="16" strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-offset} />;
+              offset += len;
+              return el;
+            })}
+        </g>
+        <text x="70" y="72" textAnchor="middle" fontSize="24" fontWeight="900" fill="#0F172A" fontFamily="ui-monospace, monospace">
+          {center}
+        </text>
+        <text x="70" y="90" textAnchor="middle" fontSize="10" fontWeight="700" fill="#64748B">
+          {sub}
+        </text>
+      </svg>
+      <div className="space-y-2">
+        {parts.map((p) => (
+          <div key={p.label} className="flex items-center gap-2 text-xs">
+            <span className="w-3 h-3 rounded-full" style={{ background: p.color }} />
+            <span className="font-semibold text-slate-600 w-12">{p.label}</span>
+            <span className="font-black font-mono text-slate-950">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type Series = { name: string; color: string; values: number[] };
 
 export function LineChart({ labels, series, height = 220 }: { labels: string[]; series: Series[]; height?: number }) {
