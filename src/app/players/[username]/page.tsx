@@ -93,107 +93,104 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
 
   return (
     <div className="bg-[#F6F7F9] -mb-px">
-      {/* ================= HERO ================= */}
-      <header className="relative bg-[#0B0C0F] text-white overflow-hidden">
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover opacity-45" />
-        ) : (
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_0%,rgba(199,154,59,0.35),transparent_55%),radial-gradient(ellipse_at_0%_100%,rgba(79,70,229,0.35),transparent_50%)]" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C0F] via-[#0B0C0F]/70 to-transparent" />
-        {player.club && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={player.club.logo} alt="" aria-hidden className="absolute -right-10 -top-10 w-80 h-80 object-cover rounded-full opacity-[0.07] blur-[1px]" />
-        )}
-
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-          <div className="flex items-center justify-between">
-            <Link href="/players" className="inline-flex items-center gap-2 text-xs font-bold text-white/70 hover:text-white">
-              <ArrowLeft className="w-4 h-4" /> All players
-            </Link>
-            <div className="flex gap-2">
-              {clubAccess && (
-                <Link href="/dashboard/my-club" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C79A3B] text-black text-xs font-black hover:bg-[#d8ad52]">
-                  <Settings className="w-3.5 h-3.5" /> Manage {player.club?.shortName || "club"}
-                </Link>
-              )}
-              {isMe && (
-                <Link href="/dashboard?tab=profile" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/20">
-                  <Pencil className="w-3.5 h-3.5" /> Edit profile
-                </Link>
-              )}
+      {/* ================= HERO (cover + centred avatar) ================= */}
+      <header className="bg-white border-b border-slate-200">
+        <div className="max-w-6xl mx-auto sm:px-6 lg:px-8">
+          {/* Cover photo — shown as-is, no dimming */}
+          <div className="relative h-44 sm:h-64 lg:h-80 overflow-hidden sm:rounded-b-3xl bg-slate-200">
+            {cover ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,#1E1B4B_0%,#312E81_35%,#8a6420_75%,#C79A3B_100%)]">
+                <div
+                  className="absolute inset-0 opacity-20"
+                  style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)", backgroundSize: "22px 22px" }}
+                />
+                {player.club && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={player.club.logo} alt="" aria-hidden className="absolute right-6 top-1/2 -translate-y-1/2 w-40 h-40 sm:w-56 sm:h-56 object-cover rounded-full opacity-15" />
+                )}
+              </div>
+            )}
+            <div className="absolute inset-x-0 top-0 p-3 sm:p-4 flex items-center justify-between">
+              <Link href="/players" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/45 backdrop-blur text-xs font-bold text-white hover:bg-black/60">
+                <ArrowLeft className="w-3.5 h-3.5" /> All players
+              </Link>
             </div>
           </div>
 
-          <div className="mt-10 sm:mt-14 flex flex-col md:flex-row md:items-end gap-6">
-            <div className="relative w-32 h-32 sm:w-40 sm:h-40 shrink-0">
-              <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-[#C79A3B] via-[#f5d58a] to-[#8a6420] p-[3px] rotate-3">
-                <div className="w-full h-full rounded-[1.8rem] bg-[#0B0C0F]" />
-              </div>
+          <div className="px-4 sm:px-0 pb-6">
+            {/* Avatar overlapping the cover */}
+            <div className="relative mx-auto -mt-20 sm:-mt-24 w-36 h-36 sm:w-44 sm:h-44">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={player.avatar} alt={player.fullName} className="relative w-full h-full rounded-[2rem] object-cover border-4 border-[#0B0C0F] bg-slate-800" />
+              <img src={player.avatar} alt={player.fullName} className="w-full h-full rounded-full object-cover ring-[5px] ring-white bg-slate-100 shadow-lg" />
               {player.club && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={player.club.logo} alt={player.club.name} title={player.club.name} className="absolute -bottom-2 -right-2 w-12 h-12 rounded-2xl object-cover border-[3px] border-[#0B0C0F] bg-white" />
+                <img src={player.club.logo} alt={player.club.name} title={player.club.name} className="absolute bottom-1 right-1 w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ring-4 ring-white bg-white shadow" />
               )}
             </div>
 
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-black tracking-widest uppercase">{player.preferredPosition}</span>
-                {player.shirtNo ? <span className="px-2 py-0.5 rounded-md bg-[#C79A3B] text-black text-[10px] font-black">#{player.shirtNo}</span> : null}
-                {player.status !== "ACTIVE" && <span className="px-2 py-0.5 rounded-md bg-rose-600 text-[10px] font-black">{player.status.replace(/_/g, " ")}</span>}
-              </div>
-              <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-none flex items-center gap-2">
+            {/* Identity */}
+            <div className="mt-4 text-center space-y-2.5">
+              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-950 inline-flex items-center justify-center gap-2">
                 {player.fullName}
-                {player.isVerified && <BadgeCheck className="w-7 h-7 text-sky-400 shrink-0" aria-label="Verified" />}
+                {player.isVerified && <BadgeCheck className="w-6 h-6 sm:w-7 sm:h-7 text-sky-500 shrink-0" aria-label="Verified" />}
               </h1>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/70">
-                <span className="font-mono">@{player.username}</span>
+              <div className="font-mono text-sm text-slate-500">@{player.username}</div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <span className="px-2.5 py-1 rounded-full bg-slate-900 text-white text-[10px] font-black tracking-widest uppercase">{player.preferredPosition}</span>
+                {player.shirtNo ? <span className="px-2.5 py-1 rounded-full bg-[#C79A3B] text-black text-[10px] font-black">#{player.shirtNo}</span> : null}
+                {player.status !== "ACTIVE" && <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-[10px] font-black">{player.status.replace(/_/g, " ")}</span>}
                 {player.club && (
-                  <Link href={`/clubs/${player.club.slug}`} className="inline-flex items-center gap-1 font-bold text-white hover:underline">
-                    <Shield className="w-3.5 h-3.5 text-[#C79A3B]" /> {player.club.name}
+                  <Link href={`/clubs/${player.club.slug}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900 hover:bg-amber-100">
+                    <Shield className="w-3 h-3" /> {player.club.name}
                   </Link>
                 )}
                 {player.location && (
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5" /> {player.location}
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">
+                    <MapPin className="w-3 h-3" /> {player.location}
                   </span>
                 )}
                 {player.facebookProfile && (
-                  <a href={player.facebookProfile} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 hover:text-white">
-                    <Facebook className="w-3.5 h-3.5" /> Facebook
+                  <a href={player.facebookProfile} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-[11px] font-bold text-blue-700 hover:bg-blue-100">
+                    <Facebook className="w-3 h-3" /> Facebook
                   </a>
                 )}
               </div>
-            </div>
 
-            {/* Rank medallion */}
-            <div className="shrink-0 self-start md:self-end">
-              <div className="w-28 h-28 rounded-full bg-gradient-to-b from-[#f5d58a] to-[#8a6420] p-[3px] shadow-[0_0_40px_rgba(199,154,59,0.35)]">
-                <div className="w-full h-full rounded-full bg-[#0B0C0F] flex flex-col items-center justify-center">
-                  <span className="text-[9px] font-black tracking-[0.2em] text-[#C79A3B]">RANK</span>
-                  <span className="text-2xl font-black font-mono leading-none mt-1">{rankInfo.rank ? `#${rankInfo.rank}` : "—"}</span>
-                  <span className="text-[9px] text-white/50 mt-1">{rankInfo.rank ? `of ${rankInfo.total}` : "unranked"}</span>
+              {(clubAccess || isMe) && (
+                <div className="flex flex-wrap justify-center gap-2 pt-1">
+                  {isMe && (
+                    <Link href="/dashboard?tab=profile" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 text-white text-xs font-bold hover:bg-slate-800">
+                      <Pencil className="w-3.5 h-3.5" /> Edit profile
+                    </Link>
+                  )}
+                  {clubAccess && (
+                    <Link href="/dashboard/my-club" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#C79A3B] text-black text-xs font-bold hover:bg-[#d8ad52]">
+                      <Settings className="w-3.5 h-3.5" /> Manage {player.club?.shortName || "club"}
+                    </Link>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
-          </div>
 
-          {/* Glass stat bar */}
-          <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 rounded-2xl overflow-hidden border border-white/10 bg-white/[0.06] backdrop-blur divide-x divide-white/10">
-            {[
-              ["Matches", s.matchesPlayed],
-              ["Wins", s.wins],
-              ["Win rate", `${s.winRate}%`],
-              ["Goals", s.goalsScored],
-            ].map(([k, v]) => (
-              <div key={k} className="px-5 py-4">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/50">{k}</div>
-                <div className="text-2xl sm:text-3xl font-black font-mono">{v}</div>
-              </div>
-            ))}
+            {/* Stat strip */}
+            <div className="mt-6 max-w-3xl mx-auto grid grid-cols-5 rounded-2xl border border-slate-200 bg-slate-50/60 divide-x divide-slate-200">
+              {[
+                ["Rank", rankInfo.rank ? `#${rankInfo.rank}` : "—"],
+                ["Matches", s.matchesPlayed],
+                ["Wins", s.wins],
+                ["Win rate", `${s.winRate}%`],
+                ["Goals", s.goalsScored],
+              ].map(([k, v]) => (
+                <div key={k} className="px-1 sm:px-3 py-3 sm:py-3.5 text-center min-w-0">
+                  <div className={`text-lg sm:text-2xl font-black font-mono ${k === "Rank" ? "text-[#B0852A]" : "text-slate-950"}`}>{v}</div>
+                  <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide sm:tracking-widest text-slate-500 mt-0.5 truncate">{k}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </header>
