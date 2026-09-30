@@ -37,6 +37,7 @@ import { getSiteSettings } from "@/lib/settings";
 import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { toMatchLines, snapshot, monthlyLoad, seasons, humanGap, aboutText, MatchLine } from "@/lib/player-insights";
 import { LineChart, BarChart, Gauge, Donut } from "@/components/profile/Charts";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 export const dynamic = "force-dynamic";
 
@@ -137,7 +138,10 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
                 {player.fullName}
                 {player.isVerified && <BadgeCheck className="w-6 h-6 sm:w-7 sm:h-7 text-sky-500 shrink-0" aria-label="Verified" />}
               </h1>
-              <div className="font-mono text-sm text-slate-500">@{player.username}</div>
+              <div className="flex items-center justify-center gap-2">
+                <span className="font-mono text-sm text-slate-500">@{player.username}</span>
+                <CopyButton value={player.username} label="Username copied" />
+              </div>
 
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <span className="px-2.5 py-1 rounded-full bg-slate-900 text-white text-[10px] font-black tracking-widest uppercase">{player.preferredPosition}</span>
@@ -216,7 +220,10 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
               <span className="text-[10px] font-black tracking-[0.25em] text-indigo-300">PLAYER ID</span>
               <span className="text-[10px] font-bold text-white/40">{settings.brand.siteName}</span>
             </div>
-            <div className="mt-4 font-mono text-lg tracking-widest">{player.konamiId || "—"}</div>
+            <div className="mt-4 flex items-center gap-2">
+              <span className="font-mono text-lg tracking-widest">{player.konamiId || "—"}</span>
+              {player.konamiId && <CopyButton value={player.konamiId} label="Konami UID copied" className="!bg-white/10 !border-white/15 !text-white/70 hover:!text-white" />}
+            </div>
             <div className="text-[10px] text-white/40 uppercase tracking-wider">Konami UID</div>
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
               <IdRow icon={Smartphone} label="Device" value={player.deviceModel} />
