@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Gavel, Undo2, Loader2 } from "lucide-react";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone } from "@/components/admin/ui";
+import { toast, confirmDialog } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
 
 const PENALTIES = [
@@ -54,12 +55,13 @@ export default function AdminDisciplinaryPage() {
   };
 
   const revoke = async (r: any) => {
-    if (!confirm(`Revoke the sanction against ${r.targetName}?`)) return;
+    if (!(await confirmDialog({ title: `Revoke the sanction against ${r.targetName}?`, text: "Their status is restored if no other sanction is active.", confirmText: "Revoke" }))) return;
     try {
       await api(`/api/admin/disciplinary/${r.id}`, { method: "DELETE" });
+      toast.success("Sanction revoked");
       load();
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
     }
   };
 

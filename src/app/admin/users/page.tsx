@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, UserPlus, KeyRound, Trash2, Loader2, ExternalLink } from "lucide-react";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle } from "@/components/admin/ui";
+import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
 
 const ROLES = ["PLAYER", "CLUB_MANAGER", "REFEREE", "SENIOR_REFEREE", "TOURNAMENT_OFFICIAL", "MODERATOR", "ADMIN", "SUPER_ADMIN"];
@@ -43,31 +44,48 @@ export default function AdminUsersPage() {
     setMsg(null);
     try {
       await api(`/api/admin/users/${u.id}`, { method: "PATCH", json: body });
-      setMsg({ ok: true, text: `${u.fullName}: ${label}` });
+      toast.success(`${u.fullName}: ${label}`);
       load();
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
+      load();
     }
   };
 
   const resetPassword = async (u: any) => {
-    if (!confirm(`Generate a new temporary password for ${u.fullName}? They will be signed out everywhere.`)) return;
+    const ok = await confirmDialog({
+      title: `Reset password for ${u.fullName}?`,
+      text: "A new temporary password will be generated and they will be signed out everywhere.",
+      confirmText: "Reset password",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const r = await api<{ temporaryPassword: string }>(`/api/admin/users/${u.id}`, { method: "PATCH", json: { action: "RESET_PASSWORD" } });
-      setMsg({ ok: true, text: `Temporary password for @${u.username}: ${r.temporaryPassword} — share it privately; they should change it after signing in.` });
+      await infoDialog({
+        icon: "success",
+        title: "Temporary password",
+        html: `<div style="font-family:monospace;font-size:18px;font-weight:800;padding:10px;background:#F1F5F9;border-radius:12px;user-select:all">${r.temporaryPassword}</div><p style="margin-top:10px;font-size:12px">Share it privately with @${u.username}. They should change it after signing in.</p>`,
+      });
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
     }
   };
 
   const remove = async (u: any) => {
-    if (!confirm(`Permanently delete ${u.fullName} (@${u.username}) and their player profile? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete ${u.fullName}?`,
+      text: `@${u.username} and their player profile will be permanently deleted. This cannot be undone.`,
+      confirmText: "Delete permanently",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/api/admin/users/${u.id}`, { method: "DELETE" });
-      setMsg({ ok: true, text: `Deleted @${u.username}` });
+      toast.success(`Deleted @${u.username}`);
       load();
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
     }
   };
 

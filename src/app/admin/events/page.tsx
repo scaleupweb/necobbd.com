@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Users, UserMinus, Download } from "lucide-react";
 import { ResourceManager, FieldDef } from "@/components/admin/ResourceManager";
 import { api, Badge, Button, Empty, Modal, Notice, statusTone } from "@/components/admin/ui";
+import { toast, confirmDialog } from "@/lib/feedback";
 import { formatDate, formatTime } from "@/lib/utils";
 
 const FIELDS: FieldDef[] = [
@@ -57,11 +58,12 @@ function RegistrationsModal({ event, onClose }: { event: any; onClose: () => voi
   }, [event.id]);
 
   const remove = async (userId: string) => {
-    if (!confirm("Remove this registration?")) return;
+    if (!(await confirmDialog({ title: "Remove this registration?", confirmText: "Remove", danger: true }))) return;
     try {
       setList(await api(`/api/admin/events/${event.id}/registrations?userId=${userId}`, { method: "DELETE" }));
+      toast.success("Registration removed");
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     }
   };
 

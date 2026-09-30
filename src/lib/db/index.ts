@@ -1010,42 +1010,13 @@ export const db = {
     await connectDB();
     const t = await Tournament.findOne(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId });
     if (!t || t.status === "DRAFT") throw new ServiceError("Tournament not found", 404);
-    if (t.participantType === "CLUB") return db._joinTournamentAsClub(t, userId);
-    const player = await Player.findOne({ userId }).lean<any>();
-    if (!player) throw new ServiceError("Only registered players can join tournaments", 403);
-    if (player.status !== "ACTIVE") throw new ServiceError("Your player account is not active", 403);
-    if (t.status !== "REGISTRATION_OPEN") throw new ServiceError("Registration is not open for this tournament", 409);
-    if (t.registrationDeadline && new Date(t.registrationDeadline).getTime() < Date.now()) throw new ServiceError("Registration deadline has passed", 409);
-    const active = t.participants.filter((p: any) => p.status !== "REMOVED");
-    if (active.some((p: any) => String(p.userId) === userId)) throw new ServiceError("You have already joined this tournament", 409);
-    if (t.participants.some((p: any) => String(p.userId) === userId && p.status === "REMOVED")) {
-      throw new ServiceError("You were removed from this tournament. Contact an admin.", 403);
-    }
-    if (active.length >= t.maxParticipants) throw new ServiceError("Tournament is full", 409);
-
-    // Atomic guard against two requests racing past the capacity check.
-    const res = await Tournament.updateOne(
-      { _id: t._id, "participants.userId": { $ne: oid(userId) }, $expr: { $lt: [{ $size: "$participants" }, t.maxParticipants + (t.participants.length - active.length)] } },
-      { $push: { participants: { userId, playerId: player._id, clubId: player.clubId, joinedAt: new Date(), status: "CONFIRMED" } } }
-    );
-    if (!res.modifiedCount) throw new ServiceError("Could not join — the tournament may have just filled up", 409);
-
-    await db.addActivityEvent({
-      type: "TOURNAMENT_JOIN",
-      category: "Tournaments",
-      title: `${player.fullName} joined ${t.name}`,
-      avatar: player.avatar,
-      targetUrl: `/tournaments/${t.slug}`,
-      userId,
-      playerId: String(player._id),
-    });
-    await db.notify(userId, "Tournament registration confirmed", `You are registered for ${t.name}.`, `/tournaments/${t.slug}`);
-    return db.getTournamentBySlug(t.slug, { includeDrafts: true });
+    // Tournaments are club competitions: only a club's main manager can register the club.
+    return db._joinTournamentAsClub(t, userId);
   },
 
   async _joinTournamentAsClub(t: any, userId: string) {
-    const club = await db.getManagedClub(userId);
-    if (!club) throw new ServiceError("Only a club manager can enter a club into this tournament. Register your club first.", 403);
+    const club = await db.getMainManagedClub(userId);
+    if (!club) throw new ServiceError("Only a club's main manager can register the club for a tournament.", 403);
     if (club.status !== "ACTIVE") throw new ServiceError("Your club is not active yet", 403);
     if (t.status !== "REGISTRATION_OPEN") throw new ServiceError("Registration is not open for this tournament", 409);
     if (t.registrationDeadline && new Date(t.registrationDeadline).getTime() < Date.now()) throw new ServiceError("Registration deadline has passed", 409);
@@ -1070,6 +1041,13 @@ export const db = {
     });
     await db.notify(userId, "Club registered", `${club.name} is registered for ${t.name}.`, `/tournaments/${t.slug}`);
     return db.getTournamentBySlug(t.slug, { includeDrafts: true });
+  },
+
+  /** The club whose main manager (owner) is this user — moderators don't count. */
+  async getMainManagedClub(userId: string) {
+    if (!isId(userId)) return null;
+    await connectDB();
+    return Club.findOne({ managerId: userId }).lean<any>();
   },
 
   /** The club this user may manage: its manager, or a full-control staff member. */
@@ -1122,27 +1100,10 @@ export const db = {
     const t = await Tournament.findOne(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId });
     if (!t) throw new ServiceError("Tournament not found", 404);
     if (t.status !== "REGISTRATION_OPEN") throw new ServiceError("You can only withdraw while registration is open", 409);
-    if (t.participantType === "CLUB") {
-      const club = await db.getManagedClub(userId);
-      if (!club) throw new ServiceError("Only the club manager can withdraw the club", 403);
-      const r = await Tournament.updateOne({ _id: t._id }, { $pull: { clubParticipants: { clubId: club._id, status: { $ne: "REMOVED" } } } });
-      if (!r.modifiedCount) throw new ServiceError("Your club is not registered for this tournament", 409);
-      return db.getTournamentBySlug(t.slug, { includeDrafts: true });
-    }
-    const before = t.participants.length;
-    t.participants = t.participants.filter((p: any) => !(String(p.userId) === userId && p.status !== "REMOVED")) as any;
-    if (t.participants.length === before) throw new ServiceError("You are not registered for this tournament", 409);
-    await t.save();
-    const player = await Player.findOne({ userId }, { fullName: 1 }).lean<any>();
-    await db.addActivityEvent({
-      type: "TOURNAMENT_LEAVE",
-      category: "Tournaments",
-      title: `Withdrew from ${t.name}`,
-      targetUrl: `/tournaments/${t.slug}`,
-      userId,
-      playerId: player ? String(player._id) : undefined,
-      isPublic: false,
-    });
+    const club = await db.getMainManagedClub(userId);
+    if (!club) throw new ServiceError("Only the club's main manager can withdraw the club", 403);
+    const r = await Tournament.updateOne({ _id: t._id }, { $pull: { clubParticipants: { clubId: club._id, status: { $ne: "REMOVED" } } } });
+    if (!r.modifiedCount) throw new ServiceError("Your club is not registered for this tournament", 409);
     return db.getTournamentBySlug(t.slug, { includeDrafts: true });
   },
 

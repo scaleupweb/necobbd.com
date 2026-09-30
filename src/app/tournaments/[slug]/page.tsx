@@ -33,7 +33,8 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const fixtures: any[] = t.fixtures || [];
   const participants: any[] = t.participants || [];
   const clubs: any[] = (t as any).clubs || [];
-  const isClub = t.participantType === "CLUB";
+  // Every tournament is a club competition; old player entries are still listed if present.
+  const isClub = t.participantType === "CLUB" || participants.length === 0;
 
   // Group fixtures into bracket columns by round, ordered by when each round starts.
   const rounds = new Map<string, any[]>();
@@ -111,11 +112,11 @@ export default async function TournamentDetailPage({ params }: { params: Promise
             <JoinButton
               endpoint={`/api/tournaments/${t.slug}/join`}
               memberIds={t.participantUserIds}
-              memberClubIds={isClub ? t.participantClubIds : []}
-              allowLeave={!isClub}
+              memberClubIds={t.participantClubIds}
+              clubOnly
               isOpen={t.isRegistrationOpen}
-              joinLabel={isClub ? "Register my club" : "Join tournament"}
-              leaveLabel="Withdraw from tournament"
+              joinLabel="Register club"
+              leaveLabel="Withdraw club from tournament"
               closedLabel={
                 t.status === "REGISTRATION_OPEN" && t.currentParticipants >= t.maxParticipants ? "Tournament is full" : STATUS[t.status]?.label || "Registration closed"
               }

@@ -6,6 +6,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { SiteShell } from "@/components/layout/SiteShell";
+import { Toasts } from "@/components/ui/Toasts";
 import { getSiteSettings } from "@/lib/settings";
 
 const fontOutfit = Outfit({
@@ -81,6 +82,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         >
           {children}
         </SiteShell>
+        <Toasts />
       </body>
     </html>
   );

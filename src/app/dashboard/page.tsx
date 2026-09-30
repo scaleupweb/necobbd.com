@@ -18,6 +18,7 @@ import {
 import { formatCurrency, getFormColor, formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ImageInput } from "@/components/ui/ImageInput";
+import { toast } from "@/lib/feedback";
 import { LocationInput } from "@/components/ui/LocationInput";
 
 type Tab = "overview" | "profile" | "security";
@@ -140,22 +141,23 @@ function Card({ title, icon: Icon, action, children }: { title: string; icon: an
 
 function Overview({ data, reload }: { data: any; reload: () => void }) {
   const { player, tournaments, events, fixtures, activity, notifications, openTournaments } = data;
+  // Registration is only for the club's main manager (not moderators).
+  const managedClub = data.managedClub?.isOwner ? data.managedClub : null;
   const [joining, setJoining] = useState<string | null>(null);
-  const [msg, setMsg] = useState("");
   const upcoming = fixtures.filter((f: any) => f.status === "SCHEDULED" || f.status === "LIVE");
   const recent = fixtures.filter((f: any) => f.status === "FINISHED").slice(0, 5);
 
+  // Only a club's main manager can register the club for a tournament.
   const join = async (slug: string) => {
     setJoining(slug);
-    setMsg("");
     try {
       const res = await fetch(`/api/tournaments/${slug}/join`, { method: "POST" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message);
-      setMsg("You're in! Good luck.");
+      toast.success(`${managedClub?.name || "Your club"} is registered!`);
       reload();
     } catch (e: any) {
-      setMsg(e.message || "Could not join");
+      toast.error(e.message || "Could not register the club");
     } finally {
       setJoining(null);
     }
@@ -166,7 +168,12 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
       <div className="lg:col-span-8 space-y-6">
         {openTournaments.length > 0 && (
           <Card title="Open for registration" icon={Trophy} action={<Link href="/tournaments" className="text-xs font-bold hover:underline">All →</Link>}>
-            {msg && <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold">{msg}</div>}
+            {!managedClub && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                Tournaments are for clubs. Only a club&apos;s main manager can register — ask your manager, or{" "}
+                <Link href="/register?type=club" className="font-bold underline">create a club</Link>.
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {openTournaments.map((t: any) => (
                 <div key={t.id} className="p-4 rounded-2xl border border-slate-200 space-y-2">
@@ -176,13 +183,20 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
                     {t.registrationDeadline && ` · closes ${formatDate(t.registrationDeadline)}`}
                     {t.prizePool && ` · ${t.prizePool}`}
                   </div>
-                  <button
-                    onClick={() => join(t.slug)}
-                    disabled={joining === t.slug || !player}
-                    className="w-full py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-zinc-800 disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    {joining === t.slug && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {player ? "Join tournament" : "Player profile required"}
-                  </button>
+                  {managedClub ? (
+                    <button
+                      onClick={() => join(t.slug)}
+                      disabled={joining === t.slug || managedClub.status !== "ACTIVE"}
+                      className="w-full py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-zinc-800 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                    >
+                      {joining === t.slug && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {managedClub.status === "ACTIVE" ? `Register ${managedClub.name}` : "Club awaiting approval"}
+                    </button>
+                  ) : (
+                    <Link href={`/tournaments/${t.slug}`} className="block w-full py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold text-center hover:bg-slate-200">
+                      View tournament
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>

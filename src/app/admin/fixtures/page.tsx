@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Play, Pause, Ban, CheckCircle2, Trash2, XCircle, Pencil, Loader2, ExternalLink, RotateCcw } from "lucide-react";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle, toLocalInput, fromLocalInput } from "@/components/admin/ui";
+import { toast, confirmDialog } from "@/lib/feedback";
 import { ResultModal } from "@/components/admin/ResultModal";
 import { formatDate, formatTime } from "@/lib/utils";
 
@@ -53,24 +54,34 @@ export default function AdminFixturesPage() {
     load();
   }, [load]);
 
+  const ACTION_DONE: Record<string, string> = {
+    START: "Match is now live",
+    RESET: "Match returned to scheduled",
+    POSTPONE: "Match postponed",
+    CANCEL: "Match cancelled",
+    REJECT_CLAIM: "Reported score rejected",
+  };
+
   const act = async (f: any, action: string, confirmText?: string) => {
-    if (confirmText && !confirm(confirmText)) return;
+    if (confirmText && !(await confirmDialog({ title: confirmText, confirmText: "Yes, continue", danger: action === "CANCEL" || action === "REJECT_CLAIM" }))) return;
     setMsg(null);
     try {
       await api(`/api/admin/fixtures/${f.id}`, { method: "PATCH", json: { action } });
+      toast.success(ACTION_DONE[action] || "Done");
       load();
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
     }
   };
 
   const remove = async (f: any) => {
-    if (!confirm("Delete this fixture?")) return;
+    if (!(await confirmDialog({ title: "Delete this fixture?", text: "This cannot be undone.", confirmText: "Delete", danger: true }))) return;
     try {
       await api(`/api/admin/fixtures/${f.id}`, { method: "DELETE" });
+      toast.success("Fixture deleted");
       load();
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
     }
   };
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, BadgeCheck, Pencil, Loader2, ExternalLink, Tag } from "lucide-react";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle } from "@/components/admin/ui";
+import { toast, promptDialog } from "@/lib/feedback";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { formatCurrency } from "@/lib/utils";
 import { PLAYER_POSITIONS } from "@/lib/constants";
@@ -57,14 +58,20 @@ export default function AdminPlayersPage() {
   };
 
   const listForTransfer = async (p: any) => {
-    const price = prompt(`Asking price for ${p.fullName} in $M`, String(p.marketValue));
+    const price = await promptDialog({
+      title: `List ${p.fullName} on the transfer market`,
+      text: "Asking price in $M",
+      value: p.marketValue ? String(p.marketValue) : "",
+      inputType: "number",
+      confirmText: "List player",
+    });
     if (!price) return;
     try {
       await api("/api/admin/transfers", { method: "POST", json: { action: "LIST", playerId: p.id, askingPrice: Number(price) } });
-      setMsg({ ok: true, text: `${p.fullName} is now on the transfer list.` });
+      toast.success(`${p.fullName} is now on the transfer list`);
       load();
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      toast.error(e.message);
     }
   };
 

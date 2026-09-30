@@ -9,6 +9,17 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ success: false, data: null });
   }
-  const unread = await db.unreadNotificationCount(session.id).catch(() => 0);
-  return NextResponse.json({ success: true, data: { ...session, unreadNotifications: unread } });
+  const [unread, owned] = await Promise.all([
+    db.unreadNotificationCount(session.id).catch(() => 0),
+    db.getMainManagedClub(session.id).catch(() => null),
+  ]);
+  return NextResponse.json({
+    success: true,
+    data: {
+      ...session,
+      unreadNotifications: unread,
+      // Club this user owns as main manager (only they can register it for tournaments).
+      managedClub: owned ? { id: String(owned._id), name: owned.name, status: owned.status } : null,
+    },
+  });
 }

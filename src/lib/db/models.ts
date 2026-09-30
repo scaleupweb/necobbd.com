@@ -165,7 +165,7 @@ const TournamentSchema = new Schema<any>(
     },
     isFeatured: { type: Boolean, default: false },
     // PLAYER: individual players join. CLUB: club managers enter their club.
-    participantType: { type: String, enum: ["PLAYER", "CLUB"], default: "PLAYER" },
+    participantType: { type: String, enum: ["PLAYER", "CLUB"], default: "CLUB" },
     participants: { type: [ParticipantSchema], default: [] },
     clubParticipants: {
       type: [

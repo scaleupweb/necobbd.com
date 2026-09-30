@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Users, Crown, Download, Swords, UserMinus, UserPlus, ExternalLink } from "lucide-react";
 import { ResourceManager, FieldDef } from "@/components/admin/ResourceManager";
 import { api, Badge, Button, Empty, Modal, Notice, statusTone } from "@/components/admin/ui";
+import { toast, confirmDialog } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
 
 const STATUSES = ["DRAFT", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED"];
@@ -16,18 +17,7 @@ const FIELDS: FieldDef[] = [
   { name: "season", label: "Season / edition", type: "text", placeholder: "e.g. Season 1" },
   { name: "status", label: "Status", type: "select", options: opt(STATUSES), required: true, default: "DRAFT", hint: "DRAFT is hidden from the public site" },
   { name: "format", label: "Format", type: "select", options: opt(FORMATS), required: true, default: "SINGLE_ELIMINATION" },
-  {
-    name: "participantType",
-    label: "Who registers",
-    type: "select",
-    required: true,
-    default: "PLAYER",
-    options: [
-      { value: "PLAYER", label: "Individual players" },
-      { value: "CLUB", label: "Clubs (club managers enter their club)" },
-    ],
-  },
-  { name: "maxParticipants", label: "Max players / clubs", type: "number", required: true, default: 32 },
+  { name: "maxParticipants", label: "Max clubs", type: "number", required: true, default: 32, hint: "Only club main managers can register their club" },
   { name: "prizePool", label: "Prize pool", type: "text", placeholder: "e.g. 50,000 BDT" },
   { name: "entryFee", label: "Entry fee", type: "text", default: "Free" },
   { name: "gameCategory", label: "Game", type: "text", default: "eFootball Mobile" },
@@ -49,9 +39,10 @@ export default function AdminTournamentsPage() {
   const quickStatus = async (row: any, status: string, reload: () => void) => {
     try {
       await api(`/api/admin/resources/tournaments/${row.id}`, { method: "PATCH", json: { status } });
+      toast.success(`${row.name}: ${status.replace(/_/g, " ").toLowerCase()}`);
       reload();
     } catch (e: any) {
-      alert(e.message);
+      toast.error(e.message);
     }
   };
 
@@ -128,12 +119,13 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
 
   const isClub = tournament.participantType === "CLUB";
   const act = async (id: string, action: "REMOVE" | "RESTORE") => {
-    if (action === "REMOVE" && !confirm(`Remove this ${isClub ? "club" : "player"} from the tournament?`)) return;
+    if (action === "REMOVE" && !(await confirmDialog({ title: `Remove this ${isClub ? "club" : "player"} from the tournament?`, text: "You can restore them later.", confirmText: "Remove", danger: true }))) return;
     try {
       setList(await api(`/api/admin/tournaments/${tournament.id}/participants`, { method: "PATCH", json: { ...(isClub ? { clubId: id } : { userId: id }), action } }));
+      toast.success(action === "REMOVE" ? "Removed from tournament" : "Restored");
       onChanged();
     } catch (e: any) {
-      setError(e.message);
+      toast.error(e.message);
     }
   };
 

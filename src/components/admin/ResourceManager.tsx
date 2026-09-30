@@ -4,6 +4,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Loader2 } from "lucide-react";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { api, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, Toggle, toLocalInput, fromLocalInput } from "./ui";
+import { toast, confirmDialog } from "@/lib/feedback";
 
 export type FieldDef = {
   name: string;
@@ -99,6 +100,7 @@ export function ResourceManager({
       }
       if (editing?.id) await api(`/api/admin/resources/${resource}/${editing.id}`, { method: "PATCH", json: body });
       else await api(`/api/admin/resources/${resource}`, { method: "POST", json: body });
+      toast.success(editing?.id ? `${singular[0].toUpperCase()}${singular.slice(1)} updated` : `${singular[0].toUpperCase()}${singular.slice(1)} created`);
       setEditing(null);
       await load();
       onChanged?.();
@@ -111,13 +113,15 @@ export function ResourceManager({
 
   const remove = async (row: any) => {
     const name = row.name || row.title || singular;
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({ title: `Delete "${name}"?`, text: "This cannot be undone.", confirmText: "Delete", danger: true });
+    if (!ok) return;
     try {
       await api(`/api/admin/resources/${resource}/${row.id}`, { method: "DELETE" });
+      toast.success(`"${name}" deleted`);
       await load();
       onChanged?.();
     } catch (e: any) {
-      alert(e.message);
+      toast.error(e.message);
     }
   };
 

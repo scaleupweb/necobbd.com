@@ -17,8 +17,11 @@ export const GET = handle(async () => {
     db.getTournaments({ status: "REGISTRATION_OPEN" }),
   ]);
   const managed = await db.getManagedClub(session.id);
+  // Only the main manager (owner) may register the club for tournaments.
+  const isOwner = !!managed && String(managed.managerId || "") === session.id;
+  const managedId = managed ? String(managed._id) : "";
   return ok({
-    managedClub: managed ? { name: managed.name, slug: managed.slug, status: managed.status, logo: managed.logo } : null,
+    managedClub: managed ? { id: managedId, name: managed.name, slug: managed.slug, status: managed.status, logo: managed.logo, isOwner } : null,
     user: session,
     player,
     tournaments,
@@ -26,6 +29,6 @@ export const GET = handle(async () => {
     fixtures,
     activity,
     notifications: notifications.slice(0, 10),
-    openTournaments: openTournaments.filter((t: any) => t.isRegistrationOpen && !t.participantUserIds.includes(session.id)).slice(0, 4),
+    openTournaments: openTournaments.filter((t: any) => t.isRegistrationOpen && !(managedId && t.participantClubIds.includes(managedId))).slice(0, 4),
   });
 });

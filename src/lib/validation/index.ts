@@ -200,7 +200,7 @@ export const TournamentBaseSchema = z.object({
     entryFee: trimmed(40).optional().default("Free"),
     status: z.enum(["DRAFT", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED"]).default("DRAFT"),
     isFeatured: z.boolean().optional().default(false),
-    participantType: z.enum(["PLAYER", "CLUB"]).default("PLAYER"),
+    participantType: z.literal("CLUB").default("CLUB"),
     banner: imageUrl.optional().default(""),
     logo: imageUrl.optional().default(""),
     winnerPlayerId: optionalId,
