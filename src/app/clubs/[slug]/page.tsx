@@ -20,12 +20,14 @@ import {
   UserCog,
   Star,
   Info,
+  BadgeCheck,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Donut, Gauge } from "@/components/profile/Charts";
 import { FitImage } from "@/components/ui/FitImage";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 export const dynamic = "force-dynamic";
 
@@ -122,7 +124,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
             {/* Identity */}
             <div className="mt-5 text-center space-y-2.5">
               <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-950">{club.name}</h1>
-              {club.slogan && <p className="text-sm sm:text-base italic text-slate-500">“{club.slogan}”</p>}
+              {club.slogan && <p className="text-sm sm:text-base italic text-slate-500">“{club.slogan.replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, "")}”</p>}
 
               <div className="flex flex-wrap items-center justify-center gap-2">
                 {club.isAcademy && (
@@ -357,31 +359,81 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
           <section id="squad" className="scroll-mt-32">
             <Title icon={Users} title="Squad" subtitle={`${squad.length} registered player${squad.length === 1 ? "" : "s"}`} />
             {squad.length ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {squad.map((p: any) => (
-                  <Link key={p.id} href={`/players/${p.username}`} className="group relative rounded-2xl bg-white border border-slate-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                    <div className="relative h-28 bg-gradient-to-b from-slate-100 to-slate-200">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.avatar} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
-                      {p.shirtNo ? (
-                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 text-white text-xs font-black font-mono">#{p.shirtNo}</span>
-                      ) : null}
-                      <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-white/90 text-[10px] font-black">{p.preferredPosition}</span>
-                      {extras?.captain?.username === p.username && (
-                        <span className="absolute bottom-2 left-2 w-6 h-6 rounded-full bg-[#C79A3B] text-black text-[10px] font-black flex items-center justify-center" title="Captain">
-                          C
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {squad.map((p: any) => {
+                  const isCaptain = extras?.captain?.username === p.username;
+                  return (
+                    <div
+                      key={p.id}
+                      className="relative rounded-2xl border border-amber-200/70 bg-gradient-to-b from-amber-50/70 via-white to-white p-3 sm:p-4 text-center shadow-sm hover:shadow-md hover:border-amber-300 transition-all"
+                    >
+                      {/* Rating + position */}
+                      <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-[10px] sm:text-[11px] font-black font-mono">
+                        <Sparkles className="w-3 h-3" /> {p.rating}
+                      </span>
+                      <span className="absolute top-2.5 right-2.5 px-1.5 py-0.5 rounded-lg bg-slate-900 text-white text-[10px] font-black">{p.preferredPosition}</span>
+
+                      {/* Avatar */}
+                      <Link href={`/players/${p.username}`} className="relative mx-auto mt-5 block w-20 h-20 sm:w-24 sm:h-24">
+                        <span className="absolute inset-0 rounded-full bg-gradient-to-br from-[#C79A3B] via-[#f5d58a] to-[#8a6420] p-[3px]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.avatar} alt={p.fullName} className="w-full h-full rounded-full object-cover bg-slate-100 ring-2 ring-white" />
                         </span>
+                        {p.shirtNo ? (
+                          <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[11px] font-black font-mono ring-2 ring-white">#{p.shirtNo}</span>
+                        ) : null}
+                        {isCaptain && (
+                          <span className="absolute top-0 -right-1 w-6 h-6 rounded-full bg-[#C79A3B] text-black text-[10px] font-black flex items-center justify-center ring-2 ring-white" title="Captain">
+                            C
+                          </span>
+                        )}
+                      </Link>
+
+                      {/* Name */}
+                      <Link href={`/players/${p.username}`} className="mt-4 flex items-center justify-center gap-1 text-sm sm:text-base font-black text-slate-950 hover:underline">
+                        <span className="truncate">{p.fullName}</span>
+                        {p.isVerified && <BadgeCheck className="w-4 h-4 text-sky-500 shrink-0" aria-label="Verified" />}
+                      </Link>
+
+                      {/* Username + copy */}
+                      <div className="mt-0.5 flex items-center justify-center gap-1.5 min-w-0">
+                        <span className="text-[11px] sm:text-xs text-slate-500 font-mono truncate">@{p.username}</span>
+                        <CopyButton value={p.username} label="Username copied" className="!w-6 !h-6 shrink-0" />
+                      </div>
+
+                      {/* Details */}
+                      <div className="mt-2.5 space-y-1 text-[11px] sm:text-xs text-slate-600">
+                        {p.konamiId && (
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className="text-slate-400">UID:</span>
+                            <span className="font-bold font-mono text-slate-800 break-all leading-tight">{p.konamiId}</span>
+                            <CopyButton value={p.konamiId} label="UID copied" className="!w-5 !h-5 !rounded-md !border-0 !bg-transparent shrink-0" />
+                          </div>
+                        )}
+                        {p.deviceModel && (
+                          <div className="truncate">
+                            <span className="text-slate-400">Device:</span> <span className="font-bold text-slate-800">{p.deviceModel}</span>
+                          </div>
+                        )}
+                        <div className="font-mono text-slate-500">
+                          M {p.stats.matchesPlayed} <span className="text-slate-300">|</span> W {p.stats.wins} <span className="text-slate-300">|</span> GF {p.stats.goalsScored}
+                        </div>
+                      </div>
+
+                      {p.facebookProfile && (
+                        <a
+                          href={p.facebookProfile}
+                          target="_blank"
+                          rel="noopener noreferrer nofollow"
+                          className="mt-2.5 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                          aria-label={`${p.fullName} on Facebook`}
+                        >
+                          <Facebook className="w-3.5 h-3.5" />
+                        </a>
                       )}
                     </div>
-                    <div className="p-3">
-                      <div className="text-sm font-bold text-black truncate group-hover:underline">{p.fullName}</div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-[11px] text-slate-500 truncate">@{p.username}</span>
-                        <span className="text-[11px] font-black font-mono text-slate-700">{p.rating}</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <Empty icon={Users} title="No players yet" text="Players who join this club will be listed here." />
