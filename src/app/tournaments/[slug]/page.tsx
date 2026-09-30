@@ -32,6 +32,8 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const status = STATUS[t.status] || STATUS.DRAFT;
   const fixtures: any[] = t.fixtures || [];
   const participants: any[] = t.participants || [];
+  const clubs: any[] = (t as any).clubs || [];
+  const isClub = t.participantType === "CLUB";
 
   // Group fixtures into bracket columns by round, ordered by when each round starts.
   const rounds = new Map<string, any[]>();
@@ -86,7 +88,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
 
           <div className="lg:col-span-4 p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 h-fit">
             <div className="text-center">
-              <div className="text-[11px] text-slate-500 uppercase font-bold">Players registered</div>
+              <div className="text-[11px] text-slate-500 uppercase font-bold">{isClub ? "Clubs registered" : "Players registered"}</div>
               <div className="text-3xl font-black text-black font-mono">
                 {t.currentParticipants}
                 <span className="text-slate-400 text-xl">/{t.maxParticipants}</span>
@@ -109,8 +111,10 @@ export default async function TournamentDetailPage({ params }: { params: Promise
             <JoinButton
               endpoint={`/api/tournaments/${t.slug}/join`}
               memberIds={t.participantUserIds}
+              memberClubIds={isClub ? t.participantClubIds : []}
+              allowLeave={!isClub}
               isOpen={t.isRegistrationOpen}
-              joinLabel="Join tournament"
+              joinLabel={isClub ? "Register my club" : "Join tournament"}
               leaveLabel="Withdraw from tournament"
               closedLabel={
                 t.status === "REGISTRATION_OPEN" && t.currentParticipants >= t.maxParticipants ? "Tournament is full" : STATUS[t.status]?.label || "Registration closed"
@@ -149,9 +153,28 @@ export default async function TournamentDetailPage({ params }: { params: Promise
         {/* Participants */}
         <section className="lg:col-span-7 rounded-3xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
           <h2 className="text-sm font-black text-black uppercase tracking-wider flex items-center gap-2">
-            <Users className="w-4 h-4" /> Participants ({participants.length})
+            <Users className="w-4 h-4" /> {isClub ? `Clubs (${clubs.length})` : `Participants (${participants.length})`}
           </h2>
-          {participants.length ? (
+          {isClub ? (
+            clubs.length ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {clubs.map((c) => (
+                  <Link key={c.id} href={`/clubs/${c.slug}`} className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 hover:border-black transition-colors">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={c.logo} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-black truncate">{c.name}</div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {c.shortName} · {c.squadCount} players{c.location ? ` · ${c.location}` : ""}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">No clubs have registered yet.</p>
+            )
+          ) : participants.length ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {participants.map((p) => (
                 <Link key={p.id} href={`/players/${p.username}`} className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 hover:border-black transition-colors">

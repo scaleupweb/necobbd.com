@@ -22,7 +22,7 @@ export const POST = handle(async (req: NextRequest) => {
   const data = await parseBody(req, TransferRequestSchema);
 
   const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
-  if (!isAdmin && !(session.role === "CLUB_MANAGER" && session.clubId === data.targetClubId)) {
+  if (!isAdmin && !(await db.canManageClub(session.id, data.targetClubId))) {
     return fail("Only the manager of the bidding club can make an offer", 403, "FORBIDDEN");
   }
 

@@ -93,7 +93,7 @@ export function OngoingTournamentsAndActivity({
                     <div className="flex items-center space-x-1.5 text-[11px] sm:text-xs text-zinc-300 font-medium pt-1">
                       <Users className="w-3.5 h-3.5 text-[#FBBF24] shrink-0" />
                       <span className="truncate">
-                        {featured.participants}/{featured.maxParticipants} players{featured.prizePool ? ` • ${featured.prizePool}` : ""}
+                        {featured.participants}/{featured.maxParticipants} {featured.unit}{featured.prizePool ? ` • ${featured.prizePool}` : ""}
                       </span>
                     </div>
                   </div>

@@ -12,12 +12,12 @@ export const GET = handle(async () => {
   if (!club) return fail("Club not found", 404, "NOT_FOUND");
   const [fixtures, requests] = await Promise.all([
     db.getFixtures({ clubId: club.id, limit: 20 }),
-    session.role === "CLUB_MANAGER" ? db.getTransferRequests() : Promise.resolve([]),
+    db.getTransferRequests(),
   ]);
   return ok({
     ...club,
     squad: club.squad.map(({ phone, ...p }: any) => p),
-    isManager: club.managerId === session.id,
+    isManager: await db.canManageClub(session.id, club.id),
     fixtures,
     offers: requests.filter((r: any) => r.targetClubId === club.id),
   });

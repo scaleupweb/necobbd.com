@@ -17,7 +17,13 @@ export const GET = handle(async (_req: NextRequest, { params }: Ctx) => {
 export const PATCH = handle(async (req: NextRequest, { params }: Ctx) => {
   const { id } = await params;
   const session = await requireRole(TOURNAMENT_STAFF);
-  const { userId, action } = await req.json();
+  const { userId, clubId, action } = await req.json();
+  if (clubId) {
+    if (!isId(clubId) || (action !== "REMOVE" && action !== "RESTORE")) return fail("Invalid request");
+    await db.setClubEntryStatus(id, clubId, action === "REMOVE" ? "REMOVED" : "CONFIRMED");
+    await audit(req, session, `CLUB_ENTRY_${action}`, `Tournament ${id}`, `club ${clubId}`);
+    return ok(await db.getTournamentParticipantsAdmin(id));
+  }
   if (!isId(userId)) return fail("Invalid user");
   if (action === "REMOVE") await db.removeTournamentParticipant(id, userId);
   else if (action === "RESTORE") await db.restoreTournamentParticipant(id, userId);

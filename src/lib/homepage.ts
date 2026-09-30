@@ -211,6 +211,7 @@ export async function getHomepageData(settings: SiteSettings) {
           progressPercent: featured.progressPercent,
           participants: featured.currentParticipants,
           maxParticipants: featured.maxParticipants,
+          unit: featured.participantType === "CLUB" ? "clubs" : "players",
           prizePool: featured.prizePool,
           isRegistrationOpen: featured.isRegistrationOpen,
         }
@@ -221,7 +222,7 @@ export async function getHomepageData(settings: SiteSettings) {
       .map((t: any, i: number) => ({
         slug: t.slug,
         name: t.name,
-        subtitle: `${statusLabel[t.status] || t.status} • ${t.currentParticipants}/${t.maxParticipants} players`,
+        subtitle: `${statusLabel[t.status] || t.status} • ${t.currentParticipants}/${t.maxParticipants} ${t.participantType === "CLUB" ? "clubs" : "players"}`,
         badgeType: badges[i % badges.length],
       })),
     activities: activity.slice(0, 5).map((a: any) => ({

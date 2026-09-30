@@ -31,6 +31,7 @@ const UserSchema = new Schema<any>(
     lastLoginAt: Date,
     passwordResetTokenHash: { type: String, select: false },
     passwordResetExpires: { type: Date, select: false },
+    legacy: { type: Mixed },
   },
   opts
 );
@@ -57,6 +58,12 @@ const PlayerSchema = new Schema<any>(
     formHistory: { type: String, default: "" },
     motmCount: { type: Number, default: 0 },
     clubId: { type: ObjectId, ref: "Club" },
+    shirtNo: Number,
+    bloodGroup: { type: String, default: "" },
+    dob: Date,
+    discord: { type: String, default: "" },
+    // Record from the previous NECOB website (ids and original image file names).
+    legacy: { type: Mixed },
     stats: {
       matchesPlayed: { type: Number, default: 0 },
       wins: { type: Number, default: 0 },
@@ -87,6 +94,18 @@ const ClubSchema = new Schema<any>(
     logo: String,
     banner: String,
     managerId: { type: ObjectId, ref: "User" },
+    email: { type: String, default: "", lowercase: true, trim: true },
+    slogan: { type: String, default: "" },
+    presidentId: { type: ObjectId, ref: "Player" },
+    captainId: { type: ObjectId, ref: "Player" },
+    viceCaptainId: { type: ObjectId, ref: "Player" },
+    isAcademy: { type: Boolean, default: false },
+    // Other users allowed to manage this club (from the old site's club access list).
+    staff: {
+      type: [new Schema<any>({ userId: { type: ObjectId, ref: "User" }, access: { type: String, default: "full_control" } }, { _id: false })],
+      default: [],
+    },
+    legacy: { type: Mixed },
     location: { type: String, default: "" },
     facebookPage: { type: String, default: "" },
     description: { type: String, default: "" },
@@ -145,8 +164,29 @@ const TournamentSchema = new Schema<any>(
       default: "DRAFT",
     },
     isFeatured: { type: Boolean, default: false },
+    // PLAYER: individual players join. CLUB: club managers enter their club.
+    participantType: { type: String, enum: ["PLAYER", "CLUB"], default: "PLAYER" },
     participants: { type: [ParticipantSchema], default: [] },
+    clubParticipants: {
+      type: [
+        new Schema<any>(
+          {
+            clubId: { type: ObjectId, ref: "Club", required: true },
+            registeredBy: { type: ObjectId, ref: "User" },
+            joinedAt: { type: Date, default: Date.now },
+            status: { type: String, enum: ["CONFIRMED", "PENDING", "REMOVED"], default: "CONFIRMED" },
+            paymentType: { type: String, default: "free" },
+            trxId: String,
+            fbPostLink: String,
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     winnerPlayerId: { type: ObjectId, ref: "Player" },
+    winnerClubId: { type: ObjectId, ref: "Club" },
+    legacy: { type: Mixed },
   },
   opts
 );
@@ -240,6 +280,10 @@ const TransferHistorySchema = new Schema<any>(
     fee: Number,
     transferDate: { type: Date, default: Date.now },
     approvedBy: String,
+    newClubId: { type: ObjectId, ref: "Club" },
+    oldClubId: { type: ObjectId, ref: "Club" },
+    transferType: { type: String, default: "free" },
+    legacy: { type: Mixed },
   },
   opts
 );

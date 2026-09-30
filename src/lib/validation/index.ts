@@ -74,6 +74,26 @@ export const RegisterSchema = z.object({
   website: z.string().max(0).optional(), // honeypot: must stay empty
 });
 
+export const ClubRegisterSchema = z.object({
+  clubName: trimmed(60).min(3, "Club name must be at least 3 characters"),
+  shortName: z
+    .string()
+    .trim()
+    .min(2, "Short tag must be 2-6 letters")
+    .max(6, "Short tag must be 2-6 letters")
+    .regex(/^[A-Za-z0-9]+$/, "Short tag can only contain letters and numbers")
+    .transform((s) => s.toUpperCase()),
+  managerName: trimmed(60).min(2, "Manager name is required"),
+  email: z.string().trim().toLowerCase().email("Please enter a valid email address").max(120),
+  password,
+  phone: trimmed(30).optional().default(""),
+  location: trimmed(80).optional().default(""),
+  facebookPage: optionalUrl,
+  slogan: trimmed(120).optional().default(""),
+  description: trimmed(500).optional().default(""),
+  website: z.string().max(0).optional(), // honeypot
+});
+
 export const LoginSchema = z.object({
   emailOrUsername: trimmed(120).min(1, "Email or username is required"),
   password: z.string().min(1, "Password is required").max(128),
@@ -147,6 +167,9 @@ export const ClubSchema = z.object({
   banner: imageUrl.optional().default(""),
   status: z.enum(["ACTIVE", "PENDING", "SUSPENDED", "INACTIVE"]).optional().default("ACTIVE"),
   managerId: optionalId,
+  slogan: trimmed(120).optional().default(""),
+  email: z.union([z.string().trim().toLowerCase().email(), z.literal("")]).optional().default(""),
+  isAcademy: z.boolean().optional().default(false),
   trophiesCount: z.coerce.number().int().min(0).max(1000).optional().default(0),
   marketValue: z.coerce.number().min(0).max(100000).optional().default(0),
 });
@@ -167,6 +190,7 @@ export const TournamentBaseSchema = z.object({
     entryFee: trimmed(40).optional().default("Free"),
     status: z.enum(["DRAFT", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ONGOING", "COMPLETED", "CANCELLED"]).default("DRAFT"),
     isFeatured: z.boolean().optional().default(false),
+    participantType: z.enum(["PLAYER", "CLUB"]).default("PLAYER"),
     banner: imageUrl.optional().default(""),
     logo: imageUrl.optional().default(""),
     winnerPlayerId: optionalId,

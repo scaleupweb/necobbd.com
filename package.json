@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:import-legacy": "tsx scripts/import-legacy.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

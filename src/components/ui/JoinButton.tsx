@@ -11,6 +11,7 @@ import { Loader2, CheckCircle2 } from "lucide-react";
 export function JoinButton({
   endpoint,
   memberIds,
+  memberClubIds = [],
   isOpen,
   joinLabel = "Join Now",
   leaveLabel = "Withdraw",
@@ -20,6 +21,8 @@ export function JoinButton({
 }: {
   endpoint: string;
   memberIds: string[];
+  /** For club tournaments: clubs already entered (compared with the viewer's club). */
+  memberClubIds?: string[];
   isOpen: boolean;
   joinLabel?: string;
   leaveLabel?: string;
@@ -38,10 +41,11 @@ export function JoinButton({
       .then((r) => r.json())
       .then((j) => {
         setMe(j.success ? j.data : null);
-        if (j.success) setJoined(memberIds.includes(j.data.id));
+        if (j.success) setJoined(memberIds.includes(j.data.id) || (!!j.data.clubId && memberClubIds.includes(j.data.clubId)));
       })
       .catch(() => setMe(null));
-  }, [memberIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberIds.join(","), memberClubIds.join(",")]);
 
   const act = async (method: "POST" | "DELETE") => {
     if (!me) {
@@ -70,7 +74,7 @@ export function JoinButton({
     return (
       <div className="space-y-2">
         <div className={`${base} bg-emerald-50 text-emerald-800 border border-emerald-200`}>
-          <CheckCircle2 className="w-4 h-4" /> You&apos;re registered
+          <CheckCircle2 className="w-4 h-4" /> {memberClubIds.length ? "Your club is registered" : "You're registered"}
         </div>
         {allowLeave && isOpen && (
           <button onClick={() => act("DELETE")} disabled={busy} className="w-full text-xs font-semibold text-rose-600 hover:underline disabled:opacity-50">

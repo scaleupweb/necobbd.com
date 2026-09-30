@@ -16,7 +16,18 @@ const FIELDS: FieldDef[] = [
   { name: "season", label: "Season / edition", type: "text", placeholder: "e.g. Season 1" },
   { name: "status", label: "Status", type: "select", options: opt(STATUSES), required: true, default: "DRAFT", hint: "DRAFT is hidden from the public site" },
   { name: "format", label: "Format", type: "select", options: opt(FORMATS), required: true, default: "SINGLE_ELIMINATION" },
-  { name: "maxParticipants", label: "Max players", type: "number", required: true, default: 32 },
+  {
+    name: "participantType",
+    label: "Who registers",
+    type: "select",
+    required: true,
+    default: "PLAYER",
+    options: [
+      { value: "PLAYER", label: "Individual players" },
+      { value: "CLUB", label: "Clubs (club managers enter their club)" },
+    ],
+  },
+  { name: "maxParticipants", label: "Max players / clubs", type: "number", required: true, default: 32 },
   { name: "prizePool", label: "Prize pool", type: "text", placeholder: "e.g. 50,000 BDT" },
   { name: "entryFee", label: "Entry fee", type: "text", default: "Free" },
   { name: "gameCategory", label: "Game", type: "text", default: "eFootball Mobile" },
@@ -115,10 +126,11 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
     api<any[]>(`/api/admin/tournaments/${tournament.id}/participants`).then(setList).catch((e) => setError(e.message));
   }, [tournament.id]);
 
-  const act = async (userId: string, action: "REMOVE" | "RESTORE") => {
-    if (action === "REMOVE" && !confirm("Remove this player from the tournament?")) return;
+  const isClub = tournament.participantType === "CLUB";
+  const act = async (id: string, action: "REMOVE" | "RESTORE") => {
+    if (action === "REMOVE" && !confirm(`Remove this ${isClub ? "club" : "player"} from the tournament?`)) return;
     try {
-      setList(await api(`/api/admin/tournaments/${tournament.id}/participants`, { method: "PATCH", json: { userId, action } }));
+      setList(await api(`/api/admin/tournaments/${tournament.id}/participants`, { method: "PATCH", json: { ...(isClub ? { clubId: id } : { userId: id }), action } }));
       onChanged();
     } catch (e: any) {
       setError(e.message);
@@ -137,8 +149,15 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
 
   const exportCsv = () => {
     if (!list) return;
-    const rows = [["Name", "Username", "Email", "Konami ID", "Phone", "Rating", "Joined", "Status"]];
-    for (const p of list) rows.push([p.fullName, p.username, p.email, p.konamiId || "", p.phone || "", String(p.rating ?? ""), p.joinedAt, p.status]);
+    const rows = isClub
+      ? [["Club", "Tag", "Manager", "Email", "Payment", "Facebook post", "Joined", "Status"]]
+      : [["Name", "Username", "Email", "Konami ID", "Phone", "Rating", "Joined", "Status"]];
+    for (const p of list)
+      rows.push(
+        isClub
+          ? [p.fullName, p.username, p.managerName || "", p.email || "", p.paymentType || "", p.fbPostLink || "", p.joinedAt, p.status]
+          : [p.fullName, p.username, p.email, p.konamiId || "", p.phone || "", String(p.rating ?? ""), p.joinedAt, p.status]
+      );
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
@@ -169,7 +188,7 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
         ) : (
           <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
             {list.map((p) => (
-              <div key={p.userId} className={`flex items-center gap-3 p-3 text-xs ${p.status === "REMOVED" ? "opacity-50" : ""}`}>
+              <div key={p.userId || p.clubId} className={`flex items-center gap-3 p-3 text-xs ${p.status === "REMOVED" ? "opacity-50" : ""}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.avatar} alt="" className="w-8 h-8 rounded-lg object-cover" />
                 <div className="flex-1 min-w-0">
@@ -177,12 +196,12 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
                     {p.fullName} {winner && winner === p.playerId && <Badge tone="amber">CHAMPION</Badge>}
                   </div>
                   <div className="text-slate-500 truncate">
-                    @{p.username} · {p.email} · UID {p.konamiId || "—"}
+                    {isClub ? `${p.username} · ${p.managerName || "no manager"} · ${p.email || "—"}` : `@${p.username} · ${p.email} · UID ${p.konamiId || "—"}`}
                   </div>
                 </div>
                 <Badge tone={statusTone(p.status === "REMOVED" ? "REVOKED" : "ACTIVE")}>{p.status}</Badge>
                 {p.status === "REMOVED" ? (
-                  <Button small variant="secondary" onClick={() => act(p.userId, "RESTORE")} title="Restore">
+                  <Button small variant="secondary" onClick={() => act(isClub ? p.clubId : p.userId, "RESTORE")} title="Restore">
                     <UserPlus className="w-3.5 h-3.5" />
                   </Button>
                 ) : (
@@ -192,7 +211,7 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
                         <Crown className={`w-3.5 h-3.5 ${winner === p.playerId ? "text-amber-600" : ""}`} />
                       </Button>
                     )}
-                    <Button small variant="ghost" onClick={() => act(p.userId, "REMOVE")} title="Remove">
+                    <Button small variant="ghost" onClick={() => act(isClub ? p.clubId : p.userId, "REMOVE")} title="Remove">
                       <UserMinus className="w-3.5 h-3.5 text-rose-600" />
                     </Button>
                   </>

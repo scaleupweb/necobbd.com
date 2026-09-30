@@ -47,6 +47,11 @@ export default function MyClubDashboard() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       
+      {club.status === "PENDING" && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
+          <strong>Waiting for approval.</strong> An admin will review your club soon. Once approved it will appear on the Clubs page and you can enter tournaments.
+        </div>
+      )}
       {/* Header */}
       <div className="relative rounded-3xl overflow-hidden bg-white border border-slate-200 p-8 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

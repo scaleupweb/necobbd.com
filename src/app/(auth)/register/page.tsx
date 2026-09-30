@@ -1,12 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User, Mail, Lock, Smartphone, Shield, ArrowRight, CheckCircle2 } from "lucide-react";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
+import { ClubRegisterForm } from "./ClubRegisterForm";
 
 export default function RegisterPage() {
+  const [type, setType] = useState<"player" | "club">("player");
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("type") === "club") setType("club");
+  }, []);
+
+  const pick = (t: "player" | "club") => {
+    setType(t);
+    const url = new URL(window.location.href);
+    if (t === "club") url.searchParams.set("type", "club");
+    else url.searchParams.delete("type");
+    window.history.replaceState(null, "", url.toString());
+  };
+
+  return (
+    <div>
+      <div className="max-w-2xl mx-auto px-4 pt-10 -mb-6">
+        <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 border border-slate-200">
+          {(
+            [
+              ["player", "Player Registration", User],
+              ["club", "Club Registration", Shield],
+            ] as const
+          ).map(([k, label, Icon]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => pick(k)}
+              className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                type === k ? "bg-black text-white shadow-sm" : "text-slate-600 hover:text-black"
+              }`}
+            >
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {type === "player" ? <PlayerRegisterForm /> : <ClubRegisterForm />}
+    </div>
+  );
+}
+
+function PlayerRegisterForm() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: "",
