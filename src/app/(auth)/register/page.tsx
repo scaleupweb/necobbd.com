@@ -58,7 +58,7 @@ function PlayerRegisterForm() {
     email: "",
     password: "",
     konamiId: "",
-    deviceModel: DEVICE_MODELS[0],
+    deviceModel: "",
     preferredPosition: "CF",
     playStyle: "Quick Counter",
     facebookProfile: "",
@@ -242,15 +242,23 @@ function PlayerRegisterForm() {
 
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Primary Device Model *</label>
-                <select
+                <input
+                  type="text"
+                  list="device-models"
                   value={formData.deviceModel}
                   onChange={(e) => setFormData({ ...formData, deviceModel: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-xs"
-                >
+                  placeholder="Type your phone, e.g. Redmi Note 13 Pro"
+                  required
+                  minLength={2}
+                  maxLength={60}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs"
+                />
+                <datalist id="device-models">
                   {DEVICE_MODELS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
+                    <option key={d} value={d} />
                   ))}
-                </select>
+                </datalist>
+                <p className="text-[10px] text-slate-400 mt-1">Type any model — suggestions appear as you type.</p>
               </div>
             </div>
 

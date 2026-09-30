@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { LocationInput } from "@/components/ui/LocationInput";
 
 const input =
   "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs";
@@ -89,7 +90,7 @@ export function ClubRegisterForm() {
               </label>
               <label className="block space-y-1">
                 <span className="block text-slate-700 font-bold">Location</span>
-                <input className={input} value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="Dhaka" maxLength={80} />
+                <LocationInput className={input} value={f.location} onChange={(v) => set("location", v)} placeholder="Dhaka" />
               </label>
               <label className="sm:col-span-2 block space-y-1">
                 <span className="block text-slate-700 font-bold">Slogan</span>

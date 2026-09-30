@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Users, ArrowRightLeft, Swords, Plus, Pencil, Loader2, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ImageInput } from "@/components/ui/ImageInput";
+import { LocationInput } from "@/components/ui/LocationInput";
 
 const ACCESS_LABEL: Record<string, string> = {
   MANAGER: "Club Manager",
@@ -248,7 +249,7 @@ function EditClubProfile({ club, onClose, onSaved }: { club: any; onClose: () =>
           </label>
           <label className="block space-y-1">
             <span className="block text-slate-700 font-bold">Location</span>
-            <input className={input} value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} maxLength={80} />
+            <LocationInput className={input} value={f.location} onChange={(v) => setF({ ...f, location: v })} />
           </label>
           <label className="sm:col-span-2 block space-y-1">
             <span className="block text-slate-700 font-bold">Facebook page</span>

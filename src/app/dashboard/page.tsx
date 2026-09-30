@@ -16,8 +16,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { formatCurrency, getFormColor, formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
-import { PLAYER_POSITIONS, PLAY_STYLES } from "@/lib/constants";
+import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ImageInput } from "@/components/ui/ImageInput";
+import { LocationInput } from "@/components/ui/LocationInput";
 
 type Tab = "overview" | "profile" | "security";
 
@@ -454,10 +455,15 @@ function ProfileForm({ player, user, onSaved }: { player: any; user: any; onSave
               <input className={input} value={form.konamiId} onChange={(e) => set("konamiId", e.target.value)} minLength={5} maxLength={40} />
             </Field>
             <Field label="Device">
-              <input className={input} value={form.deviceModel} onChange={(e) => set("deviceModel", e.target.value)} maxLength={60} />
+              <input className={input} list="device-models" value={form.deviceModel} onChange={(e) => set("deviceModel", e.target.value)} maxLength={60} placeholder="e.g. Redmi Note 13 Pro" />
+              <datalist id="device-models">
+                {DEVICE_MODELS.map((d) => (
+                  <option key={d} value={d} />
+                ))}
+              </datalist>
             </Field>
             <Field label="Location">
-              <input className={input} value={form.location} onChange={(e) => set("location", e.target.value)} maxLength={80} placeholder="e.g. Dhaka" />
+              <LocationInput className={input} value={form.location} onChange={(v) => set("location", v)} />
             </Field>
             <Field label="Position">
               <select className={input} value={form.preferredPosition} onChange={(e) => set("preferredPosition", e.target.value)}>
