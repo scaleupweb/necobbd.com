@@ -266,7 +266,16 @@ export async function getHomepageData(settings: SiteSettings) {
     clubsSpotlight: {
       totalClubs: clubs.length,
       clubPlayers,
-      clubs: spotlight.map((c: any) => ({ slug: c.slug, name: c.name, shortName: c.shortName, logo: c.logo, squadCount: c.squadCount, location: c.location, isAcademy: !!c.isAcademy })),
+      clubs: spotlight.map((c: any) => ({
+        slug: c.slug,
+        name: c.name,
+        shortName: c.shortName,
+        logo: c.logo,
+        banner: c.banner && !String(c.banner).startsWith("/images/placeholders") ? c.banner : "",
+        squadCount: c.squadCount,
+        location: c.location,
+        isAcademy: !!c.isAcademy,
+      })),
     },
     newestPlayers,
     news: news.map((n: any) => ({ slug: n.slug, title: n.title, date: formatDate(n.publishedDate), image: n.featuredImage })),

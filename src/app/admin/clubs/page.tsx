@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { ResourceManager, FieldDef } from "@/components/admin/ResourceManager";
 import { api, Badge, statusTone } from "@/components/admin/ui";
+import { clubLogo } from "@/lib/crest";
 
 export default function AdminClubsPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -52,7 +53,7 @@ export default function AdminClubsPage() {
           render: (r) => (
             <div className="flex items-center gap-2.5 min-w-[180px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={r.logo || "/images/placeholders/club.svg"} alt="" className="w-9 h-9 rounded-lg object-cover border border-slate-200" />
+              <img src={clubLogo(r)} alt="" className="w-9 h-9 rounded-lg object-cover border border-slate-200" />
               <div>
                 <div className="font-bold text-slate-950">{r.name}</div>
                 <div className="text-[10px] text-slate-500">{r.shortName} · {r.location || "—"}</div>

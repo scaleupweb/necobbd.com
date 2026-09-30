@@ -27,6 +27,7 @@ import { plain, isId, slugify, escapeRegex, PLACEHOLDER } from "./serialize";
 import { calculateNewRating, updateFormHistory } from "../ranking/engine";
 import { calculatePlayerMarketValue } from "../valuation/engine";
 import { DEFAULT_SITE_SETTINGS, mergeSettings, SiteSettings } from "../site-settings";
+import { clubLogo } from "../crest";
 
 export { isId, slugify };
 
@@ -73,7 +74,7 @@ type ClubMini = { id: string; name: string; shortName: string; slug: string; log
 
 function clubMini(c: any): ClubMini | undefined {
   if (!c) return undefined;
-  return { id: String(c._id), name: c.name, shortName: c.shortName, slug: c.slug, logo: c.logo || PLACEHOLDER.club };
+  return { id: String(c._id), name: c.name, shortName: c.shortName, slug: c.slug, logo: clubLogo(c) };
 }
 
 async function clubMap(ids?: any[]): Promise<Map<string, any>> {
@@ -119,7 +120,7 @@ function shapeClub(c: any, extra: { squadCount?: number; managerName?: string; s
   const out = plain<any>(c);
   return {
     ...out,
-    logo: c.logo || PLACEHOLDER.club,
+    logo: clubLogo(c),
     banner: c.banner || PLACEHOLDER.banner,
     managerId: c.managerId ? String(c.managerId) : undefined,
     managerName: extra.managerName || "",
@@ -179,7 +180,7 @@ async function shapeFixtures(list: any[]) {
   };
   const cMini = (id: any) => {
     const c = id ? cm.get(String(id)) : undefined;
-    return c ? { id: String(c._id), name: c.name, shortName: c.shortName, slug: c.slug, logo: c.logo || PLACEHOLDER.club } : undefined;
+    return c ? { id: String(c._id), name: c.name, shortName: c.shortName, slug: c.slug, logo: clubLogo(c) } : undefined;
   };
 
   return list.map((f: any) => {
@@ -1157,7 +1158,7 @@ export const db = {
           slug: c.slug,
           email: m.email || c.email,
           managerName: m.fullName,
-          avatar: c.logo || PLACEHOLDER.club,
+          avatar: clubLogo(c),
           joinedAt: new Date(e.joinedAt).toISOString(),
           status: e.status,
           paymentType: e.paymentType,

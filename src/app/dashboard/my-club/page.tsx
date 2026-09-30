@@ -195,7 +195,7 @@ export default function MyClubDashboard() {
 }
 
 function EditClubProfile({ club, onClose, onSaved }: { club: any; onClose: () => void; onSaved: () => void }) {
-  const clean = (v?: string) => (v && !v.startsWith("/images/placeholders") ? v : "");
+  const clean = (v?: string) => (v && !v.startsWith("/images/placeholders") && !v.startsWith("/api/crest/") ? v : "");
   const [f, setF] = useState({
     logo: clean(club.logo),
     banner: clean(club.banner),
