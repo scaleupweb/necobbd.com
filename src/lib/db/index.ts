@@ -1510,6 +1510,69 @@ export const db = {
     return { rank: ahead + 1, total };
   },
 
+  /** Everything the public club profile needs beyond the club + squad. */
+  async getClubProfileExtras(clubId: string) {
+    if (!isId(clubId)) return null;
+    await connectDB();
+    const club = await Club.findById(clubId).lean<any>();
+    if (!club) return null;
+
+    const leaderIds = [club.presidentId, club.captainId, club.viceCaptainId].filter(Boolean);
+    const [leaders, manager, staffUsers, moves, tourns, rankAhead, rankTotal] = await Promise.all([
+      Player.find({ _id: { $in: leaderIds } }, { fullName: 1, username: 1, avatar: 1 }).lean(),
+      club.managerId ? User.findById(club.managerId, { fullName: 1, username: 1, avatar: 1 }).lean<any>() : null,
+      Player.find({ userId: { $in: (club.staff || []).map((s: any) => s.userId) } }, { fullName: 1, username: 1, avatar: 1, userId: 1 }).lean(),
+      TransferHistory.find({ $or: [{ newClubId: club._id }, { oldClubId: club._id }] }).sort({ transferDate: -1 }).limit(60).lean(),
+      Tournament.find({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: club._id, status: { $ne: "REMOVED" } } } }, { name: 1, slug: 1, logo: 1, status: 1, winnerClubId: 1, clubParticipants: 1 }).lean(),
+      Club.countDocuments({ status: "ACTIVE", "stats.matches": { $gt: 0 }, points: { $gt: club.points || 0 } }),
+      Club.countDocuments({ status: "ACTIVE", "stats.matches": { $gt: 0 } }),
+    ]);
+    const lm = new Map(leaders.map((p: any) => [String(p._id), p]));
+    const mini = (p: any) => (p ? { username: p.username, fullName: p.fullName, avatar: p.avatar || PLACEHOLDER.avatar } : null);
+
+    const moverIds = moves.map((m: any) => m.playerId).filter(Boolean);
+    const movers = await Player.find({ _id: { $in: moverIds } }, { username: 1, avatar: 1 }).lean();
+    const mm = new Map(movers.map((p: any) => [String(p._id), p]));
+
+    return {
+      manager: manager ? { username: manager.username, fullName: manager.fullName, avatar: manager.avatar || PLACEHOLDER.avatar } : null,
+      president: mini(lm.get(String(club.presidentId))),
+      captain: mini(lm.get(String(club.captainId))),
+      viceCaptain: mini(lm.get(String(club.viceCaptainId))),
+      staff: staffUsers.map((p: any) => ({
+        ...mini(p),
+        access: (club.staff || []).find((s: any) => String(s.userId) === String(p.userId))?.access || "full_control",
+      })),
+      transfers: moves.map((m: any) => {
+        const p: any = mm.get(String(m.playerId)) || {};
+        return {
+          id: String(m._id),
+          date: new Date(m.transferDate).toISOString(),
+          direction: String(m.newClubId) === String(club._id) ? "IN" : "OUT",
+          playerName: m.playerName,
+          username: p.username,
+          avatar: p.avatar || PLACEHOLDER.avatar,
+          otherClub: String(m.newClubId) === String(club._id) ? m.previousClubName : m.newClubName,
+          fee: m.fee || 0,
+          type: m.transferType || "free",
+        };
+      }),
+      tournaments: tourns.map((t: any) => {
+        const entry = (t.clubParticipants || []).find((c: any) => String(c.clubId) === String(club._id));
+        return {
+          id: String(t._id),
+          name: t.name,
+          slug: t.slug,
+          logo: t.logo || PLACEHOLDER.logo,
+          status: t.status,
+          won: t.winnerClubId && String(t.winnerClubId) === String(club._id),
+          joinedAt: entry ? new Date(entry.joinedAt).toISOString() : undefined,
+        };
+      }),
+      rank: club.stats?.matches ? { rank: rankAhead + 1, total: rankTotal } : { rank: null, total: rankTotal },
+    };
+  },
+
   /** A player's club moves, newest first, with club logos for the timeline. */
   async getTransferHistoryForPlayer(playerId: string) {
     if (!isId(playerId)) return [];
