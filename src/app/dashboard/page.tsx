@@ -419,6 +419,7 @@ function ProfileForm({ player, user, onSaved }: { player: any; user: any; onSave
     coverImage: player?.coverImage || "",
     konamiId: player?.konamiId || "",
     deviceModel: player?.deviceModel || "",
+    dob: player?.dob ? String(player.dob).slice(0, 10) : "",
     preferredPosition: player?.preferredPosition || "CF",
     playStyle: player?.playStyle || "Possession Game",
     facebookProfile: player?.facebookProfile || "",
@@ -436,6 +437,7 @@ function ProfileForm({ player, user, onSaved }: { player: any; user: any; onSave
     setMsg(null);
     try {
       const body: any = { ...form };
+      if (!body.dob) delete body.dob;
       if (!player) {
         // Staff accounts without a player profile can only change name/avatar.
         for (const k of Object.keys(body)) if (!["fullName", "avatar"].includes(k)) delete body[k];
@@ -475,6 +477,9 @@ function ProfileForm({ player, user, onSaved }: { player: any; user: any; onSave
                   <option key={d} value={d} />
                 ))}
               </datalist>
+            </Field>
+            <Field label="Date of birth">
+              <input type="date" className={input} value={form.dob} onChange={(e) => set("dob", e.target.value)} />
             </Field>
             <Field label="Location">
               <LocationInput className={input} value={form.location} onChange={(v) => set("location", v)} />

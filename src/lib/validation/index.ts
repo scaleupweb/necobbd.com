@@ -49,6 +49,18 @@ export const password = z
   .regex(/[A-Z]/, "Password needs an uppercase letter")
   .regex(/[0-9]/, "Password needs a number");
 
+/** Date of birth as YYYY-MM-DD; the person must be 8–100 years old. */
+export const dob = z
+  .string({ required_error: "Please enter your date of birth" })
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Please enter your date of birth")
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    if (isNaN(d.getTime())) return false;
+    const age = (Date.now() - d.getTime()) / (365.25 * 86400000);
+    return age >= 8 && age <= 100;
+  }, "Please enter a valid date of birth");
+
 export const ROLES = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE", "CLUB_MANAGER", "PLAYER"] as const;
 
 // ---------- Auth ----------
@@ -66,6 +78,7 @@ export const RegisterSchema = z.object({
   password,
   konamiId: trimmed(40).min(5, "Konami ID / In-game UID is required"),
   deviceModel: trimmed(60).min(2, "Device model is required"),
+  dob,
   facebookProfile: optionalUrl,
   preferredPosition: trimmed(10).default("CF"),
   playStyle: trimmed(40).default("Possession Game"),
@@ -131,6 +144,7 @@ export const PlayerSelfUpdateSchema = z.object({
   coverImage: imageUrl.optional(),
   konamiId: trimmed(40).min(5).optional(),
   deviceModel: trimmed(60).min(2).optional(),
+  dob: dob.optional(),
   facebookProfile: optionalUrl,
   preferredPosition: trimmed(10).optional(),
   playStyle: trimmed(40).optional(),

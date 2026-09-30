@@ -433,6 +433,7 @@ export const db = {
       avatar: data.avatar || undefined,
       konamiId: data.konamiId || "",
       deviceModel: data.deviceModel || "",
+      dob: data.dob ? new Date(`${data.dob}T00:00:00Z`) : undefined,
       facebookProfile: data.facebookProfile || "",
       preferredPosition: data.preferredPosition || "CF",
       playStyle: data.playStyle || "Possession Game",

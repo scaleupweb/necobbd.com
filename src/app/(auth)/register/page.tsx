@@ -50,6 +50,13 @@ export default function RegisterPage() {
   );
 }
 
+/** YYYY-MM-DD for the date `years` years ago (bounds for the birthday picker). */
+function dobLimit(years: number) {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - years);
+  return d.toISOString().slice(0, 10);
+}
+
 function PlayerRegisterForm() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -59,6 +66,7 @@ function PlayerRegisterForm() {
     password: "",
     konamiId: "",
     deviceModel: "",
+    dob: "",
     preferredPosition: "CF",
     playStyle: "Quick Counter",
     facebookProfile: "",
@@ -290,15 +298,31 @@ function PlayerRegisterForm() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-slate-700 font-bold mb-1">Facebook Profile URL (Optional)</label>
-              <input
-                type="url"
-                placeholder="https://facebook.com/username"
-                value={formData.facebookProfile}
-                onChange={(e) => setFormData({ ...formData, facebookProfile: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Date of Birth *</label>
+                <input
+                  type="date"
+                  value={formData.dob}
+                  onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                  min={dobLimit(100)}
+                  max={dobLimit(8)}
+                  required
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-xs"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Only the day and month are shown on your profile.</p>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Facebook Profile URL (Optional)</label>
+                <input
+                  type="url"
+                  placeholder="https://facebook.com/username"
+                  value={formData.facebookProfile}
+                  onChange={(e) => setFormData({ ...formData, facebookProfile: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs"
+                />
+              </div>
             </div>
 
             <button

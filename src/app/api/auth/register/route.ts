@@ -35,6 +35,7 @@ export const POST = handle(async (req: NextRequest) => {
     fullName: data.fullName,
     konamiId: data.konamiId,
     deviceModel: data.deviceModel,
+    dob: data.dob,
     facebookProfile: data.facebookProfile,
     preferredPosition: data.preferredPosition,
     playStyle: data.playStyle,
