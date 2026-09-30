@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Trophy, Calendar, Users, ArrowRight, CheckCircle2, GitFork, Sparkles } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { FitImage } from "@/components/ui/FitImage";
 
 export default function TournamentsPage() {
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -65,11 +66,7 @@ export default function TournamentsPage() {
               <div>
                 {/* Banner image */}
                 <div className="relative h-48 overflow-hidden bg-slate-100">
-                  <img
-                    src={t.banner}
-                    alt={t.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+                  <FitImage src={t.banner} alt={t.name} imgClassName="group-hover:scale-[1.03] transition-transform duration-500" />
                   <div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-black text-white text-[10px] font-bold uppercase">
                     {t.gameCategory}
                   </div>

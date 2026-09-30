@@ -38,6 +38,7 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { toMatchLines, snapshot, monthlyLoad, seasons, humanGap, aboutText, MatchLine } from "@/lib/player-insights";
 import { LineChart, BarChart, Gauge, Donut } from "@/components/profile/Charts";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
 
@@ -100,8 +101,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
           {/* Cover photo — shown as-is, no dimming */}
           <div className="relative h-44 sm:h-64 lg:h-80 overflow-hidden sm:rounded-b-3xl bg-slate-200">
             {cover ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <FitImage src={cover} />
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(135deg,#1E1B4B_0%,#312E81_35%,#8a6420_75%,#C79A3B_100%)]">
                 <div
@@ -240,8 +240,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
             <Link href={`/clubs/${player.club.slug}`} className="block relative rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-sm group">
               <div className="h-20 bg-[#0B0C0F] relative overflow-hidden">
                 {club?.banner && !club.banner.startsWith("/images/placeholders") && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={club.banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60" />
+                  <FitImage src={club.banner} className="opacity-60" />
                 )}
                 <span className="absolute right-4 top-1 text-6xl font-black text-white/15 font-mono">{player.shirtNo ? `#${player.shirtNo}` : ""}</span>
               </div>

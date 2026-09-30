@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { formatDate, formatTime } from "@/lib/utils";
 import { JoinButton } from "@/components/ui/JoinButton";
 import { DeadlineCountdown } from "@/components/ui/DeadlineCountdown";
+import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
 
@@ -56,8 +57,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
       {/* Hero */}
       <div className="rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-sm">
         <div className="relative h-40 sm:h-56 bg-[#0F1012]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={t.banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-80" />
+          <FitImage src={t.banner} className="opacity-80" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           <div className="absolute bottom-4 left-5 sm:left-8 flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}

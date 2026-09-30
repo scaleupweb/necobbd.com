@@ -6,6 +6,7 @@ import { Users, ArrowRightLeft, Swords, Plus, Pencil, Loader2, ExternalLink } fr
 import { formatCurrency } from "@/lib/utils";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { LocationInput } from "@/components/ui/LocationInput";
+import { FitImage } from "@/components/ui/FitImage";
 
 const ACCESS_LABEL: Record<string, string> = {
   MANAGER: "Club Manager",
@@ -65,8 +66,7 @@ export default function MyClubDashboard() {
       {/* Header */}
       <div className="relative rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-sm">
         <div className="relative h-32 sm:h-44 bg-[#0F1012]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={club.banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-90" />
+          <FitImage src={club.banner} />
           <div className="absolute top-3 right-3 flex gap-2">
             <Link href={`/clubs/${club.slug}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/90 text-black text-xs font-bold hover:bg-white">
               <ExternalLink className="w-3.5 h-3.5" /> Public page

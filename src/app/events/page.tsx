@@ -3,6 +3,7 @@ import { Calendar, MapPin, Users, Ticket, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { JoinButton } from "@/components/ui/JoinButton";
 import { formatDate, formatTime } from "@/lib/utils";
+import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function EventsPage() {
           >
             <div className="space-y-4">
               <div className="relative h-56 rounded-2xl overflow-hidden bg-slate-100">
-                <img src={ev.banner} alt={ev.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <FitImage src={ev.banner} alt={ev.name} imgClassName="group-hover:scale-[1.03] transition-transform duration-500" />
                 <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/90 text-white text-xs font-bold shadow-sm">
                   {ev.eventType || "Event"} · {ev.capacity} seats
                 </div>

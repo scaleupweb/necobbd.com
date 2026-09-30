@@ -26,6 +26,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Donut, Gauge } from "@/components/profile/Charts";
+import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
 
@@ -87,8 +88,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
       {/* ================= HERO ================= */}
       <header className="relative bg-[#0B0C0F] text-white overflow-hidden">
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover opacity-45" />
+          <FitImage src={cover} className="opacity-45" />
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_10%,rgba(199,154,59,0.35),transparent_55%),radial-gradient(ellipse_at_0%_100%,rgba(16,185,129,0.25),transparent_50%)]" />
         )}
