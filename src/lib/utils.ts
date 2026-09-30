@@ -6,6 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
+  if (!amount || amount <= 0) return "—";
   if (amount >= 1000) {
     return `$${(amount / 1000).toFixed(1)}B`;
   }

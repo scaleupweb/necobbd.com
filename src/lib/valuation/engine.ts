@@ -12,6 +12,9 @@ export interface PlayerValuationMetrics {
  * Calculates a player's virtual market value in Millions USD ($M)
  */
 export function calculatePlayerMarketValue(metrics: PlayerValuationMetrics): number {
+  // No official matches yet → no market value (shown as "—" on the site).
+  if (!metrics.matchesPlayed) return 0;
+
   // Base value from rating (e.g. 750 rating -> ~35M, 900+ rating -> 120M+)
   let baseValue = Math.max(5, (metrics.rating - 600) * 0.4);
 
