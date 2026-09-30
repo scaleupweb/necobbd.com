@@ -1081,6 +1081,37 @@ export const db = {
     return Club.findOne({ staff: { $elemMatch: { userId: oid(userId), access: "full_control" } } }).lean<any>();
   },
 
+  /**
+   * What this user may do with a club: MANAGER (club owner account), FULL (staff with
+   * full control) or INFO (staff allowed to edit club info only). Null = no access.
+   */
+  async getClubAccess(userId: string, clubId: string): Promise<"MANAGER" | "FULL" | "INFO" | null> {
+    if (!isId(userId) || !isId(clubId)) return null;
+    await connectDB();
+    const club = await Club.findById(clubId, { managerId: 1, staff: 1 }).lean<any>();
+    if (!club) return null;
+    if (club.managerId && String(club.managerId) === userId) return "MANAGER";
+    const entry = (club.staff || []).find((s: any) => String(s.userId) === userId);
+    if (!entry) return null;
+    return entry.access === "full_control" ? "FULL" : "INFO";
+  },
+
+  /** Clubs a user can edit (as manager or staff), used to pick "their" club. */
+  async getEditableClubId(userId: string, fallbackClubId?: string) {
+    if (!isId(userId)) return fallbackClubId;
+    await connectDB();
+    const c = await Club.findOne({ $or: [{ managerId: userId }, { "staff.userId": oid(userId) }] }, { _id: 1 }).lean<any>();
+    return c ? String(c._id) : fallbackClubId;
+  },
+
+  async updateClubProfile(clubId: string, data: Record<string, any>) {
+    if (!isId(clubId)) throw new ServiceError("Invalid club", 400);
+    await connectDB();
+    const c = await Club.findByIdAndUpdate(clubId, { $set: data }, { new: true }).lean<any>();
+    if (!c) throw new ServiceError("Club not found", 404);
+    return shapeClub(c);
+  },
+
   async canManageClub(userId: string, clubId: string) {
     const club = await db.getManagedClub(userId);
     return !!club && String(club._id) === clubId;

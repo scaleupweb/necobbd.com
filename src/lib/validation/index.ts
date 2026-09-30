@@ -94,6 +94,16 @@ export const ClubRegisterSchema = z.object({
   website: z.string().max(0).optional(), // honeypot
 });
 
+/** Fields a club manager / club moderator may edit on their own club. */
+export const ClubSelfUpdateSchema = z.object({
+  logo: imageUrl.optional(),
+  banner: imageUrl.optional(),
+  slogan: trimmed(120).optional(),
+  description: trimmed(1000).optional(),
+  location: trimmed(80).optional(),
+  facebookPage: optionalUrl,
+});
+
 export const LoginSchema = z.object({
   emailOrUsername: trimmed(120).min(1, "Email or username is required"),
   password: z.string().min(1, "Password is required").max(128),
