@@ -35,11 +35,14 @@ export default async function NewsPage() {
             key={art.id}
             className="rounded-3xl bg-white border border-slate-200 overflow-hidden hover:border-black shadow-sm hover:shadow-md transition-all flex flex-col justify-between group"
           >
-            <div className="relative h-52 overflow-hidden bg-slate-100">
+            <div className="relative aspect-[4/3] overflow-hidden bg-[#111111]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={art.featuredImage} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover scale-110 blur-xl opacity-60" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={art.featuredImage}
                 alt={art.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="relative w-full h-full object-contain group-hover:scale-[1.03] transition-transform duration-500"
               />
               <div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-black/90 text-white text-[10px] font-bold uppercase tracking-wider">
                 {art.category}

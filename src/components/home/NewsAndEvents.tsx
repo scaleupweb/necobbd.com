@@ -70,8 +70,10 @@ export function NewsAndEvents({
                     href={`/news/${item.slug}`}
                     className="group bg-white border border-[#E5E7EB] hover:border-[#111111] rounded-2xl overflow-hidden flex flex-col transition-all duration-300 shadow-sm hover:shadow-md h-full"
                   >
-                    <div className="relative aspect-[16/10] w-full bg-[#F7F8FA] overflow-hidden">
-                      <Image src={item.image} alt={item.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {/* Posters come in any shape: show the whole image, with a blurred copy filling the spare space. */}
+                    <div className="relative aspect-[4/3] w-full bg-[#111111] overflow-hidden">
+                      <Image src={item.image} alt="" aria-hidden fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover scale-110 blur-xl opacity-60" />
+                      <Image src={item.image} alt={item.title} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-contain group-hover:scale-[1.03] transition-transform duration-300" />
                     </div>
                     <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
                       <h3 className="text-xs sm:text-sm font-black text-[#111111] leading-snug line-clamp-2">{item.title}</h3>
