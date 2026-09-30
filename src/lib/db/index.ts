@@ -1487,6 +1487,46 @@ export const db = {
     return plain(hist.toObject());
   },
 
+  /**
+   * Overall rank by rating among players who have played at least one official
+   * match (ties broken by matches played, then join date). Null = unranked.
+   */
+  async getPlayerRank(p: { id: string; rating: number; stats: { matchesPlayed: number }; createdAt?: string }): Promise<{ rank: number | null; total: number }> {
+    await connectDB();
+    const ranked = { status: "ACTIVE", "stats.matchesPlayed": { $gt: 0 } };
+    if (!p.stats.matchesPlayed) return { rank: null, total: await Player.countDocuments(ranked) };
+    const created = p.createdAt ? new Date(p.createdAt) : new Date();
+    const [ahead, total] = await Promise.all([
+      Player.countDocuments({
+        ...ranked,
+        $or: [
+          { rating: { $gt: p.rating } },
+          { rating: p.rating, "stats.matchesPlayed": { $gt: p.stats.matchesPlayed } },
+          { rating: p.rating, "stats.matchesPlayed": p.stats.matchesPlayed, createdAt: { $lt: created } },
+        ],
+      }),
+      Player.countDocuments(ranked),
+    ]);
+    return { rank: ahead + 1, total };
+  },
+
+  /** A player's club moves, newest first, with club logos for the timeline. */
+  async getTransferHistoryForPlayer(playerId: string) {
+    if (!isId(playerId)) return [];
+    await connectDB();
+    const list = await TransferHistory.find({ playerId }).sort({ transferDate: -1 }).lean();
+    const clubs = await clubMap(list.flatMap((h: any) => [h.newClubId, h.oldClubId]).filter(Boolean));
+    return list.map((h: any) => ({
+      id: String(h._id),
+      date: new Date(h.transferDate).toISOString(),
+      newClub: clubMini(clubs.get(String(h.newClubId))) || { name: h.newClubName },
+      oldClub: h.oldClubId ? clubMini(clubs.get(String(h.oldClubId))) || { name: h.previousClubName } : null,
+      fee: h.fee || 0,
+      type: h.transferType || "free",
+      shirtNo: h.legacy?.shirtNo || "",
+    }));
+  },
+
   async getTransferHistory() {
     await connectDB();
     const list = await TransferHistory.find({}).sort({ transferDate: -1 }).limit(200).lean();

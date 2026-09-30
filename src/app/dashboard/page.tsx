@@ -237,6 +237,26 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
       </div>
 
       <div className="lg:col-span-4 space-y-6">
+        <Card title="My club" icon={Trophy}>
+          {data.managedClub ? (
+            <Link href="/dashboard/my-club" className="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.managedClub.logo || "/images/placeholders/club.svg"} alt="" className="w-10 h-10 rounded-xl object-cover" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-black truncate">{data.managedClub.name}</div>
+                <div className="text-[11px] text-slate-500">{data.managedClub.status === "PENDING" ? "Waiting for admin approval" : "You manage this club"}</div>
+              </div>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500">Own or run a club? Create it from your account — no separate login needed.</p>
+              <Link href="/register?type=club" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-black text-white text-xs font-bold">
+                Create a club <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          )}
+        </Card>
         {player && (
           <Card title="Form & stats" icon={LayoutDashboard}>
             <div className="flex gap-1.5">

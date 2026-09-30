@@ -27,7 +27,8 @@ export default function TransferMarketPage() {
   const [submitted, setSubmitted] = useState(false);
   const [offerError, setOfferError] = useState("");
   const [me, setMe] = useState<any>(null);
-  const canBid = me && (me.role === "CLUB_MANAGER" || me.role === "ADMIN" || me.role === "SUPER_ADMIN") && me.clubId;
+  // "me" holds the club this user manages (from /api/me/club), if any.
+  const canBid = !!me && me.isManager && me.status === "ACTIVE";
 
   useEffect(() => {
     async function loadTransfers() {
@@ -44,7 +45,7 @@ export default function TransferMarketPage() {
       }
     }
     loadTransfers();
-    fetch("/api/auth/me").then((r) => r.json()).then((j) => j.success && setMe(j.data)).catch(() => {});
+    fetch("/api/me/club").then((r) => r.json()).then((j) => j.success && setMe(j.data)).catch(() => {});
   }, []);
 
   const handleSendTransfer = async (e: React.FormEvent) => {
@@ -56,7 +57,7 @@ export default function TransferMarketPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           playerId: selectedPlayer.id,
-          targetClubId: me?.clubId,
+          targetClubId: me?.id,
           offeredFee: Number(offeredFee),
           message,
         }),

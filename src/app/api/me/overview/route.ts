@@ -16,7 +16,9 @@ export const GET = handle(async () => {
     db.getNotifications(session.id),
     db.getTournaments({ status: "REGISTRATION_OPEN" }),
   ]);
+  const managed = await db.getManagedClub(session.id);
   return ok({
+    managedClub: managed ? { name: managed.name, slug: managed.slug, status: managed.status, logo: managed.logo } : null,
     user: session,
     player,
     tournaments,

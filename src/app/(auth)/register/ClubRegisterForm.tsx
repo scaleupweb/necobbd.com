@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
@@ -25,7 +25,14 @@ export function ClubRegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const [me, setMe] = useState<any>(undefined);
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => setMe(j.success ? j.data : null))
+      .catch(() => setMe(null));
+  }, []);
+  const set =(k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
   const pwChecks = [
     { ok: f.password.length >= 8, label: "8+ characters" },
     { ok: /[a-z]/.test(f.password), label: "lowercase" },
@@ -36,8 +43,10 @@ export function ClubRegisterForm() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!pwChecks.every((c) => c.ok)) return setError("Password must have 8+ characters with uppercase, lowercase and a number.");
-    if (f.password !== confirmPassword) return setError("Passwords do not match.");
+    if (!me) {
+      if (!pwChecks.every((c) => c.ok)) return setError("Password must have 8+ characters with uppercase, lowercase and a number.");
+      if (f.password !== confirmPassword) return setError("Passwords do not match.");
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/register-club", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
@@ -96,6 +105,21 @@ export function ClubRegisterForm() {
               </label>
             </div>
 
+            {me ? (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900">
+                The club will be managed from your account <strong>@{me.username}</strong>. You can run it from <strong>My Club</strong> — no separate login needed.
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500">
+                Already a player here?{" "}
+                <Link href="/login?next=/register?type=club" className="font-bold text-black underline">
+                  Sign in first
+                </Link>{" "}
+                and the club will be linked to your player account.
+              </p>
+            )}
+            {me === null && (
+            <>
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pt-2">Manager login</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block space-y-1">
@@ -126,6 +150,8 @@ export function ClubRegisterForm() {
                 <input type="password" className={input} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required autoComplete="new-password" />
               </label>
             </div>
+            </>
+            )}
             <input type="text" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" value={f.website} onChange={(e) => set("website", e.target.value)} />
 
             <button
