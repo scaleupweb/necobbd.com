@@ -40,11 +40,11 @@ export default async function NewsArticlePage({ params }: { params: Promise<{ sl
       </div>
 
       {/* Featured Banner */}
-      <div className="relative rounded-3xl overflow-hidden border border-slate-200 shadow-sm bg-[#111111] flex justify-center">
+      <div className="relative h-[260px] sm:h-[360px] lg:h-[420px] rounded-3xl overflow-hidden border border-slate-200 shadow-sm bg-[#111111]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={article.featuredImage} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={article.featuredImage} alt={article.title} className="relative w-auto max-w-full max-h-[70vh] object-contain" />
+        <img src={article.featuredImage} alt={article.title} className="relative w-full h-full object-contain" />
       </div>
 
       {/* Article Content */}
