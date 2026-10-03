@@ -7,10 +7,11 @@ import { ok, fail, handle, parseBody, limit } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export const GET = handle(async () => {
-  const [listings, history, settings] = await Promise.all([db.getTransferListings(), db.getTransferHistory(), db.getSiteSettings()]);
+  const [listings, history, feed, settings] = await Promise.all([db.getTransferListings(), db.getTransferHistory(), db.getTransferFeed(), db.getSiteSettings()]);
   return ok({
     listings,
     history,
+    feed,
     windowStatus: { isOpen: settings.sections.transfers.show, name: settings.sections.transfers.title },
   });
 });

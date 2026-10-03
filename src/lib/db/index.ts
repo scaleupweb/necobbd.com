@@ -1879,6 +1879,35 @@ export const db = {
     });
   },
 
+  /** Site-wide transfer feed for the public Transfer Market (newest first). */
+  async getTransferFeed(limit = 3000) {
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const moves = await TransferHistory.find({}).sort({ transferDate: -1 }).limit(limit).lean<any>();
+    const [players, clubs] = await Promise.all([
+      Player.find({ _id: { $in: moves.map((m: any) => m.playerId).filter(Boolean) } }, { fullName: 1, username: 1, avatar: 1, preferredPosition: 1, rating: 1 }).lean<any>(),
+      clubMap(moves.flatMap((m: any) => [m.newClubId, m.oldClubId]).filter(Boolean)),
+    ]);
+    const pm = new Map(players.map((p: any) => [String(p._id), p]));
+    const side = (id: any, name?: string) => (id && clubs.get(String(id)) ? clubMini(clubs.get(String(id))) : { name: name && name !== "Free Agent" ? name : "No club" });
+    return moves.map((m: any) => {
+      const p: any = pm.get(String(m.playerId)) || {};
+      const type = m.transferType || "free";
+      const contractEnd = m.contractEndDate || m.legacy?.contractTill;
+      return {
+        id: String(m._id),
+        date: new Date(m.transferDate).toISOString(),
+        type: type === "registered" ? "free" : type,
+        player: { fullName: p.fullName || m.playerName, username: p.username || "", avatar: p.avatar || PLACEHOLDER.avatar, position: p.preferredPosition || "", rating: p.rating || 0 },
+        from: type === "expired" || type === "released" || type === "transfer" ? side(m.oldClubId, m.previousClubName) : { name: type === "signing" ? m.previousClubName || "No club" : "No club" },
+        to: type === "expired" ? { name: "Free Agent" } : type === "released" ? { name: "No club" } : side(m.newClubId, m.newClubName),
+        contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,
+        postLink: m.postLink || m.legacy?.fbPost || "",
+        fee: m.fee || 0,
+      };
+    });
+  },
+
   async getTransferHistory() {
     await connectDB();
     const list = await TransferHistory.find({}).sort({ transferDate: -1 }).limit(200).lean();
