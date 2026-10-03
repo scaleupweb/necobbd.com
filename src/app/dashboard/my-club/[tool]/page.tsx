@@ -14,12 +14,14 @@ import {
   ChangeLogo,
   AccessControl,
   TournamentRegistration,
+  UpdatePlayerInfo,
 } from "@/components/club-hub/ToolViews";
 
 const VIEWS: Record<string, () => React.ReactNode> = {
   squad: () => <SquadRoster />,
   fixtures: () => <ClubFixtures />,
   "transfer-history": () => <TransferHistory />,
+  "update-player": () => <UpdatePlayerInfo />,
   "change-info": () => <ChangeInfo />,
   "change-logo": () => <ChangeLogo />,
   "access-control": () => <AccessControl />,

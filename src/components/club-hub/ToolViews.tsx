@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown } from "lucide-react";
+import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog } from "lucide-react";
+import { DEVICE_MODELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast, confirmDialog } from "@/lib/feedback";
 import { ImageInput } from "@/components/ui/ImageInput";
@@ -79,6 +80,147 @@ export function SquadRoster() {
           </div>
         ))}
       </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- Update Player Info
+
+export function UpdatePlayerInfo() {
+  const { club, reload } = useClubHub();
+  const squad = [...(club.squad || [])].sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [q, setQ] = useState("");
+  const selected = squad.find((p: any) => p.id === selectedId);
+  const s = q.trim().toLowerCase();
+  const shown = squad.filter((p: any) => !s || `${p.fullName} ${p.username} ${p.konamiId}`.toLowerCase().includes(s));
+
+  const pick = (id: string) => {
+    setSelectedId(id);
+    // On phones the editor sits below the list.
+    setTimeout(() => document.getElementById("player-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+
+  if (!squad.length) return <Card className="text-center text-sm text-slate-500 py-12">No players in your squad yet.</Card>;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4 items-start">
+      {/* Player list */}
+      <Card className="!p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 pb-2">Player list · {squad.length}</div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, username or UID…" className={`${input} !py-2`} />
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
+          {shown.map((p: any) => (
+            <button
+              key={p.id}
+              onClick={() => pick(p.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${p.id === selectedId ? "bg-amber-50" : "hover:bg-slate-50"}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.avatar} alt="" className={`w-10 h-10 rounded-full object-cover bg-slate-100 ring-2 ${p.id === selectedId ? "ring-[#C79A3B]" : "ring-transparent"}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-slate-950 truncate">{p.fullName}</span>
+                <span className="block text-[11px] text-slate-500 font-mono truncate">{p.konamiId || "no UID"}</span>
+              </span>
+              <span className="text-[11px] font-black font-mono text-slate-400">{p.shirtNo ? `#${p.shirtNo}` : ""}</span>
+            </button>
+          ))}
+          {!shown.length && <div className="p-6 text-center text-xs text-slate-500">No player matches “{q}”.</div>}
+        </div>
+      </Card>
+
+      {/* Editor */}
+      <div id="player-editor" className="scroll-mt-24">
+        {selected ? (
+          <PlayerEditor key={selected.id} player={selected} squad={squad} onSaved={reload} />
+        ) : (
+          <Card className="text-center py-16">
+            <UserCog className="w-8 h-8 mx-auto text-slate-300" />
+            <p className="mt-3 text-sm font-bold text-slate-700">Select a player</p>
+            <p className="text-xs text-slate-500">Pick someone from the player list to update their photo, Konami ID, device or shirt number.</p>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlayerEditor({ player, squad, onSaved }: { player: any; squad: any[]; onSaved: () => Promise<void> }) {
+  const clean = (v?: string) => (v && !v.startsWith("/images/placeholders") ? v : "");
+  const [f, setF] = useState({
+    avatar: clean(player.avatar),
+    konamiId: player.konamiId || "",
+    deviceModel: player.deviceModel || "",
+    shirtNo: player.shirtNo ? String(player.shirtNo) : "",
+  });
+  const [busy, setBusy] = useState(false);
+  const takenBy = f.shirtNo ? squad.find((p) => p.id !== player.id && String(p.shirtNo || "") === f.shirtNo) : null;
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (takenBy) return toast.error(`#${f.shirtNo} is already worn by ${takenBy.fullName}`);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/me/club/players/${player.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...f, shirtNo: f.shirtNo ? Number(f.shirtNo) : "" }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Save failed");
+      await onSaved();
+      toast.success(`${player.fullName} updated`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <form onSubmit={save} className="space-y-5">
+        <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={player.avatar} alt="" className="w-14 h-14 rounded-full object-cover bg-slate-100" />
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-black text-slate-950 truncate">{player.fullName}</div>
+            <div className="text-xs text-slate-500 font-mono">@{player.username} · {player.preferredPosition}</div>
+          </div>
+          <Link href={`/players/${player.username}`} target="_blank" className="text-xs font-bold text-slate-500 hover:text-black shrink-0">
+            Profile ↗
+          </Link>
+        </div>
+
+        <ImageInput label="Player image" value={f.avatar} onChange={(v) => setF({ ...f, avatar: v })} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="block space-y-1">
+            <span className="text-xs font-bold text-slate-700">Player new Konami User ID</span>
+            <input className={`${input} font-mono`} value={f.konamiId} onChange={(e) => setF({ ...f, konamiId: e.target.value })} minLength={5} maxLength={40} placeholder="e.g. ASDL-229-704-966" />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-bold text-slate-700">Player new device info</span>
+            <input className={input} list="club-device-models" value={f.deviceModel} onChange={(e) => setF({ ...f, deviceModel: e.target.value })} minLength={2} maxLength={60} placeholder="e.g. Redmi Note 13 Pro" />
+            <datalist id="club-device-models">
+              {DEVICE_MODELS.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-bold text-slate-700">Shirt number</span>
+            <input type="number" min={1} max={99} className={`${input} font-mono`} value={f.shirtNo} onChange={(e) => setF({ ...f, shirtNo: e.target.value })} placeholder="1–99" />
+            {takenBy && <span className="block text-[11px] font-semibold text-rose-600">#{f.shirtNo} is already worn by {takenBy.fullName}</span>}
+          </label>
+        </div>
+
+        <div className="flex justify-end">
+          <SaveButton busy={busy} />
+        </div>
+      </form>
     </Card>
   );
 }

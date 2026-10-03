@@ -54,7 +54,7 @@ export const TOOLS: ClubTool[] = [
   { slug: "transfer-history", label: "Transfer History", desc: "Offers you made and their status.", icon: History, group: "transfers", ready: true },
   { slug: "register-player", label: "Register New Player", desc: "Add a new player to your club.", icon: UserPlus, group: "transfers", ready: false },
   { slug: "unregister-player", label: "Unregister Player", desc: "Release a player from your roster.", icon: UserMinus, group: "transfers", ready: false },
-  { slug: "update-player", label: "Update Player Info", desc: "Edit squad players' details and positions.", icon: UserCog, group: "transfers", ready: false },
+  { slug: "update-player", label: "Update Player Info", desc: "Change a squad player's image, Konami ID, device and shirt number.", icon: UserCog, group: "transfers", ready: true },
 
   // Club Administration
   { slug: "change-info", label: "Change Info", desc: "Slogan, location, Facebook page and about text.", icon: PenLine, group: "admin", ready: true, infoAccess: true },

@@ -153,7 +153,15 @@ export const PlayerSelfUpdateSchema = z.object({
   location: trimmed(80).optional(),
 });
 
-export const PlayerAdminUpdateSchema = PlayerSelfUpdateSchema.extend({
+/** What a club manager may change on a player in their own squad. */
+export const ClubPlayerUpdateSchema = z.object({
+  avatar: imageUrl.optional(),
+  konamiId: trimmed(40).min(5, "Konami ID must be at least 5 characters").optional(),
+  deviceModel: trimmed(60).min(2, "Device model is required").optional(),
+  shirtNo: z.union([z.coerce.number().int().min(1, "Shirt number must be 1–99").max(99, "Shirt number must be 1–99"), z.literal(""), z.null()]).optional(),
+});
+
+export const PlayerAdminUpdateSchema =PlayerSelfUpdateSchema.extend({
   status: z.enum(["ACTIVE", "PENDING_VERIFICATION", "SUSPENDED", "BANNED", "INACTIVE"]).optional(),
   isVerified: z.boolean().optional(),
   clubId: optionalId,
