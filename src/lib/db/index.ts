@@ -1076,6 +1076,25 @@ export const db = {
     return entry.access === "full_control" ? "FULL" : "INFO";
   },
 
+  /**
+   * The main manager hands the club over to a player in its squad. That player's own
+   * account becomes the club's main manager (no separate club account needed).
+   */
+  async handOverClub(clubId: string, fromUserId: string, toPlayerId: string) {
+    if (!isId(clubId) || !isId(toPlayerId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const club = await Club.findById(clubId, { managerId: 1, name: 1 }).lean<any>();
+    if (!club) throw new ServiceError("Club not found", 404);
+    if (String(club.managerId || "") !== fromUserId) throw new ServiceError("Only the club's main manager can hand the club over", 403);
+    const player = await Player.findById(toPlayerId, { userId: 1, clubId: 1, fullName: 1 }).lean<any>();
+    if (!player || String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
+    if (!player.userId) throw new ServiceError("That player has no account to sign in with", 400);
+    if (String(player.userId) === fromUserId) throw new ServiceError("You are already the main manager", 400);
+    await Club.updateOne({ _id: clubId }, { $set: { managerId: player.userId }, $pull: { staff: { userId: player.userId } } });
+    await db.notify(String(player.userId), "You are now the club manager", `You are now the main manager of ${club.name}. Open My Club Management from your account menu.`, "/dashboard/my-club");
+    return { managerId: String(player.userId), managerName: player.fullName };
+  },
+
   /** Clubs a user can edit (as manager or staff), used to pick "their" club. */
   async getEditableClubId(userId: string, fallbackClubId?: string) {
     if (!isId(userId)) return fallbackClubId;

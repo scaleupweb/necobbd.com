@@ -288,7 +288,7 @@ export function Navbar({
                         <User className="w-3.5 h-3.5 mr-2" /> My Public Profile
                       </Link>
                     )}
-                    {user.clubId && (
+                    {user.canManageClubId && (
                       <Link
                         href="/dashboard/my-club"
                         className="flex items-center px-4 py-2 text-xs font-medium text-[#111111] hover:bg-[#F7F8FA]"
@@ -449,6 +449,15 @@ export function Navbar({
                     >
                       My Dashboard
                     </Link>
+                    {user.canManageClubId && (
+                      <Link
+                        href="/dashboard/my-club"
+                        onClick={() => setMobileDrawerOpen(false)}
+                        className="block w-full py-2.5 text-center text-xs font-bold bg-[#C79A3B] text-black rounded-xl min-h-[44px] flex items-center justify-center"
+                      >
+                        <Shield className="w-3.5 h-3.5 mr-1.5" /> My Club Management
+                      </Link>
+                    )}
                     {STAFF_ROLES.includes(user.role) && (
                       <Link
                         href="/admin"

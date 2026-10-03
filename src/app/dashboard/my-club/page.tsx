@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Users, ArrowRightLeft, Swords, Plus, Pencil, Loader2, ExternalLink } from "lucide-react";
+import { Users, ArrowRightLeft, Swords, Plus, Pencil, Loader2, ExternalLink, Crown } from "lucide-react";
+import { toast, confirmDialog } from "@/lib/feedback";
 import { formatCurrency } from "@/lib/utils";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { LocationInput } from "@/components/ui/LocationInput";
@@ -189,7 +190,80 @@ export default function MyClubDashboard() {
         </div>
       )}
 
+      {club.access === "MANAGER" && <HandOverClub club={club} />}
+
       {editing && <EditClubProfile club={club} onClose={() => setEditing(false)} onSaved={loadClub} />}
+    </div>
+  );
+}
+
+/** Main manager passes the club to a squad player, who then manages it from their own account. */
+function HandOverClub({ club }: { club: any }) {
+  const candidates = (club.squad || []).filter((p: any) => p.userId);
+  const [playerId, setPlayerId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const handOver = async () => {
+    const p = candidates.find((c: any) => c.id === playerId);
+    if (!p) return;
+    const yes = await confirmDialog({
+      title: `Make ${p.fullName} the main manager?`,
+      text: `${p.fullName} will manage ${club.name} from their own account. You will lose main-manager access.`,
+      confirmText: "Hand over",
+      danger: true,
+    });
+    if (!yes) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/me/club/hand-over", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Could not hand over the club");
+      toast.success(`${p.fullName} is now the main manager`);
+      window.location.href = "/dashboard";
+    } catch (e: any) {
+      toast.error(e.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5 sm:p-6 space-y-3">
+      <div className="flex items-start gap-3">
+        <span className="w-9 h-9 rounded-xl bg-[#C79A3B] text-black flex items-center justify-center shrink-0">
+          <Crown className="w-4 h-4" />
+        </span>
+        <div>
+          <h2 className="text-sm font-black text-slate-950">Main manager</h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Hand the club to a player in your squad. They manage it from their own player login — no separate club account needed.
+          </p>
+        </div>
+      </div>
+      {candidates.length ? (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <select
+            value={playerId}
+            onChange={(e) => setPlayerId(e.target.value)}
+            className="flex-1 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-black"
+          >
+            <option value="">Choose a squad player…</option>
+            {candidates.map((p: any) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName} (@{p.username})
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handOver}
+            disabled={!playerId || busy}
+            className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Hand over club
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">No squad player with an account yet.</p>
+      )}
     </div>
   );
 }

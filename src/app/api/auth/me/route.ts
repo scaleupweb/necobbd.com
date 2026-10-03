@@ -9,9 +9,10 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ success: false, data: null });
   }
-  const [unread, owned] = await Promise.all([
+  const [unread, owned, manageable] = await Promise.all([
     db.unreadNotificationCount(session.id).catch(() => 0),
     db.getMainManagedClub(session.id).catch(() => null),
+    db.getEditableClubId(session.id).catch(() => undefined),
   ]);
   return NextResponse.json({
     success: true,
@@ -20,6 +21,8 @@ export async function GET() {
       unreadNotifications: unread,
       // Club this user owns as main manager (only they can register it for tournaments).
       managedClub: owned ? { id: String(owned._id), name: owned.name, status: owned.status } : null,
+      // Club this user can open in My Club (main manager or club staff) — works from a player account too.
+      canManageClubId: manageable || null,
     },
   });
 }

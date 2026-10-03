@@ -23,9 +23,9 @@ export default function AdminClubsPage() {
     { name: "status", label: "Status", type: "select", required: true, default: "ACTIVE", options: ["ACTIVE", "PENDING", "SUSPENDED", "INACTIVE"].map((v) => ({ value: v, label: v })) },
     {
       name: "managerId",
-      label: "Club manager",
+      label: "Club main manager",
       type: "select",
-      hint: "The user becomes this club's manager and can bid in the transfer market. Give them the CLUB_MANAGER role under Users.",
+      hint: "Pick any account — usually the manager's own player account. They manage the club from their normal login (My Club Management), no separate club account needed.",
       options: users.map((u) => ({ value: u.id, label: `${u.fullName} (@${u.username}) · ${u.role.replace(/_/g, " ")}` })),
     },
     { name: "slogan", label: "Slogan", type: "text" },

@@ -23,9 +23,16 @@ export const POST = handle(async (req: NextRequest, { params }: { params: Promis
     return ok(updated);
   }
 
+  // A club's main manager or full-control staff may report for the club, whatever their account role.
+  const canActForClub = async (clubId?: string) => {
+    if (!clubId) return false;
+    const access = await db.getClubAccess(session.id, clubId);
+    return access === "MANAGER" || access === "FULL";
+  };
   const isParticipant =
     (session.playerProfileId && (fixture.homePlayer?.id === session.playerProfileId || fixture.awayPlayer?.id === session.playerProfileId)) ||
-    (session.role === "CLUB_MANAGER" && session.clubId && (fixture.homeClub?.id === session.clubId || fixture.awayClub?.id === session.clubId));
+    (await canActForClub(fixture.homeClub?.id)) ||
+    (await canActForClub(fixture.awayClub?.id));
   if (!isParticipant) return fail("Only match participants or officials can report a result", 403, "FORBIDDEN");
   if (fixture.status !== "LIVE" && fixture.status !== "SCHEDULED") return fail("This match can no longer accept results", 409);
 
