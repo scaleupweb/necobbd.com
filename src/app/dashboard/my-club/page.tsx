@@ -31,7 +31,9 @@ export default function ClubControlCenter() {
       <section className="relative overflow-hidden rounded-3xl bg-[#0B0C0F] text-white">
         <FitImage src={club.banner} className="opacity-95" />
         {/* Light scrim only behind the text so the cover stays clearly visible */}
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-[#0B0C0F]/65 via-[#0B0C0F]/25 to-transparent" />
+        {/* Phones: text sits on top of the cover, so dim it evenly. Wider screens: text is on the left only. */}
+        <div aria-hidden className="absolute inset-0 bg-[#0B0C0F]/70 md:hidden" />
+        <div aria-hidden className="absolute inset-0 hidden md:block bg-gradient-to-r from-[#0B0C0F]/65 via-[#0B0C0F]/25 to-transparent" />
         <ClubToolsMenu dark className="absolute top-3 right-3 z-10" />
         <div className="relative p-5 sm:p-7 flex flex-col md:flex-row md:items-center gap-5">
           <div className="flex items-center gap-4 min-w-0 flex-1 pr-10 lg:pr-0">
