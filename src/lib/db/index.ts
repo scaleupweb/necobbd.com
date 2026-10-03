@@ -1820,6 +1820,40 @@ export const db = {
     };
   },
 
+  /** Every move in or out of a club (newest first) for the club's Transfer History tool. */
+  async getClubTransferLog(clubId: string) {
+    if (!isId(clubId)) return [];
+    await connectDB();
+    const moves = await TransferHistory.find({ $or: [{ newClubId: clubId }, { oldClubId: clubId }] }).sort({ transferDate: -1 }).limit(500).lean<any>();
+    const [players, clubs] = await Promise.all([
+      Player.find({ _id: { $in: moves.map((m: any) => m.playerId).filter(Boolean) } }, { fullName: 1, username: 1, avatar: 1, konamiId: 1, clubId: 1 }).lean<any>(),
+      clubMap(moves.flatMap((m: any) => [m.newClubId, m.oldClubId]).filter(Boolean)),
+    ]);
+    const pm = new Map(players.map((p: any) => [String(p._id), p]));
+    return moves.map((m: any) => {
+      const into = String(m.newClubId || "") === clubId;
+      const otherId = into ? m.oldClubId : m.newClubId;
+      const other: any = otherId ? clubs.get(String(otherId)) : null;
+      const p: any = pm.get(String(m.playerId)) || {};
+      const contractEnd = m.contractEndDate || m.legacy?.contractTill;
+      return {
+        id: String(m._id),
+        date: new Date(m.transferDate).toISOString(),
+        direction: into ? "IN" : "OUT",
+        type: m.transferType || "free",
+        player: { id: p._id ? String(p._id) : "", fullName: p.fullName || m.playerName, username: p.username || "", avatar: p.avatar || PLACEHOLDER.avatar, konamiId: p.konamiId || "", stillHere: String(p.clubId || "") === clubId },
+        // Old-site registrations say "Free Agent" for players who simply had no club yet.
+        otherClub: other ? clubMini(other) : { name: into ? (m.previousClubName && m.previousClubName !== "Free Agent" ? m.previousClubName : "No club") : m.newClubName || "No club" },
+        contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,
+        postLink: m.postLink || m.legacy?.fbPost || "",
+        seat: m.seat || null,
+        shirtNo: m.legacy?.shirtNo || "",
+        fee: m.fee || 0,
+        approvedBy: m.approvedBy || "",
+      };
+    });
+  },
+
   /** A player's club moves, newest first, with club logos for the timeline. */
   async getTransferHistoryForPlayer(playerId: string) {
     if (!isId(playerId)) return [];

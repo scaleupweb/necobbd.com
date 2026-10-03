@@ -9,7 +9,6 @@ import {
   ComingSoon,
   SquadRoster,
   ClubFixtures,
-  TransferHistory,
   ChangeInfo,
   ChangeLogo,
   AccessControl,
@@ -18,11 +17,12 @@ import {
   RegisterNewPlayer,
 } from "@/components/club-hub/ToolViews";
 import { TransferWindow } from "@/components/club-hub/TransferWindow";
+import { ClubTransferHistory } from "@/components/club-hub/TransferHistory";
 
 const VIEWS: Record<string, () => React.ReactNode> = {
   squad: () => <SquadRoster />,
   fixtures: () => <ClubFixtures />,
-  "transfer-history": () => <TransferHistory />,
+  "transfer-history": () => <ClubTransferHistory />,
   "update-player": () => <UpdatePlayerInfo />,
   "register-player": () => <RegisterNewPlayer />,
   "transfer-window": () => <TransferWindow />,
