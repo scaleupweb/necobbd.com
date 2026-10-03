@@ -14,10 +14,11 @@ export const GET = handle(async () => {
   if (!clubId) return fail("You are not attached to a club", 404, "NOT_FOUND");
   const club = await db.getClubById(clubId);
   if (!club) return fail("Club not found", 404, "NOT_FOUND");
-  const [{ access, permissions }, fixtures, requests] = await Promise.all([
+  const [{ access, permissions }, fixtures, requests, settings] = await Promise.all([
     db.getClubPermissions(session.id, club.id),
     db.getFixtures({ clubId: club.id, limit: 20 }),
     db.getTransferRequests(),
+    db.getSiteSettings(),
   ]);
   const isManager = access === "MANAGER" || access === "FULL";
   const can = (tool: string) => isManager || (access === "CUSTOM" && permissions.includes(tool));
@@ -27,6 +28,7 @@ export const GET = handle(async () => {
     squad: club.squad.map(({ phone, ...p }: any) => p),
     access,
     permissions,
+    siteName: settings.brand.siteName,
     isManager,
     canEdit: can("change-info") || can("change-logo"),
     fixtures,

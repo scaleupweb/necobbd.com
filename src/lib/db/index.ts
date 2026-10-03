@@ -1658,6 +1658,38 @@ export const db = {
     return plain(r.toObject());
   },
 
+  /** A club unregisters (releases) one of its players; they leave with no club. */
+  async clubReleasePlayer(clubId: string, playerId: string, byName: string) {
+    if (!isId(clubId) || !isId(playerId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const [club, player] = await Promise.all([Club.findById(clubId, { name: 1, managerId: 1, slug: 1 }).lean<any>(), Player.findById(playerId)]);
+    if (!club || !player) throw new ServiceError("Player or club not found", 404);
+    if (String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
+    if (player.userId && String(player.userId) === String(club.managerId || "")) throw new ServiceError("The main manager can't be unregistered. Hand the club over first.", 409);
+    if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined recently and is frozen for ${FREEZE_DAYS} days`, 409);
+    player.clubId = undefined;
+    player.seat = undefined;
+    player.shirtNo = undefined;
+    player.set("contract.status", "FREE_AGENT");
+    await player.save();
+    if (player.userId) {
+      await User.updateOne({ _id: player.userId }, { $unset: { clubId: 1 } });
+      await Club.updateOne({ _id: club._id }, { $pull: { staff: { userId: player.userId } } });
+      await db.notify(String(player.userId), `Unregistered from ${club.name}`, `${club.name} has released you. You now have no club and can join another one.`, "/dashboard");
+    }
+    await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: club.name,
+      oldClubId: club._id,
+      newClubName: "No club",
+      fee: 0,
+      approvedBy: byName,
+      transferType: "released",
+    });
+    return { player: player.fullName };
+  },
+
   /**
    * Admin moves a player into a club (seat + new 120-day contract) or out of their club,
    * recording it in the transfer history like any other move.

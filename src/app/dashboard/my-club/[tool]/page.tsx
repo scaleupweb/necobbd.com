@@ -17,6 +17,7 @@ import {
   RegisterNewPlayer,
 } from "@/components/club-hub/ToolViews";
 import { TransferWindow } from "@/components/club-hub/TransferWindow";
+import { UnregisterPlayer } from "@/components/club-hub/UnregisterPlayer";
 import { ClubTransferHistory } from "@/components/club-hub/TransferHistory";
 
 const VIEWS: Record<string, () => React.ReactNode> = {
@@ -26,6 +27,7 @@ const VIEWS: Record<string, () => React.ReactNode> = {
   "update-player": () => <UpdatePlayerInfo />,
   "register-player": () => <RegisterNewPlayer />,
   "transfer-window": () => <TransferWindow />,
+  "unregister-player": () => <UnregisterPlayer />,
   "change-info": () => <ChangeInfo />,
   "change-logo": () => <ChangeLogo />,
   "access-control": () => <AccessControl />,

@@ -51,7 +51,7 @@ export const TOOLS: ClubTool[] = [
   { slug: "player-loans", label: "Player Loans", desc: "Request loans and answer other clubs' requests.", icon: Repeat, group: "transfers", ready: false },
   { slug: "transfer-history", label: "Transfer History", desc: "Every player who joined or left the club, with dates, contracts and requests.", icon: History, group: "transfers", ready: true },
   { slug: "register-player", label: "Register New Player", desc: "Create a new player account directly in your club.", icon: UserPlus, group: "transfers", ready: true },
-  { slug: "unregister-player", label: "Unregister Player", desc: "Release a player from your roster.", icon: UserMinus, group: "transfers", ready: false },
+  { slug: "unregister-player", label: "Unregister Player", desc: "Release a squad player from your club (confirm by typing the site name).", icon: UserMinus, group: "transfers", ready: true },
   { slug: "update-player", label: "Update Player Info", desc: "Change a squad player's image, Konami ID, device and shirt number.", icon: UserCog, group: "transfers", ready: true },
 
   // Club Administration
