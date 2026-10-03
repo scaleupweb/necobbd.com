@@ -6,6 +6,7 @@ import { toast, confirmDialog } from "@/lib/feedback";
 import { CONTRACT_DAYS, FREEZE_DAYS } from "@/lib/squad";
 import { api, Badge, Button, Empty, Notice, PageHeader, inputCls, statusTone } from "@/components/admin/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { noClubLabel } from "@/lib/squad";
 
 export default function AdminTransfersPage() {
   const [data, setData] = useState<any>(null);
@@ -156,7 +157,7 @@ export default function AdminTransfersPage() {
                   <img src={l.player.avatar} alt="" className="w-10 h-10 rounded-lg object-cover" />
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-slate-950">{l.player.fullName}</div>
-                    <div className="text-slate-500">{l.player.club?.name || "Free agent"} · asking {formatCurrency(l.askingPrice)}</div>
+                    <div className="text-slate-500">{l.player.club?.name || noClubLabel(l.player)} · asking {formatCurrency(l.askingPrice)}</div>
                   </div>
                   <Button small variant="ghost" onClick={() => run(() => api("/api/admin/transfers", { method: "POST", json: { action: "CLOSE", listingId: l.id } }), "Listing removed.")} title="Remove listing">
                     <X className="w-3.5 h-3.5" />

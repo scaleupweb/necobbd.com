@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Search, Lock, Unlock, X, Loader2, CheckCircle2, Clock, XCircle, Snowflake, FileSignature, Image as ImageIcon, Download, Share2, ExternalLink, UserPlus } from "lucide-react";
+import { Search, Lock, Unlock, X, Loader2, CheckCircle2, Clock, XCircle, Snowflake, FileSignature, Image as ImageIcon, Download, Share2, ExternalLink, UserPlus, LayoutGrid, Table2 } from "lucide-react";
 import { toast } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
-import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout, contractDaysLeft, isFrozen, freezeLeft } from "@/lib/squad";
+import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout, contractDaysLeft, isFrozen, freezeLeft, isFreeAgent } from "@/lib/squad";
 import { useClubHub } from "./ClubHubContext";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
@@ -49,33 +49,81 @@ export function TransferWindow() {
 
 
 const DAY_MS = 86400000;
+type Layout = "cards" | "table";
+type View = "all" | "noclub" | "free" | "club" | "ending";
 
-/** Contract status line for the player list. */
-function ContractLine({ p }: { p: any }) {
+/** Contract progress for a club player. */
+function contractInfo(p: any) {
   const c = p.contract || {};
-  if (p.club) {
-    const left = contractDaysLeft(c.endDate);
-    const start = c.startDate ? new Date(c.startDate).getTime() : c.endDate ? new Date(c.endDate).getTime() - CONTRACT_DAYS * DAY_MS : 0;
-    const day = start ? Math.min(CONTRACT_DAYS, Math.max(1, Math.floor((Date.now() - start) / DAY_MS) + 1)) : 0;
-    const pct = day ? Math.round((day / CONTRACT_DAYS) * 100) : 0;
-    const soon = left > 0 && left <= 30;
+  const left = contractDaysLeft(c.endDate);
+  const start = c.startDate ? new Date(c.startDate).getTime() : c.endDate ? new Date(c.endDate).getTime() - CONTRACT_DAYS * DAY_MS : 0;
+  const day = start ? Math.min(CONTRACT_DAYS, Math.max(1, Math.floor((Date.now() - start) / DAY_MS) + 1)) : 0;
+  return { left, day, pct: day ? Math.round((day / CONTRACT_DAYS) * 100) : 0, soon: left > 0 && left <= 30, known: !!c.endDate };
+}
+
+/** Status of a player in the Transfer Window: in a club (locked), Free Agent or no club. */
+function statusOf(p: any): "club" | "free" | "noclub" {
+  return p.club ? "club" : isFreeAgent(p) ? "free" : "noclub";
+}
+
+function ContractBar({ p, compact = false }: { p: any; compact?: boolean }) {
+  const st = statusOf(p);
+  if (st === "club") {
+    const ci = contractInfo(p);
     return (
-      <div className="mt-1 flex items-center gap-2 min-w-0">
-        <div className="w-20 h-1.5 rounded-full bg-slate-200 overflow-hidden shrink-0">
-          <div className={`h-full rounded-full ${soon ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+      <div className="min-w-0">
+        <div className="flex items-center justify-between gap-2 text-[10px] font-bold">
+          <span className={ci.soon ? "text-amber-700" : "text-slate-500"}>{ci.known ? `Day ${ci.day}/${CONTRACT_DAYS}` : "Under contract"}</span>
+          {ci.known && <span className={ci.soon ? "text-amber-700" : "text-slate-700"}>{ci.left}d left</span>}
         </div>
-        <span className={`text-[10px] font-bold truncate ${soon ? "text-amber-700" : "text-slate-500"}`}>
-          {c.endDate ? `Day ${day}/${CONTRACT_DAYS} · ${left} day${left === 1 ? "" : "s"} left` : "Under contract"}
-        </span>
-        {isFrozen(p.frozenUntil) && <span className="text-[10px] font-black text-sky-700 shrink-0">❄ {freezeLeft(p.frozenUntil)}</span>}
+        <div className={`mt-1 ${compact ? "h-1" : "h-1.5"} rounded-full bg-slate-200 overflow-hidden`}>
+          <div className={`h-full rounded-full ${ci.soon ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${ci.pct}%` }} />
+        </div>
       </div>
     );
   }
-  const ended = c.endDate && new Date(c.endDate).getTime() < Date.now();
+  if (st === "free") {
+    return <div className="text-[10px] font-bold text-emerald-700 truncate">{CONTRACT_DAYS}-day contract ended {formatDate(p.contract.endDate)}</div>;
+  }
+  return <div className="text-[10px] font-bold text-slate-400 truncate">Never signed to a club</div>;
+}
+
+function StatusPill({ p }: { p: any }) {
+  const st = statusOf(p);
+  if (st === "club")
+    return (
+      <span className="inline-flex items-center gap-1.5 max-w-full px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-bold text-slate-600">
+        <Lock className="w-3 h-3 shrink-0 text-slate-400" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={p.club.logo} alt="" className="w-4 h-4 rounded object-cover shrink-0" />
+        <span className="truncate">{p.club.name}</span>
+      </span>
+    );
   return (
-    <div className="mt-1 text-[10px] font-bold text-emerald-700 truncate">
-      Free agent · {ended ? `contract ended ${formatDate(c.endDate)}` : "no contract yet"}
-    </div>
+    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-black ${st === "free" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700"}`}>
+      <Unlock className="w-3 h-3" /> {st === "free" ? "Free Agent" : "No club"}
+    </span>
+  );
+}
+
+function ActionButton({ p, requested, onPick, full = false }: { p: any; requested: boolean; onPick: () => void; full?: boolean }) {
+  const w = full ? "w-full justify-center" : "";
+  if (p.club)
+    return (
+      <span className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed ${w}`}>
+        <Lock className="w-3.5 h-3.5" /> Locked
+      </span>
+    );
+  if (requested)
+    return (
+      <span className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-amber-50 text-amber-800 text-xs font-bold ${w}`}>
+        <Clock className="w-3.5 h-3.5" /> Requested
+      </span>
+    );
+  return (
+    <button onClick={onPick} className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-zinc-800 shrink-0 ${w}`}>
+      <UserPlus className="w-3.5 h-3.5" /> Add to team
+    </button>
   );
 }
 
@@ -88,7 +136,22 @@ function SignPlayer() {
   const [q, setQ] = useState("");
   const [shown, setShown] = useState(PAGE);
   const [picked, setPicked] = useState<any>(null);
-  const [view, setView] = useState<"all" | "free" | "club" | "ending">("all");
+  const [view, setView] = useState<View>("all");
+  const [layout, setLayout] = useState<Layout>("cards");
+
+  // Remember the chosen layout on this device.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("tw-layout");
+      if (saved === "cards" || saved === "table") setLayout(saved);
+    } catch {}
+  }, []);
+  const chooseLayout = (l: Layout) => {
+    setLayout(l);
+    try {
+      localStorage.setItem("tw-layout", l);
+    } catch {}
+  };
 
   const loadRequests = () =>
     fetch("/api/me/club/transfer-requests", { cache: "no-store" })
@@ -105,12 +168,11 @@ function SignPlayer() {
   const list = useMemo(
     () =>
       (players || []).filter((p) => {
-        if (view === "free" && p.club) return false;
-        if (view === "club" && !p.club) return false;
-        if (view === "ending") {
-          const left = contractDaysLeft(p.contract?.endDate);
-          if (!p.club || !left || left > 30) return false;
-        }
+        const st = statusOf(p);
+        if (view === "noclub" && st !== "noclub") return false;
+        if (view === "free" && st !== "free") return false;
+        if (view === "club" && st !== "club") return false;
+        if (view === "ending" && !(st === "club" && contractInfo(p).soon)) return false;
         return matches(p, s);
       }),
     [players, s, view]
@@ -119,97 +181,157 @@ function SignPlayer() {
     const all = players || [];
     return {
       all: all.length,
-      free: all.filter((p) => !p.club).length,
-      club: all.filter((p) => p.club).length,
-      ending: all.filter((p) => p.club && contractDaysLeft(p.contract?.endDate) > 0 && contractDaysLeft(p.contract?.endDate) <= 30).length,
+      noclub: all.filter((p) => statusOf(p) === "noclub").length,
+      free: all.filter((p) => statusOf(p) === "free").length,
+      club: all.filter((p) => statusOf(p) === "club").length,
+      ending: all.filter((p) => statusOf(p) === "club" && contractInfo(p).soon).length,
     };
   }, [players]);
   useEffect(() => setShown(PAGE), [s, view]);
 
+  const visible = list.slice(0, shown);
+
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 space-y-2">
-          <div className="relative">
+      {/* Controls */}
+      <div className="rounded-3xl bg-white border border-slate-200 p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search player name, username or Konami UID…" className={`${input} pl-10`} />
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-            <span className="inline-flex items-center gap-1"><Unlock className="w-3.5 h-3.5 text-emerald-600" /> Free agent — can be signed</span>
-            <span className="inline-flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-slate-400" /> Already in a club</span>
-            <span className="ml-auto font-bold">{players ? `${list.length} players` : "Loading…"}</span>
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+          <div className="inline-flex self-start rounded-xl bg-slate-100 p-1 shrink-0">
             {([
-              ["all", "All"],
-              ["free", "Free agents"],
-              ["club", "In a club"],
-              ["ending", "Contract ending ≤30d"],
-            ] as const).map(([v, l]) => (
+              ["cards", "Cards", LayoutGrid],
+              ["table", "Table", Table2],
+            ] as const).map(([v, l, Icon]) => (
               <button
                 key={v}
-                onClick={() => setView(v)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap border transition-colors ${
-                  view === v ? "bg-black border-black text-white" : "bg-white border-slate-200 text-slate-600 hover:border-slate-400"
-                }`}
+                onClick={() => chooseLayout(v)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${layout === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
               >
-                {l} <span className={view === v ? "text-white/60" : "text-slate-400"}>{counts[v]}</span>
+                <Icon className="w-4 h-4" /> {l}
               </button>
             ))}
           </div>
         </div>
-
-        {players === null ? (
-          <div className="py-14 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" /></div>
-        ) : !list.length ? (
-          <div className="py-14 text-center text-sm text-slate-500">No player matches “{q}”.</div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {list.slice(0, shown).map((p) => {
-              const locked = !!p.club;
-              const requested = pendingIds.has(String(p.id));
-              return (
-                <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${locked ? "bg-slate-50/50" : ""}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.avatar} alt="" loading="lazy" className={`w-11 h-11 rounded-full object-cover bg-slate-100 ${locked ? "opacity-60 grayscale" : ""}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Link href={`/players/${p.username}`} target="_blank" className="text-sm font-bold text-slate-950 truncate hover:underline">{p.fullName}</Link>
-                      {locked ? <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <Unlock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                    </div>
-                    <div className="text-[11px] text-slate-500 truncate">
-                      <span className="font-mono">{p.konamiId || "no UID"}</span> · @{p.username}
-                    </div>
-                    <ContractLine p={p} />
-                  </div>
-                  {locked ? (
-                    <span className="inline-flex items-center gap-1.5 max-w-[45%] px-2.5 py-1.5 rounded-xl bg-slate-100 text-[11px] font-bold text-slate-500">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.club.logo} alt="" className="w-4 h-4 rounded object-cover shrink-0" />
-                      <span className="truncate">{p.club.name}</span>
-                    </span>
-                  ) : requested ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 text-[11px] font-bold">
-                      <Clock className="w-3.5 h-3.5" /> Requested
-                    </span>
-                  ) : (
-                    <button onClick={() => setPicked(p)} className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-zinc-800 shrink-0">
-                      <UserPlus className="w-3.5 h-3.5" /> Add to team
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {players && shown < list.length && (
-          <div className="p-3 border-t border-slate-100 text-center">
-            <button onClick={() => setShown((n) => n + PAGE)} className="px-4 py-2 rounded-xl bg-slate-100 text-xs font-bold hover:bg-slate-200">
-              Show more ({shown}/{list.length})
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
+          {([
+            ["all", "All"],
+            ["noclub", "No club"],
+            ["free", "Free Agents"],
+            ["club", "In a club"],
+            ["ending", "Contract ending ≤30d"],
+          ] as const).map(([v, l]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap border transition-colors ${
+                view === v ? "bg-black border-black text-white" : "bg-white border-slate-200 text-slate-600 hover:border-slate-400"
+              }`}
+            >
+              {l} <span className={view === v ? "text-white/60" : "text-slate-400"}>{counts[v]}</span>
             </button>
-          </div>
-        )}
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1"><Unlock className="w-3.5 h-3.5 text-sky-600" /> No club — never signed</span>
+          <span className="inline-flex items-center gap-1"><Unlock className="w-3.5 h-3.5 text-emerald-600" /> Free Agent — {CONTRACT_DAYS}-day contract ended</span>
+          <span className="inline-flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-slate-400" /> In a club — locked</span>
+          <span className="sm:ml-auto font-bold">{players ? `${list.length} players` : "Loading…"}</span>
+        </div>
       </div>
+
+      {/* Results */}
+      {players === null ? (
+        <div className="rounded-3xl bg-white border border-slate-200 py-14 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" /></div>
+      ) : !list.length ? (
+        <div className="rounded-3xl bg-white border border-dashed border-slate-300 py-14 text-center text-sm text-slate-500">No player matches.</div>
+      ) : layout === "cards" ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          {visible.map((p) => {
+            const st = statusOf(p);
+            return (
+              <div
+                key={p.id}
+                className={`relative flex flex-col rounded-2xl border bg-white overflow-hidden transition-all ${
+                  st === "club" ? "border-slate-200" : "border-emerald-200 hover:shadow-lg hover:-translate-y-0.5"
+                }`}
+              >
+                <div className={`h-1.5 ${st === "club" ? "bg-slate-200" : st === "free" ? "bg-emerald-500" : "bg-sky-500"}`} />
+                <div className="p-3 sm:p-4 flex flex-col items-center text-center flex-1">
+                  <div className="relative">
+                    <span className={`block rounded-full p-[3px] ${st === "club" ? "bg-slate-200" : "bg-gradient-to-br from-[#C79A3B] via-[#f5d58a] to-[#8a6420]"}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.avatar} alt="" loading="lazy" className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover bg-slate-100 ring-2 ring-white ${st === "club" ? "grayscale opacity-70" : ""}`} />
+                    </span>
+                    <span className={`absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center ring-2 ring-white ${st === "club" ? "bg-slate-500 text-white" : "bg-emerald-500 text-white"}`}>
+                      {st === "club" ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                    </span>
+                  </div>
+                  <Link href={`/players/${p.username}`} target="_blank" className="mt-3 w-full text-sm font-black text-slate-950 truncate hover:underline">{p.fullName}</Link>
+                  <div className="w-full text-[11px] text-slate-500 font-mono truncate">{p.konamiId || `@${p.username}`}</div>
+                  <div className="mt-2 max-w-full"><StatusPill p={p} /></div>
+                  <div className="mt-3 w-full"><ContractBar p={p} /></div>
+                  {isFrozen(p.frozenUntil) && <div className="mt-1 text-[10px] font-black text-sky-700">❄ Frozen · {freezeLeft(p.frozenUntil)}</div>}
+                  <div className="mt-auto pt-3 w-full">
+                    <ActionButton p={p} requested={pendingIds.has(String(p.id))} onPick={() => setPicked(p)} full />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left">
+              <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Player</th>
+                  <th className="px-4 py-3">Konami UID</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 w-48">Contract</th>
+                  <th className="px-4 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {visible.map((p) => (
+                  <tr key={p.id} className={statusOf(p) === "club" ? "bg-slate-50/40" : "hover:bg-emerald-50/30"}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.avatar} alt="" loading="lazy" className={`w-10 h-10 rounded-full object-cover bg-slate-100 ${p.club ? "grayscale opacity-70" : ""}`} />
+                        <div className="min-w-0">
+                          <Link href={`/players/${p.username}`} target="_blank" className="block text-sm font-bold text-slate-950 truncate max-w-[220px] hover:underline">{p.fullName}</Link>
+                          <div className="text-[11px] text-slate-500 truncate">@{p.username}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-mono font-bold text-slate-700 whitespace-nowrap">{p.konamiId || "—"}</td>
+                    <td className="px-4 py-3 max-w-[220px]"><StatusPill p={p} /></td>
+                    <td className="px-4 py-3">
+                      <ContractBar p={p} compact />
+                      {isFrozen(p.frozenUntil) && <div className="mt-1 text-[10px] font-black text-sky-700">❄ {freezeLeft(p.frozenUntil)}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <ActionButton p={p} requested={pendingIds.has(String(p.id))} onPick={() => setPicked(p)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {players && shown < list.length && (
+        <div className="text-center">
+          <button onClick={() => setShown((n) => n + PAGE)} className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold hover:bg-zinc-800">
+            Show more <span className="text-white/50 font-mono ml-1">{shown}/{list.length}</span>
+          </button>
+        </div>
+      )}
 
       <MyRequests requests={requests} />
 
@@ -292,7 +414,7 @@ function SignSheet({ player, club, pending, onClose, onDone }: { player: any; cl
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={player.avatar} alt="" className="w-11 h-11 rounded-full object-cover bg-slate-100" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Sign free agent</div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Sign player</div>
             <div className="text-base font-black text-slate-950 truncate">{player.fullName}</div>
           </div>
           <button onClick={onClose} aria-label="Close" className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100">
@@ -383,7 +505,7 @@ function SignSheet({ player, club, pending, onClose, onDone }: { player: any; cl
                   <div className="mt-1 text-sm font-bold text-slate-900">
                     {formatDate(start.toISOString())} → {formatDate(end.toISOString())}
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-1">Counts down from the day the admins approve. When it ends the player becomes a Free Agent.</p>
+                  <p className="text-[11px] text-slate-600 mt-1">Counts down from the day the admins approve. When it ends the player becomes a Free Agent and leaves the club.</p>
                 </div>
                 <div className="rounded-2xl bg-sky-50 border border-sky-200 p-4">
                   <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-sky-700">

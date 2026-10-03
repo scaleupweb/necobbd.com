@@ -38,7 +38,7 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { toMatchLines, snapshot, monthlyLoad, seasons, humanGap, aboutText, MatchLine } from "@/lib/player-insights";
 import { LineChart, BarChart, Gauge, Donut } from "@/components/profile/Charts";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { CONTRACT_DAYS, isFrozen, freezeLeft } from "@/lib/squad";
+import { CONTRACT_DAYS, isFrozen, freezeLeft, isFreeAgent, noClubLabel } from "@/lib/squad";
 import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
@@ -270,8 +270,8 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
           ) : (
             <div className="rounded-3xl border-2 border-dashed border-slate-300 p-6 text-center">
               <Shield className="w-8 h-8 mx-auto text-slate-300" />
-              <div className="mt-2 text-sm font-black text-slate-700">Free agent</div>
-              <div className="text-xs text-slate-500">Open to offers from clubs</div>
+              <div className="mt-2 text-sm font-black text-slate-700">{noClubLabel(player)}</div>
+              <div className="text-xs text-slate-500">{isFreeAgent(player) ? `${CONTRACT_DAYS}-day contract ended ${formatDate(player.contract.endDate)} · open to clubs` : "Not signed to a club yet · open to clubs"}</div>
             </div>
           )}
 
@@ -516,49 +516,84 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
 
           {/* Transfers */}
           <section id="transfers" className="scroll-mt-32">
-            <SectionTitle icon={ArrowRightLeft} title="Transfer history" subtitle="Club registrations and moves" />
+            <SectionTitle icon={ArrowRightLeft} title="Transfer history" subtitle="Every club joined, left or moved to — with dates" />
             {transfers.length ? (
               <div className="relative pl-6">
                 <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gradient-to-b from-[#C79A3B] to-slate-200" />
                 <div className="space-y-3">
-                  {transfers.map((t: any, i: number) => (
-                    <div key={t.id} className="relative">
-                      <span className={`absolute -left-[22px] top-5 w-3.5 h-3.5 rounded-full border-[3px] border-[#F6F7F9] ${i === 0 ? "bg-[#C79A3B]" : "bg-slate-300"}`} />
-                      <div className="flex items-center gap-3 rounded-2xl bg-white border border-slate-200 p-3.5">
-                        {t.oldClub?.logo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={t.oldClub.logo} alt="" className="w-8 h-8 rounded-lg object-cover opacity-60" />
-                        ) : (
-                          <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-400">FREE</span>
-                        )}
-                        <ArrowRightLeft className="w-4 h-4 text-slate-300 shrink-0" />
-                        {t.newClub?.logo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={t.newClub.logo} alt="" className="w-10 h-10 rounded-xl object-cover" />
-                        ) : (
-                          <Shield className="w-10 h-10 text-slate-300" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-black text-black truncate">
-                            {t.newClub?.slug ? (
-                              <Link href={`/clubs/${t.newClub.slug}`} className="hover:underline">
-                                {t.newClub.name}
-                              </Link>
-                            ) : (
-                              t.newClub?.name
+                  {transfers.map((t: any, i: number) => {
+                    const leaving = t.type === "released" || t.type === "expired";
+                    const meta: Record<string, [string, string]> = {
+                      signing: ["Signed", "bg-emerald-50 text-emerald-700"],
+                      transfer: ["Transfer", "bg-indigo-50 text-indigo-700"],
+                      released: ["Left club", "bg-slate-100 text-slate-600"],
+                      expired: ["Contract ended", "bg-amber-50 text-amber-800"],
+                    };
+                    const [label, tone] = meta[t.type] || ["Joined", "bg-emerald-50 text-emerald-700"];
+                    const club = leaving ? t.oldClub : t.newClub;
+                    return (
+                      <div key={t.id} className="relative">
+                        <span className={`absolute -left-[22px] top-5 w-3.5 h-3.5 rounded-full border-[3px] border-[#F6F7F9] ${i === 0 ? "bg-[#C79A3B]" : "bg-slate-300"}`} />
+                        <div className="rounded-2xl bg-white border border-slate-200 p-3.5">
+                          <div className="flex items-center gap-3">
+                            {t.type === "transfer" && t.oldClub?.logo && (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={t.oldClub.logo} alt="" className="w-8 h-8 rounded-lg object-cover opacity-60" />
+                                <ArrowRightLeft className="w-4 h-4 text-slate-300 shrink-0" />
+                              </>
                             )}
+                            {club?.logo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={club.logo} alt="" className={`w-11 h-11 rounded-xl object-cover ${leaving ? "grayscale opacity-70" : ""}`} />
+                            ) : (
+                              <span className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center">
+                                <Shield className="w-5 h-5 text-slate-300" />
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide shrink-0 ${tone}`}>{label}</span>
+                                <span className="text-sm font-black text-black truncate">
+                                  {club?.slug ? (
+                                    <Link href={`/clubs/${club.slug}`} className="hover:underline">
+                                      {club.name}
+                                    </Link>
+                                  ) : (
+                                    club?.name || t.oldClubName || "—"
+                                  )}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                {formatDate(t.date)}
+                                {t.type === "transfer" && t.oldClub ? ` · from ${t.oldClub.name}` : ""}
+                                {t.type === "expired" ? " · became a Free Agent" : ""}
+                                {t.type === "released" ? " · no club" : ""}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              {t.shirtNo ? <div className="text-sm font-black font-mono text-[#C79A3B]">#{t.shirtNo}</div> : t.seat ? <div className="text-xs font-black font-mono text-[#C79A3B]">Seat {t.seat}</div> : null}
+                              {t.fee ? <div className="text-[10px] font-bold uppercase text-slate-400">{formatCurrency(t.fee)}</div> : null}
+                            </div>
                           </div>
-                          <div className="text-[11px] text-slate-500">
-                            {formatDate(t.date)} · {t.oldClub ? `from ${t.oldClub.name}` : "registered"}
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          {t.shirtNo && <div className="text-sm font-black font-mono text-[#C79A3B]">#{t.shirtNo}</div>}
-                          <div className="text-[10px] font-bold uppercase text-slate-400">{t.fee ? formatCurrency(t.fee) : t.type}</div>
+                          {!leaving && (t.contractEnd || t.postLink) && (
+                            <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+                              {t.contractEnd && (
+                                <span className="text-slate-500">
+                                  Contract: <b className="text-slate-800">{formatDate(t.date)} → {formatDate(t.contractEnd)}</b>
+                                </span>
+                              )}
+                              {t.postLink && (
+                                <a href={t.postLink} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 font-bold text-blue-600 hover:underline">
+                                  <Facebook className="w-3 h-3" /> Transfer post
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (

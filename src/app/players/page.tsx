@@ -6,6 +6,7 @@ import { Search, Users, Shield, UserX, BadgeCheck, Sparkles, ArrowUpRight, Smart
 import { PLAYER_POSITIONS } from "@/lib/constants";
 import { getFormColor } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { isFreeAgent, noClubLabel } from "@/lib/squad";
 
 const PAGE = 48;
 
@@ -17,7 +18,7 @@ const SORTS = [
   { value: "motm", label: "MOTM awards" },
 ];
 
-type ClubFilter = "ALL" | "CLUB" | "FREE";
+type ClubFilter = "ALL" | "CLUB" | "FREE" | "NOCLUB";
 
 export default function PlayersPage() {
   const [players, setPlayers] = useState<any[]>([]);
@@ -46,7 +47,7 @@ export default function PlayersPage() {
 
   const stats = useMemo(() => {
     const inClub = players.filter((p) => p.club).length;
-    return { total: players.length, inClub, free: players.length - inClub, verified: players.filter((p) => p.isVerified).length };
+    return { total: players.length, inClub, free: players.filter((p) => isFreeAgent(p)).length, verified: players.filter((p) => p.isVerified).length };
   }, [players]);
 
   const filtered = useMemo(() => {
@@ -54,7 +55,8 @@ export default function PlayersPage() {
     return players.filter((p) => {
       if (pos !== "ALL" && p.preferredPosition !== pos) return false;
       if (clubFilter === "CLUB" && !p.club) return false;
-      if (clubFilter === "FREE" && p.club) return false;
+      if (clubFilter === "FREE" && !isFreeAgent(p)) return false;
+      if (clubFilter === "NOCLUB" && (p.club || isFreeAgent(p))) return false;
       if (!q) return true;
       return [p.fullName, p.username, p.konamiId, p.club?.name, p.deviceModel].some((v) => String(v || "").toLowerCase().includes(q));
     });
@@ -86,7 +88,7 @@ export default function PlayersPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
               <HeaderStat icon={Users} label="Players" value={stats.total} />
               <HeaderStat icon={Shield} label="In a club" value={stats.inClub} />
-              <HeaderStat icon={UserX} label="Free agents" value={stats.free} />
+              <HeaderStat icon={UserX} label="Free Agents" value={stats.free} />
               <HeaderStat icon={BadgeCheck} label="Verified" value={stats.verified} />
             </div>
           </div>
@@ -112,7 +114,8 @@ export default function PlayersPage() {
                 {([
                   ["ALL", "All"],
                   ["CLUB", "In a club"],
-                  ["FREE", "Free agents"],
+                  ["FREE", "Free Agents"],
+                  ["NOCLUB", "No club"],
                 ] as const).map(([v, l]) => (
                   <button
                     key={v}
@@ -249,7 +252,7 @@ function PlayerCard({ p }: { p: any }) {
           <Shield className="w-3 h-3 shrink-0" /> <span className="truncate">{p.club.name}</span>
         </Link>
       ) : (
-        <span className="mt-1 self-center px-2 py-0.5 rounded-full bg-slate-100 text-[10px] sm:text-[11px] font-bold text-slate-500">Free agent</span>
+        <span className={`mt-1 self-center px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold ${isFreeAgent(p) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{noClubLabel(p)}</span>
       )}
 
       {/* Details */}

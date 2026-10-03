@@ -294,7 +294,11 @@ const TransferHistorySchema = new Schema<any>(
     approvedBy: String,
     newClubId: { type: ObjectId, ref: "Club" },
     oldClubId: { type: ObjectId, ref: "Club" },
+    // free/registered (old site), signing, transfer, released (left the club), expired (contract ended)
     transferType: { type: String, default: "free" },
+    contractEndDate: Date,
+    postLink: { type: String, default: "" },
+    seat: Number,
     legacy: { type: Mixed },
   },
   opts

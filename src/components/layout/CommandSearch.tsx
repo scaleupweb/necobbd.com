@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Search, X, User, Shield, Trophy, Swords, Newspaper, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { noClubLabel } from "@/lib/squad";
 
 export function CommandSearch({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
@@ -133,7 +134,7 @@ export function CommandSearch({ isOpen, onClose }: { isOpen: boolean; onClose: (
                           {p.fullName}
                         </div>
                         <div className="text-[10px] text-slate-500">
-                          @{p.username} • {p.club?.name || "Free Agent"}
+                          @{p.username} • {p.club?.name || noClubLabel(p)}
                         </div>
                       </div>
                     </div>

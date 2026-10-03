@@ -15,6 +15,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { getFormColor, formatCurrency } from "@/lib/utils";
+import { noClubLabel } from "@/lib/squad";
 
 const RANKING_TABS = [
   { id: "players", label: "Player Elo Rankings", href: "/rankings" },
@@ -182,7 +183,7 @@ export default function RankingsPage() {
                   </td>
 
                   <td className="py-3.5 px-4 text-slate-700 font-medium">
-                    {p.club?.name || "Free Agent"}
+                    {p.club?.name || noClubLabel(p)}
                   </td>
 
                   <td className="py-3.5 px-4 text-center font-mono text-slate-700">

@@ -1211,6 +1211,16 @@ export const db = {
     }
     await Player.updateOne({ _id: player._id }, { $unset: { clubId: 1, shirtNo: 1, seat: 1 }, $set: { "contract.status": "FREE_AGENT" } });
     await User.updateOne({ _id: userId }, { $unset: { clubId: 1 } });
+    await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: club?.name || "",
+      oldClubId: club?._id,
+      newClubName: "No club",
+      fee: 0,
+      approvedBy: "Player",
+      transferType: "released",
+    });
     if (club) {
       await Club.updateOne({ _id: club._id }, { $pull: { staff: { userId: oid(userId) } } });
       if (club.managerId) await db.notify(String(club.managerId), "Player left the club", `${player.fullName} has left ${club.name}.`, "/dashboard/my-club/squad");
@@ -1574,7 +1584,7 @@ export const db = {
     if (player.clubId && String(player.clubId) === clubId) throw new ServiceError("Player already belongs to this club", 409);
     if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined a club recently and is frozen for ${FREEZE_DAYS} days`, 409);
     await assertSquadSpace(club._id, player._id);
-    const oldClub = player.clubId ? await Club.findById(player.clubId, { name: 1 }).lean<any>() : null;
+    const oldClub = player.clubId ? await Club.findById(player.clubId, { name: 1, _id: 1 }).lean<any>() : null;
     player.clubId = club._id;
     player.contract = { status: "UNDER_CONTRACT", durationMonths: 12, endDate: new Date(Date.now() + 365 * 86400000) } as any;
     await player.save();
@@ -1582,10 +1592,14 @@ export const db = {
     const hist = await TransferHistory.create({
       playerId,
       playerName: player.fullName,
-      previousClubName: oldClub?.name || "Free Agent",
+      previousClubName: oldClub?.name || "No club",
+      oldClubId: oldClub?._id,
       newClubName: club.name,
+      newClubId: club._id,
       fee,
       approvedBy: approverName,
+      transferType: "transfer",
+      contractEndDate: player.contract?.endDate,
     });
     await db.addActivityEvent({
       type: "TRANSFER",
@@ -1666,6 +1680,9 @@ export const db = {
       fee: 0,
       approvedBy: approverName,
       transferType: "signing",
+      contractEndDate: player.contract?.endDate,
+      postLink: r.postLink || "",
+      seat,
     });
     await db.addActivityEvent({
       type: "TRANSFER",
@@ -1692,8 +1709,23 @@ export const db = {
     if (!force && now - lastContractSweep < 5 * 60 * 1000) return 0;
     lastContractSweep = now;
     await connectDB();
-    const expired = await Player.find({ clubId: { $ne: null }, "contract.endDate": { $lt: new Date(now) } }, { _id: 1, userId: 1 }).lean<any>();
+    const expired = await Player.find({ clubId: { $ne: null }, "contract.endDate": { $lt: new Date(now) } }, { _id: 1, userId: 1, fullName: 1, clubId: 1, contract: 1 }).lean<any>();
     if (!expired.length) return 0;
+    const exClubs = await clubMap(expired.map((p: any) => p.clubId));
+    await TransferHistory.insertMany(
+      expired.map((p: any) => ({
+        playerId: p._id,
+        playerName: p.fullName,
+        previousClubName: exClubs.get(String(p.clubId))?.name || "",
+        oldClubId: p.clubId,
+        newClubName: "Free Agent",
+        fee: 0,
+        approvedBy: "System",
+        transferType: "expired",
+        transferDate: p.contract?.endDate || new Date(now),
+        contractEndDate: p.contract?.endDate,
+      }))
+    );
     const ids = expired.map((p: any) => p._id);
     await Player.updateMany({ _id: { $in: ids } }, { $unset: { clubId: 1, seat: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
     const userIds = expired.map((p: any) => p.userId).filter(Boolean);
@@ -1794,15 +1826,23 @@ export const db = {
     await connectDB();
     const list = await TransferHistory.find({ playerId }).sort({ transferDate: -1 }).lean();
     const clubs = await clubMap(list.flatMap((h: any) => [h.newClubId, h.oldClubId]).filter(Boolean));
-    return list.map((h: any) => ({
-      id: String(h._id),
-      date: new Date(h.transferDate).toISOString(),
-      newClub: clubMini(clubs.get(String(h.newClubId))) || { name: h.newClubName },
-      oldClub: h.oldClubId ? clubMini(clubs.get(String(h.oldClubId))) || { name: h.previousClubName } : null,
-      fee: h.fee || 0,
-      type: h.transferType || "free",
-      shirtNo: h.legacy?.shirtNo || "",
-    }));
+    return list.map((h: any) => {
+      const contractEnd = h.contractEndDate || h.legacy?.contractTill;
+      return {
+        id: String(h._id),
+        date: new Date(h.transferDate).toISOString(),
+        newClub: h.newClubId ? clubMini(clubs.get(String(h.newClubId))) || { name: h.newClubName } : h.newClubName ? { name: h.newClubName } : null,
+        oldClub: h.oldClubId ? clubMini(clubs.get(String(h.oldClubId))) || { name: h.previousClubName } : null,
+        oldClubName: h.previousClubName || "",
+        fee: h.fee || 0,
+        type: h.transferType || "free",
+        shirtNo: h.legacy?.shirtNo || "",
+        seat: h.seat || null,
+        contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,
+        postLink: h.postLink || h.legacy?.fbPost || "",
+        approvedBy: h.approvedBy || "",
+      };
+    });
   },
 
   async getTransferHistory() {

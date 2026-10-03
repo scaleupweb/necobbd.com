@@ -183,7 +183,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
                   <img src={p.avatar} alt="" className="w-9 h-9 rounded-lg object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold text-black truncate">{p.fullName}</div>
-                    <div className="text-[11px] text-slate-500 truncate">{p.club?.shortName || "Free agent"} · {p.rating}</div>
+                    <div className="text-[11px] text-slate-500 truncate">{p.club?.shortName || "No club"} · {p.rating}</div>
                   </div>
                 </Link>
               ))}

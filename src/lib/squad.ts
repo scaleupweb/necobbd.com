@@ -45,6 +45,12 @@ export const contractDaysLeft = (endDate?: string | Date | null) => (endDate ? M
 /** Still frozen after joining? */
 export const isFrozen = (frozenUntil?: string | Date | null) => !!frozenUntil && new Date(frozenUntil).getTime() > Date.now();
 
+/** "Free Agent" = had a club contract that has run out. Players who never had one are just "No club". */
+export const isFreeAgent = (p: any) => !p?.club && !!p?.contract?.endDate && new Date(p.contract.endDate).getTime() < Date.now();
+
+/** Label for a player without a club. */
+export const noClubLabel = (p?: any) => (p && isFreeAgent(p) ? "Free Agent" : "No club");
+
 /** "2d 5h" style countdown until the freeze ends. */
 export function freezeLeft(frozenUntil?: string | Date | null) {
   const ms = frozenUntil ? new Date(frozenUntil).getTime() - Date.now() : 0;

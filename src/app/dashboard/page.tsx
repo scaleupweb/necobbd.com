@@ -20,6 +20,7 @@ import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { toast, confirmDialog } from "@/lib/feedback";
 import { LocationInput } from "@/components/ui/LocationInput";
+import { noClubLabel } from "@/lib/squad";
 
 type Tab = "overview" | "profile" | "security";
 
@@ -166,7 +167,7 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
   const leaveClub = async () => {
     const yes = await confirmDialog({
       title: `Leave ${player.club.name}?`,
-      text: "You become a free agent and can join or be signed by another club.",
+      text: "You will have no club and can join or be signed by another club.",
       confirmText: "Leave club",
       danger: true,
     });
@@ -323,7 +324,7 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
               <Kpi label="MOTM" value={player.motmCount} />
             </div>
             <div className="text-xs text-slate-600">
-              Club: <strong className="text-black">{player.club?.name || "Free agent"}</strong>
+              Club: <strong className="text-black">{player.club?.name || noClubLabel(player)}</strong>
             </div>
           </Card>
         )}

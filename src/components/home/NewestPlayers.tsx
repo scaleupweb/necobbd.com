@@ -23,7 +23,7 @@ export function NewestPlayers({ players }: { players: HomepageData["newestPlayer
                 <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 rounded-full bg-black text-white text-[9px] font-black">{p.position}</span>
               </div>
               <div className="mt-3 text-xs font-black text-[#111111] truncate">{p.name}</div>
-              <div className="text-[10px] text-[#6B7280] truncate">{p.club || "Free agent"}</div>
+              <div className="text-[10px] text-[#6B7280] truncate">{p.club || "No club"}</div>
             </Link>
           ))}
         </div>

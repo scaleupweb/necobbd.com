@@ -162,7 +162,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
                 {match.homePlayer?.fullName || match.homeClub?.name}
               </Link>
               <div className="text-xs text-slate-500 mt-0.5 font-medium">
-                {match.homeClub?.name || "Free Agent"} • {match.homePlayer?.rating ? `${match.homePlayer.rating} rating` : ""}
+                {match.homeClub?.name || "No club"} • {match.homePlayer?.rating ? `${match.homePlayer.rating} rating` : ""}
               </div>
             </div>
           </div>
@@ -210,7 +210,7 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
                 {match.awayPlayer?.fullName || match.awayClub?.name}
               </Link>
               <div className="text-xs text-slate-500 mt-0.5 font-medium">
-                {match.awayClub?.name || "Free Agent"} • {match.awayPlayer?.rating ? `${match.awayPlayer.rating} rating` : ""}
+                {match.awayClub?.name || "No club"} • {match.awayPlayer?.rating ? `${match.awayPlayer.rating} rating` : ""}
               </div>
             </div>
           </div>

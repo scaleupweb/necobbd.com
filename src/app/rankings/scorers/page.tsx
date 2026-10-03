@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Target, Trophy, ArrowLeft } from "lucide-react";
+import { noClubLabel } from "@/lib/squad";
 
 export default function TopScorersPage() {
   const [scorers, setScorers] = useState<any[]>([]);
@@ -69,7 +70,7 @@ export default function TopScorersPage() {
                       </div>
                     </Link>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium">{p.club?.name || "Free Agent"}</td>
+                  <td className="py-3.5 px-4 text-slate-700 font-medium">{p.club?.name || noClubLabel(p)}</td>
                   <td className="py-3.5 px-4 text-center font-mono text-slate-700">{p.stats?.matchesPlayed || 0}</td>
                   <td className="py-3.5 px-4 text-center font-mono text-black font-semibold">
                     {p.stats?.matchesPlayed ? (p.stats.goalsScored / p.stats.matchesPlayed).toFixed(2) : 0}

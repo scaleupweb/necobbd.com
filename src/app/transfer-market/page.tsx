@@ -14,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { formatCurrency, getFormColor } from "@/lib/utils";
+import { noClubLabel } from "@/lib/squad";
 
 export default function TransferMarketPage() {
   const [data, setData] = useState<any>(null);
@@ -213,7 +214,7 @@ export default function TransferMarketPage() {
                       </Link>
                       <div className="text-xs text-slate-500">@{p.username} • {p.preferredPosition}</div>
                       <div className="text-[11px] text-slate-700 font-semibold mt-0.5">
-                        {p.club?.name || "Unattached Free Agent"}
+                        {p.club?.name || noClubLabel(p)}
                       </div>
                     </div>
                   </div>
@@ -229,7 +230,7 @@ export default function TransferMarketPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Contract Duration:</span>
                     <span className="font-mono text-slate-800">
-                      {p.contract?.status === "FREE_AGENT" ? "Free Agent" : `${p.contract?.daysRemaining || 0}d remaining`}
+                      {p.club ? `${p.contract?.daysRemaining || 0}d remaining` : noClubLabel(p)}
                     </span>
                   </div>
                 </div>

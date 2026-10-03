@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Award, ArrowLeft } from "lucide-react";
+import { noClubLabel } from "@/lib/squad";
 
 export default function MotmLeaderboardPage() {
   const [leaders, setLeaders] = useState<any[]>([]);
@@ -68,7 +69,7 @@ export default function MotmLeaderboardPage() {
                       </div>
                     </Link>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium">{p.club?.name || "Free Agent"}</td>
+                  <td className="py-3.5 px-4 text-slate-700 font-medium">{p.club?.name || noClubLabel(p)}</td>
                   <td className="py-3.5 px-4 text-center font-mono text-slate-700">{p.stats?.matchesPlayed || 0}</td>
                   <td className="py-3.5 px-4 text-center font-mono text-black">{p.stats?.goalsScored || 0}</td>
                   <td className="py-3.5 px-4 text-right font-black text-amber-800 font-mono text-base">
