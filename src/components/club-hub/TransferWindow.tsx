@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Search, Lock, Unlock, X, Loader2, CheckCircle2, Clock, XCircle, Snowflake, FileSignature, Image as ImageIcon, Download, Share2, ExternalLink, UserPlus } from "lucide-react";
 import { toast } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
-import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout } from "@/lib/squad";
+import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout, contractDaysLeft, isFrozen, freezeLeft } from "@/lib/squad";
 import { useClubHub } from "./ClubHubContext";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
@@ -47,6 +47,38 @@ export function TransferWindow() {
   );
 }
 
+
+const DAY_MS = 86400000;
+
+/** Contract status line for the player list. */
+function ContractLine({ p }: { p: any }) {
+  const c = p.contract || {};
+  if (p.club) {
+    const left = contractDaysLeft(c.endDate);
+    const start = c.startDate ? new Date(c.startDate).getTime() : c.endDate ? new Date(c.endDate).getTime() - CONTRACT_DAYS * DAY_MS : 0;
+    const day = start ? Math.min(CONTRACT_DAYS, Math.max(1, Math.floor((Date.now() - start) / DAY_MS) + 1)) : 0;
+    const pct = day ? Math.round((day / CONTRACT_DAYS) * 100) : 0;
+    const soon = left > 0 && left <= 30;
+    return (
+      <div className="mt-1 flex items-center gap-2 min-w-0">
+        <div className="w-20 h-1.5 rounded-full bg-slate-200 overflow-hidden shrink-0">
+          <div className={`h-full rounded-full ${soon ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className={`text-[10px] font-bold truncate ${soon ? "text-amber-700" : "text-slate-500"}`}>
+          {c.endDate ? `Day ${day}/${CONTRACT_DAYS} · ${left} day${left === 1 ? "" : "s"} left` : "Under contract"}
+        </span>
+        {isFrozen(p.frozenUntil) && <span className="text-[10px] font-black text-sky-700 shrink-0">❄ {freezeLeft(p.frozenUntil)}</span>}
+      </div>
+    );
+  }
+  const ended = c.endDate && new Date(c.endDate).getTime() < Date.now();
+  return (
+    <div className="mt-1 text-[10px] font-bold text-emerald-700 truncate">
+      Free agent · {ended ? `contract ended ${formatDate(c.endDate)}` : "no contract yet"}
+    </div>
+  );
+}
+
 // =============================================================== Sign player
 
 function SignPlayer() {
@@ -56,6 +88,7 @@ function SignPlayer() {
   const [q, setQ] = useState("");
   const [shown, setShown] = useState(PAGE);
   const [picked, setPicked] = useState<any>(null);
+  const [view, setView] = useState<"all" | "free" | "club" | "ending">("all");
 
   const loadRequests = () =>
     fetch("/api/me/club/transfer-requests", { cache: "no-store" })
@@ -69,8 +102,29 @@ function SignPlayer() {
   const pending = requests.filter((r) => r.status === "PENDING");
   const pendingIds = new Set(pending.map((r) => String(r.playerId)));
   const s = q.trim().toLowerCase();
-  const list = useMemo(() => (players || []).filter((p) => matches(p, s)), [players, s]);
-  useEffect(() => setShown(PAGE), [s]);
+  const list = useMemo(
+    () =>
+      (players || []).filter((p) => {
+        if (view === "free" && p.club) return false;
+        if (view === "club" && !p.club) return false;
+        if (view === "ending") {
+          const left = contractDaysLeft(p.contract?.endDate);
+          if (!p.club || !left || left > 30) return false;
+        }
+        return matches(p, s);
+      }),
+    [players, s, view]
+  );
+  const counts = useMemo(() => {
+    const all = players || [];
+    return {
+      all: all.length,
+      free: all.filter((p) => !p.club).length,
+      club: all.filter((p) => p.club).length,
+      ending: all.filter((p) => p.club && contractDaysLeft(p.contract?.endDate) > 0 && contractDaysLeft(p.contract?.endDate) <= 30).length,
+    };
+  }, [players]);
+  useEffect(() => setShown(PAGE), [s, view]);
 
   return (
     <div className="space-y-4">
@@ -84,6 +138,24 @@ function SignPlayer() {
             <span className="inline-flex items-center gap-1"><Unlock className="w-3.5 h-3.5 text-emerald-600" /> Free agent — can be signed</span>
             <span className="inline-flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-slate-400" /> Already in a club</span>
             <span className="ml-auto font-bold">{players ? `${list.length} players` : "Loading…"}</span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+            {([
+              ["all", "All"],
+              ["free", "Free agents"],
+              ["club", "In a club"],
+              ["ending", "Contract ending ≤30d"],
+            ] as const).map(([v, l]) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap border transition-colors ${
+                  view === v ? "bg-black border-black text-white" : "bg-white border-slate-200 text-slate-600 hover:border-slate-400"
+                }`}
+              >
+                {l} <span className={view === v ? "text-white/60" : "text-slate-400"}>{counts[v]}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -108,6 +180,7 @@ function SignPlayer() {
                     <div className="text-[11px] text-slate-500 truncate">
                       <span className="font-mono">{p.konamiId || "no UID"}</span> · @{p.username}
                     </div>
+                    <ContractLine p={p} />
                   </div>
                   {locked ? (
                     <span className="inline-flex items-center gap-1.5 max-w-[45%] px-2.5 py-1.5 rounded-xl bg-slate-100 text-[11px] font-bold text-slate-500">
