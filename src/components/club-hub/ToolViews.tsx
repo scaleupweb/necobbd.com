@@ -165,13 +165,12 @@ export function UpdatePlayerInfo() {
 }
 
 function PlayerEditor({ player, squad, onSaved }: { player: any; squad: any[]; onSaved: () => Promise<void> }) {
-  const { club } = useClubHub();
   const [cardBusy, setCardBusy] = useState(false);
   const downloadCard = async () => {
     setCardBusy(true);
     try {
       const canvas = document.createElement("canvas");
-      await renderPlayerCard(canvas, player, club);
+      await renderPlayerCard(canvas, player);
       await downloadCanvas(canvas, `${player.username}-player-card.png`);
       toast.success("Player card downloaded");
     } catch (e: any) {
