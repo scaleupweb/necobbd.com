@@ -35,7 +35,7 @@ export default function ClubToolPage() {
   const { club } = useClubHub();
   const tool = toolBySlug(slug);
 
-  if (!tool || !canOpen(tool, club.access)) {
+  if (!tool || !canOpen(tool, club.access, club.permissions)) {
     return (
       <div className="py-16 text-center space-y-3">
         <h1 className="text-lg font-black text-slate-950">{tool ? "Managers only" : "Tool not found"}</h1>

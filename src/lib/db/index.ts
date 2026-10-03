@@ -115,7 +115,15 @@ function shapePlayer(p: any, clubs: Map<string, any>) {
   };
 }
 
-function shapeClub(c: any, extra: { squadCount?: number; managerName?: string; squadValue?: number } = {}) {
+export const MAX_CLUB_STAFF = 10;
+
+/** Tools a custom staff member may use. Legacy "info_change" staff keep their club info/logo rights. */
+function staffPermissions(s: any): string[] {
+  if (s.permissions?.length) return s.permissions;
+  return s.access === "info_change" ? ["change-info", "change-logo"] : [];
+}
+
+function shapeClub(c: any,extra: { squadCount?: number; managerName?: string; squadValue?: number } = {}) {
   const s = c.stats || {};
   const out = plain<any>(c);
   return {
@@ -1062,18 +1070,92 @@ export const db = {
   },
 
   /**
-   * What this user may do with a club: MANAGER (club owner account), FULL (staff with
-   * full control) or INFO (staff allowed to edit club info only). Null = no access.
+   * What this user may do with a club: MANAGER (main manager), FULL (staff with full
+   * control) or CUSTOM (staff limited to the tools ticked for them). Null = no access.
    */
-  async getClubAccess(userId: string, clubId: string): Promise<"MANAGER" | "FULL" | "INFO" | null> {
-    if (!isId(userId) || !isId(clubId)) return null;
+  async getClubAccess(userId: string, clubId: string): Promise<"MANAGER" | "FULL" | "CUSTOM" | null> {
+    return (await db.getClubPermissions(userId, clubId)).access;
+  },
+
+  /** Access level plus, for CUSTOM staff, the Club Control Center tools they may use. */
+  async getClubPermissions(userId: string, clubId: string): Promise<{ access: "MANAGER" | "FULL" | "CUSTOM" | null; permissions: string[] }> {
+    if (!isId(userId) || !isId(clubId)) return { access: null, permissions: [] };
     await connectDB();
     const club = await Club.findById(clubId, { managerId: 1, staff: 1 }).lean<any>();
-    if (!club) return null;
-    if (club.managerId && String(club.managerId) === userId) return "MANAGER";
+    if (!club) return { access: null, permissions: [] };
+    if (club.managerId && String(club.managerId) === userId) return { access: "MANAGER", permissions: [] };
     const entry = (club.staff || []).find((s: any) => String(s.userId) === userId);
-    if (!entry) return null;
-    return entry.access === "full_control" ? "FULL" : "INFO";
+    if (!entry) return { access: null, permissions: [] };
+    if (entry.access === "full_control") return { access: "FULL", permissions: [] };
+    return { access: "CUSTOM", permissions: staffPermissions(entry) };
+  },
+
+  /** May this user use a given Club Control Center tool for this club? */
+  async canUseClubTool(userId: string, clubId: string, tool: string) {
+    const { access, permissions } = await db.getClubPermissions(userId, clubId);
+    return access === "MANAGER" || access === "FULL" || (access === "CUSTOM" && permissions.includes(tool));
+  },
+
+  /** Club staff with their names and photos (for Access Control). */
+  async getClubStaff(clubId: string) {
+    if (!isId(clubId)) return [];
+    await connectDB();
+    const club = await Club.findById(clubId, { staff: 1 }).lean<any>();
+    const staff = club?.staff || [];
+    if (!staff.length) return [];
+    const ids = staff.map((s: any) => s.userId);
+    const [users, players] = await Promise.all([
+      User.find({ _id: { $in: ids } }, { fullName: 1, username: 1, avatar: 1 }).lean<any>(),
+      Player.find({ userId: { $in: ids } }, { userId: 1, fullName: 1, username: 1, avatar: 1, clubId: 1 }).lean<any>(),
+    ]);
+    const um = new Map(users.map((u: any) => [String(u._id), u]));
+    const pm = new Map(players.map((p: any) => [String(p.userId), p]));
+    return staff.map((s: any) => {
+      const id = String(s.userId);
+      const p: any = pm.get(id);
+      const u: any = um.get(id) || {};
+      return {
+        userId: id,
+        playerId: p ? String(p._id) : undefined,
+        fullName: p?.fullName || u.fullName || "Unknown",
+        username: p?.username || u.username || "",
+        avatar: p?.avatar || u.avatar || PLACEHOLDER.avatar,
+        inSquad: !!p && String(p.clubId || "") === clubId,
+        access: s.access === "full_control" ? "full_control" : "custom",
+        permissions: s.access === "full_control" ? [] : staffPermissions(s),
+      };
+    });
+  },
+
+  /** Grant or change a squad player's staff access. Max 10 staff per club. */
+  async setClubStaff(clubId: string, playerId: string, access: "full_control" | "custom", permissions: string[]) {
+    if (!isId(clubId) || !isId(playerId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const club = await Club.findById(clubId, { managerId: 1, staff: 1, name: 1 }).lean<any>();
+    if (!club) throw new ServiceError("Club not found", 404);
+    const player = await Player.findById(playerId, { userId: 1, clubId: 1, fullName: 1 }).lean<any>();
+    if (!player || String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
+    if (!player.userId) throw new ServiceError("That player has no account to sign in with", 400);
+    const userId = String(player.userId);
+    if (String(club.managerId || "") === userId) throw new ServiceError("The main manager already has full control", 400);
+    if (access === "custom" && !permissions.length) throw new ServiceError("Tick at least one tool, or choose Full control", 400);
+
+    const staff = club.staff || [];
+    const exists = staff.some((s: any) => String(s.userId) === userId);
+    if (!exists && staff.length >= MAX_CLUB_STAFF) throw new ServiceError(`A club can give access to at most ${MAX_CLUB_STAFF} players`, 409);
+
+    const entry = { userId: player.userId, access, permissions: access === "custom" ? permissions : [] };
+    if (exists) await Club.updateOne({ _id: clubId, "staff.userId": player.userId }, { $set: { "staff.$": entry } });
+    else await Club.updateOne({ _id: clubId }, { $push: { staff: entry } });
+    await db.notify(userId, `Club access: ${club.name}`, access === "full_control" ? `You now have full control of ${club.name}.` : `You can now use ${permissions.length} club tool${permissions.length === 1 ? "" : "s"} for ${club.name}.`, "/dashboard/my-club");
+    return db.getClubStaff(clubId);
+  },
+
+  async removeClubStaff(clubId: string, userId: string) {
+    if (!isId(clubId) || !isId(userId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    await Club.updateOne({ _id: clubId }, { $pull: { staff: { userId: oid(userId) } } });
+    return db.getClubStaff(clubId);
   },
 
   /**

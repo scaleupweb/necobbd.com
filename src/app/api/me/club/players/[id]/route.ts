@@ -13,8 +13,7 @@ export const PATCH = handle(async (req: NextRequest, { params }: { params: Promi
 
   const player = await db.getPlayerById(id);
   if (!player || !player.clubId) return fail("Player not found in a club", 404, "NOT_FOUND");
-  const access = await db.getClubAccess(session.id, player.clubId);
-  if (access !== "MANAGER" && access !== "FULL") return fail("Only your club's managers can update squad players", 403, "FORBIDDEN");
+  if (!(await db.canUseClubTool(session.id, player.clubId, "update-player"))) return fail("You don't have access to update squad players", 403, "FORBIDDEN");
 
   const updates: Record<string, any> = {};
   if (data.avatar !== undefined) updates.avatar = data.avatar;

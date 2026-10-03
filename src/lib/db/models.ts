@@ -102,7 +102,8 @@ const ClubSchema = new Schema<any>(
     isAcademy: { type: Boolean, default: false },
     // Other users allowed to manage this club (from the old site's club access list).
     staff: {
-      type: [new Schema<any>({ userId: { type: ObjectId, ref: "User" }, access: { type: String, default: "full_control" } }, { _id: false })],
+      // access: "full_control" | "custom" (legacy "info_change"); permissions = Club Control Center tool slugs for custom staff
+      type: [new Schema<any>({ userId: { type: ObjectId, ref: "User" }, access: { type: String, default: "full_control" }, permissions: { type: [String], default: [] } }, { _id: false })],
       default: [],
     },
     legacy: { type: Mixed },

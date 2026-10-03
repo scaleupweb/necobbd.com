@@ -14,7 +14,7 @@ export default function ClubControlCenter() {
 
   const tools = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return TOOLS.filter((t) => canOpen(t, club.access) && (!s || `${t.label} ${t.desc}`.toLowerCase().includes(s)));
+    return TOOLS.filter((t) => canOpen(t, club.access, club.permissions) && (!s || `${t.label} ${t.desc}`.toLowerCase().includes(s)));
   }, [q, club.access]);
 
   return (

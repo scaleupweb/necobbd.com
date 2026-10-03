@@ -10,7 +10,7 @@ import { GROUPS, TOOLS, canOpen } from "@/components/club-hub/tools";
 const ACCESS_LABEL: Record<string, string> = {
   MANAGER: "Main manager",
   FULL: "Moderator · full control",
-  INFO: "Moderator · info only",
+  CUSTOM: "Staff · custom access",
 };
 
 export default function MyClubLayout({ children }: { children: React.ReactNode }) {
@@ -63,7 +63,7 @@ export default function MyClubLayout({ children }: { children: React.ReactNode }
     );
   }
 
-  const tools = TOOLS.filter((t) => canOpen(t, club.access));
+  const tools = TOOLS.filter((t) => canOpen(t, club.access, club.permissions));
 
   return (
     <ClubHubContext.Provider value={{ club, reload }}>

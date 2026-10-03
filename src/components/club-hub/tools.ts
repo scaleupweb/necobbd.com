@@ -30,8 +30,6 @@ export type ClubTool = {
   group: ToolGroup;
   /** Built and working. Others show a "coming soon" screen until specified. */
   ready: boolean;
-  /** Club moderators with "info only" access may open these; everything else is manager-only. */
-  infoAccess?: boolean;
 };
 
 export const GROUPS: { id: ToolGroup; label: string; tone: string; tile: string }[] = [
@@ -57,8 +55,8 @@ export const TOOLS: ClubTool[] = [
   { slug: "update-player", label: "Update Player Info", desc: "Change a squad player's image, Konami ID, device and shirt number.", icon: UserCog, group: "transfers", ready: true },
 
   // Club Administration
-  { slug: "change-info", label: "Change Info", desc: "Slogan, location, Facebook page and about text.", icon: PenLine, group: "admin", ready: true, infoAccess: true },
-  { slug: "change-logo", label: "Change Logo", desc: "Club logo and cover image.", icon: ImageIcon, group: "admin", ready: true, infoAccess: true },
+  { slug: "change-info", label: "Change Info", desc: "Slogan, location, Facebook page and about text.", icon: PenLine, group: "admin", ready: true },
+  { slug: "change-logo", label: "Change Logo", desc: "Club logo and cover image.", icon: ImageIcon, group: "admin", ready: true },
   { slug: "team-control", label: "Team Control", desc: "Academy, youth and overseas settings.", icon: SlidersHorizontal, group: "admin", ready: false },
   { slug: "wallet", label: "Club Wallet", desc: "Club balance and wallet activity.", icon: Wallet, group: "admin", ready: false },
   { slug: "access-control", label: "Access Control", desc: "Main manager hand-over and staff permissions.", icon: KeyRound, group: "admin", ready: true },
@@ -71,6 +69,9 @@ export const TOOLS: ClubTool[] = [
 
 export const toolBySlug = (slug: string) => TOOLS.find((t) => t.slug === slug);
 
-/** Whether a club access level may open a tool. */
-export const canOpen = (tool: ClubTool, access?: string | null) =>
-  access === "MANAGER" || access === "FULL" || (access === "INFO" && !!tool.infoAccess);
+/** Tools that can be ticked for custom staff. Access Control stays with the main manager and full-control staff. */
+export const GRANTABLE_TOOL_SLUGS = TOOLS.filter((t) => t.slug !== "access-control").map((t) => t.slug);
+
+/** Whether a club member with this access (and, for custom staff, these tools) may open a tool. */
+export const canOpen = (tool: ClubTool, access?: string | null, permissions: string[] = []) =>
+  access === "MANAGER" || access === "FULL" || (access === "CUSTOM" && tool.slug !== "access-control" && permissions.includes(tool.slug));

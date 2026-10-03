@@ -30,8 +30,7 @@ export const POST = handle(async (req: NextRequest) => {
   const data = await parseBody(req, ClubRegisterPlayerSchema);
 
   const clubId = await db.getEditableClubId(session.id);
-  const access = clubId ? await db.getClubAccess(session.id, clubId) : null;
-  if (!clubId || (access !== "MANAGER" && access !== "FULL")) return fail("Only your club's managers can register players", 403, "FORBIDDEN");
+  if (!clubId || !(await db.canUseClubTool(session.id, clubId, "register-player"))) return fail("You don't have access to register players", 403, "FORBIDDEN");
   const club = await db.getClubById(clubId);
   if (!club) return fail("Club not found", 404, "NOT_FOUND");
   if (club.status !== "ACTIVE") return fail("Your club must be approved before registering players", 409, "CONFLICT");
