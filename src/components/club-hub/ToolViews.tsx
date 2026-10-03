@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog } from "lucide-react";
+import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog, Download } from "lucide-react";
 import { DEVICE_MODELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
@@ -11,6 +11,7 @@ import { LocationInput } from "@/components/ui/LocationInput";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useClubHub } from "./ClubHubContext";
 import { ClubToolsMenu } from "./ClubToolsMenu";
+import { renderPlayerCard, downloadCanvas } from "./canvas";
 import { SquadSeats, SquadCapacity } from "@/components/club/SquadSeats";
 import { SQUAD_LIMIT, isFrozen, freezeLeft, contractDaysLeft } from "@/lib/squad";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
@@ -164,6 +165,21 @@ export function UpdatePlayerInfo() {
 }
 
 function PlayerEditor({ player, squad, onSaved }: { player: any; squad: any[]; onSaved: () => Promise<void> }) {
+  const { club } = useClubHub();
+  const [cardBusy, setCardBusy] = useState(false);
+  const downloadCard = async () => {
+    setCardBusy(true);
+    try {
+      const canvas = document.createElement("canvas");
+      await renderPlayerCard(canvas, player, club);
+      await downloadCanvas(canvas, `${player.username}-player-card.png`);
+      toast.success("Player card downloaded");
+    } catch (e: any) {
+      toast.error(e.message || "Could not create the card");
+    } finally {
+      setCardBusy(false);
+    }
+  };
   const clean = (v?: string) => (v && !v.startsWith("/images/placeholders") ? v : "");
   const [f, setF] = useState({
     avatar: clean(player.avatar),
@@ -233,9 +249,19 @@ function PlayerEditor({ player, squad, onSaved }: { player: any; squad: any[]; o
           </label>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={downloadCard}
+            disabled={cardBusy}
+            title="Download this player's current details as an image"
+            className="px-4 py-2.5 rounded-xl bg-[#C79A3B] text-black text-xs font-bold inline-flex items-center justify-center gap-1.5 hover:bg-[#d8ad52] disabled:opacity-60"
+          >
+            {cardBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Download player card
+          </button>
           <SaveButton busy={busy} />
         </div>
+        <p className="text-[11px] text-slate-400 text-right">The card uses the player&apos;s saved details — save first if you changed something.</p>
       </form>
     </Card>
   );

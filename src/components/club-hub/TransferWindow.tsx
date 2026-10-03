@@ -7,6 +7,7 @@ import { toast } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
 import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout, contractDaysLeft, isFrozen, freezeLeft, isFreeAgent } from "@/lib/squad";
 import { useClubHub } from "./ClubHubContext";
+import { loadImage, fitFont, drawCover, roundRect } from "./canvas";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
 const PAGE = 40;
@@ -599,44 +600,6 @@ function MyRequests({ requests }: { requests: any[] }) {
 }
 
 // =============================================================== Transfer card
-
-function loadImage(src: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    if (!src) return resolve(null);
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-}
-
-function fitFont(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, size: number, weight = 900) {
-  let s = size;
-  do {
-    ctx.font = `${weight} ${s}px "Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    s -= 2;
-  } while (s > 18);
-  return s;
-}
-
-function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
-  const r = Math.max(w / img.width, h / img.height);
-  const iw = img.width * r;
-  const ih = img.height * r;
-  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
 
 async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
   const W = 1080;
