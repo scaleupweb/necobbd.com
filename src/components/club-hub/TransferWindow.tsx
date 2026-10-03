@@ -766,10 +766,7 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
   // Name
   ctx.fillStyle = "#fff";
   fitFont(ctx, player.fullName.toUpperCase(), W - 140, 96);
-  ctx.fillText(player.fullName.toUpperCase(), W / 2, 1082);
-  ctx.fillStyle = "rgba(255,255,255,0.6)";
-  ctx.font = `600 34px "JetBrains Mono", Consolas, monospace`;
-  ctx.fillText(player.konamiId ? `UID ${player.konamiId}` : `@${player.username}`, W / 2, 1136);
+  ctx.fillText(player.fullName.toUpperCase(), W / 2, 1110);
 
   // Bottom ribbon
   const rw = 560;
