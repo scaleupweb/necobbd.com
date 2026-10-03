@@ -1078,7 +1078,10 @@ export const db = {
   async getMainManagedClub(userId: string) {
     if (!isId(userId)) return null;
     await connectDB();
-    return Club.findOne({ managerId: userId }).lean<any>();
+    const list = await Club.find({ managerId: userId }).lean<any>();
+    if (list.length < 2) return list[0] || null;
+    const own = await Player.findOne({ userId }, { clubId: 1 }).lean<any>();
+    return list.find((c: any) => own?.clubId && String(c._id) === String(own.clubId)) || list[0];
   },
 
   /** The club this user may manage: its manager, or a full-control staff member. */
@@ -1232,8 +1235,12 @@ export const db = {
   async getEditableClubId(userId: string, fallbackClubId?: string) {
     if (!isId(userId)) return fallbackClubId;
     await connectDB();
-    const c = await Club.findOne({ $or: [{ managerId: userId }, { "staff.userId": oid(userId) }] }, { _id: 1 }).lean<any>();
-    return c ? String(c._id) : fallbackClubId;
+    const list = await Club.find({ $or: [{ managerId: userId }, { "staff.userId": oid(userId) }] }, { _id: 1, managerId: 1 }).lean<any>();
+    if (!list.length) return fallbackClubId;
+    // Access to several clubs: the club they play for first, then one they're main manager of.
+    const own = await Player.findOne({ userId }, { clubId: 1 }).lean<any>();
+    const pick = list.find((c: any) => own?.clubId && String(c._id) === String(own.clubId)) || list.find((c: any) => String(c.managerId) === userId) || list[0];
+    return String(pick._id);
   },
 
   async updateClubProfile(clubId: string, data: Record<string, any>) {
