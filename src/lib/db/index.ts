@@ -28,7 +28,7 @@ import { calculateNewRating, updateFormHistory } from "../ranking/engine";
 import { calculatePlayerMarketValue } from "../valuation/engine";
 import { DEFAULT_SITE_SETTINGS, mergeSettings, SiteSettings } from "../site-settings";
 import { clubLogo } from "../crest";
-import { SQUAD_LIMIT } from "../squad";
+import { SQUAD_LIMIT, CONTRACT_DAYS, FREEZE_DAYS, SQUADS, seatLayout, isFrozen } from "../squad";
 
 export { isId, slugify };
 
@@ -110,6 +110,7 @@ function shapePlayer(p: any, clubs: Map<string, any>) {
     contract: {
       status: p.contract?.status || "FREE_AGENT",
       durationMonths: p.contract?.durationMonths || 0,
+      startDate: p.contract?.startDate ? new Date(p.contract.startDate).toISOString() : undefined,
       endDate: endDate?.toISOString(),
       daysRemaining: endDate ? Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / 86400000)) : 0,
     },
@@ -117,6 +118,8 @@ function shapePlayer(p: any, clubs: Map<string, any>) {
 }
 
 export const MAX_CLUB_STAFF = 10;
+
+let lastContractSweep = 0;
 
 /** Throws when the club's Main Team Squad already has SQUAD_LIMIT players (ignoring `playerId`). */
 async function assertSquadSpace(clubId: any, playerId?: any) {
@@ -407,6 +410,7 @@ export const db = {
   // ----- Players -----
   async getPlayers(filter: { position?: string; clubId?: string; search?: string; status?: string; limit?: number } = {}) {
     await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
     const q: any = {};
     if (filter.position && filter.position !== "ALL") q.preferredPosition = filter.position;
     if (filter.clubId && filter.clubId !== "ALL" && isId(filter.clubId)) q.clubId = filter.clubId;
@@ -527,6 +531,7 @@ export const db = {
 
   async getClubBySlug(slug: string) {
     await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
     const c = await Club.findOne({ slug }).lean<any>();
     return c ? db._clubDetail(c) : null;
   },
@@ -534,6 +539,7 @@ export const db = {
   async getClubById(id: string) {
     if (!isId(id)) return null;
     await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
     const c = await Club.findById(id).lean<any>();
     return c ? db._clubDetail(c) : null;
   },
@@ -1196,13 +1202,14 @@ export const db = {
   async leaveClub(userId: string) {
     if (!isId(userId)) throw new ServiceError("Invalid user", 400);
     await connectDB();
-    const player = await Player.findOne({ userId }, { clubId: 1, fullName: 1 }).lean<any>();
+    const player = await Player.findOne({ userId }, { clubId: 1, fullName: 1, frozenUntil: 1 }).lean<any>();
     if (!player?.clubId) throw new ServiceError("You are not in a club", 400);
+    if (isFrozen(player.frozenUntil)) throw new ServiceError(`You joined recently and are frozen for ${FREEZE_DAYS} days. Try again later.`, 409);
     const club = await Club.findById(player.clubId, { managerId: 1, name: 1 }).lean<any>();
     if (club && String(club.managerId || "") === userId) {
       throw new ServiceError("You are the club's main manager. Hand the club over to another player before leaving.", 409);
     }
-    await Player.updateOne({ _id: player._id }, { $unset: { clubId: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    await Player.updateOne({ _id: player._id }, { $unset: { clubId: 1, shirtNo: 1, seat: 1 }, $set: { "contract.status": "FREE_AGENT" } });
     await User.updateOne({ _id: userId }, { $unset: { clubId: 1 } });
     if (club) {
       await Club.updateOne({ _id: club._id }, { $pull: { staff: { userId: oid(userId) } } });
@@ -1523,7 +1530,7 @@ export const db = {
     if (filter.status) q.status = filter.status;
     const list = await TransferRequest.find(q).sort({ createdAt: -1 }).lean();
     const [players, clubs] = await Promise.all([
-      Player.find({ _id: { $in: list.map((r: any) => r.playerId) } }, { fullName: 1, username: 1, avatar: 1 }).lean(),
+      Player.find({ _id: { $in: list.map((r: any) => r.playerId) } }, { fullName: 1, username: 1, avatar: 1, konamiId: 1, clubId: 1 }).lean(),
       Club.find({ _id: { $in: list.map((r: any) => r.targetClubId) } }, { name: 1, shortName: 1, slug: 1, logo: 1 }).lean(),
     ]);
     const pm = new Map(players.map((p: any) => [String(p._id), p]));
@@ -1539,7 +1546,14 @@ export const db = {
     if (r.status !== "PENDING") throw new ServiceError("Request already handled", 409);
     r.status = status;
     await r.save();
-    if (status === "ACCEPTED") await db._executeTransfer(String(r.playerId), String(r.targetClubId), r.offeredFee || 0, approverName);
+    if (status === "ACCEPTED") {
+      if (r.type === "SIGNING") await db._executeSigning(r, approverName);
+      else await db._executeTransfer(String(r.playerId), String(r.targetClubId), r.offeredFee || 0, approverName);
+    } else if (r.type === "SIGNING") {
+      const [club, player] = await Promise.all([Club.findById(r.targetClubId, { name: 1, managerId: 1 }).lean<any>(), Player.findById(r.playerId, { fullName: 1 }).lean<any>()]);
+      const to = r.requesterUserId || club?.managerId;
+      if (to) await db.notify(String(to), "Transfer request declined", `The request to sign ${player?.fullName || "the player"} for ${club?.name || "your club"} was not approved.`, "/dashboard/my-club/transfer-window");
+    }
     return plain(r.toObject());
   },
 
@@ -1558,6 +1572,7 @@ export const db = {
     const [player, club] = await Promise.all([Player.findById(playerId), Club.findById(clubId)]);
     if (!player || !club) throw new ServiceError("Player or club not found", 404);
     if (player.clubId && String(player.clubId) === clubId) throw new ServiceError("Player already belongs to this club", 409);
+    if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined a club recently and is frozen for ${FREEZE_DAYS} days`, 409);
     await assertSquadSpace(club._id, player._id);
     const oldClub = player.clubId ? await Club.findById(player.clubId, { name: 1 }).lean<any>() : null;
     player.clubId = club._id;
@@ -1584,6 +1599,107 @@ export const db = {
     });
     if (player.userId) await db.notify(String(player.userId), "Transfer completed", `You are now part of ${club.name}.`, `/clubs/${club.slug}`);
     return plain(hist.toObject());
+  },
+
+  /**
+   * Transfer Window: a club asks to sign a free agent into a squad seat. Needs a Facebook
+   * post link and goes to the admins for approval.
+   */
+  async createSigningRequest(data: { clubId: string; playerId: string; squad: string; seat: number; postLink: string; requesterUserId: string }) {
+    if (!isId(data.clubId) || !isId(data.playerId)) throw new ServiceError("Invalid player or club", 400);
+    await connectDB();
+    await db.releaseExpiredContracts(true);
+    const squadDef = SQUADS.find((x) => x.id === data.squad);
+    if (!squadDef) throw new ServiceError("Choose a squad", 400);
+    const [player, club] = await Promise.all([Player.findById(data.playerId).lean<any>(), Club.findById(data.clubId).lean<any>()]);
+    if (!player || !club) throw new ServiceError("Player or club not found", 404);
+    if (club.status !== "ACTIVE") throw new ServiceError("Your club must be approved before signing players", 409);
+    if (player.clubId) throw new ServiceError(`${player.fullName} is already in a club`, 409);
+    if (player.status && player.status !== "ACTIVE") throw new ServiceError(`${player.fullName} can't be signed right now`, 409);
+    const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+    if (squad.length >= squadDef.size) throw new ServiceError(`${squadDef.label} is full`, 409);
+    if (!Number.isInteger(data.seat) || data.seat < 1 || data.seat > squadDef.size) throw new ServiceError("Choose a seat", 400);
+    if (seatLayout(squad, squadDef.size)[data.seat - 1]) throw new ServiceError(`Seat ${data.seat} is already taken`, 409);
+    const pending = await TransferRequest.find({ targetClubId: club._id, type: "SIGNING", status: "PENDING" }, { playerId: 1, seat: 1 }).lean<any>();
+    if (pending.some((r: any) => String(r.playerId) === data.playerId)) throw new ServiceError("You already requested this player", 409);
+    if (pending.some((r: any) => r.seat === data.seat)) throw new ServiceError(`Seat ${data.seat} is reserved by another pending request`, 409);
+    if (squad.length + pending.length >= squadDef.size) throw new ServiceError(`${squadDef.label} has no free seats left (including pending requests)`, 409);
+    const r = await TransferRequest.create({
+      playerId: player._id,
+      targetClubId: club._id,
+      type: "SIGNING",
+      squad: data.squad,
+      seat: data.seat,
+      postLink: data.postLink,
+      offeredFee: 0,
+      requesterUserId: data.requesterUserId,
+    });
+    return plain(r.toObject());
+  },
+
+  /** Admin approved a signing: the player joins the seat on a 120-day contract, frozen for 3 days. */
+  async _executeSigning(r: any, approverName: string) {
+    const [player, club] = await Promise.all([Player.findById(r.playerId), Club.findById(r.targetClubId)]);
+    if (!player || !club) throw new ServiceError("Player or club not found", 404);
+    if (player.clubId) throw new ServiceError(`${player.fullName} has joined another club in the meantime`, 409);
+    await assertSquadSpace(club._id, player._id);
+    const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+    let seat = r.seat;
+    if (!seat || seatLayout(squad)[seat - 1]) seat = seatLayout(squad).indexOf(null) + 1; // seat got taken: next free one
+    const now = Date.now();
+    player.clubId = club._id;
+    player.squad = r.squad || "main";
+    player.seat = seat;
+    player.frozenUntil = new Date(now + FREEZE_DAYS * 86400000);
+    player.contract = { status: "UNDER_CONTRACT", durationMonths: 4, startDate: new Date(now), endDate: new Date(now + CONTRACT_DAYS * 86400000) } as any;
+    await player.save();
+    if (player.userId) await User.updateOne({ _id: player.userId }, { $set: { clubId: club._id } });
+    await TransferListing.updateMany({ playerId: player._id, status: { $ne: "CLOSED" } }, { $set: { status: "CLOSED" } });
+    // Other clubs' pending requests for this player can no longer happen.
+    await TransferRequest.updateMany({ _id: { $ne: r._id }, playerId: player._id, status: "PENDING" }, { $set: { status: "CANCELLED" } });
+    const hist = await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: "Free Agent",
+      newClubName: club.name,
+      newClubId: club._id,
+      fee: 0,
+      approvedBy: approverName,
+      transferType: "signing",
+    });
+    await db.addActivityEvent({
+      type: "TRANSFER",
+      category: "Transfers",
+      title: `${player.fullName} joined ${club.name}`,
+      description: `Seat ${seat} · ${CONTRACT_DAYS}-day contract`,
+      avatar: player.avatar,
+      targetUrl: `/players/${player.username}`,
+      playerId: String(player._id),
+      userId: player.userId ? String(player.userId) : undefined,
+    });
+    if (player.userId) await db.notify(String(player.userId), `Welcome to ${club.name}!`, `You signed a ${CONTRACT_DAYS}-day contract (seat ${seat}). You are frozen for ${FREEZE_DAYS} days.`, `/clubs/${club.slug}`);
+    const to = r.requesterUserId || club.managerId;
+    if (to) await db.notify(String(to), "Transfer approved", `${player.fullName} has joined ${club.name} in seat ${seat}.`, "/dashboard/my-club/squad");
+    return plain(hist.toObject());
+  },
+
+  /**
+   * Players whose contract has ended become free agents. Runs at most every few minutes
+   * (one cheap query) from the pages that list squads.
+   */
+  async releaseExpiredContracts(force = false) {
+    const now = Date.now();
+    if (!force && now - lastContractSweep < 5 * 60 * 1000) return 0;
+    lastContractSweep = now;
+    await connectDB();
+    const expired = await Player.find({ clubId: { $ne: null }, "contract.endDate": { $lt: new Date(now) } }, { _id: 1, userId: 1 }).lean<any>();
+    if (!expired.length) return 0;
+    const ids = expired.map((p: any) => p._id);
+    await Player.updateMany({ _id: { $in: ids } }, { $unset: { clubId: 1, seat: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    const userIds = expired.map((p: any) => p.userId).filter(Boolean);
+    if (userIds.length) await User.updateMany({ _id: { $in: userIds } }, { $unset: { clubId: 1 } });
+    for (const p of expired) if (p.userId) await db.notify(String(p.userId), "Contract ended", "Your club contract has ended. You are now a free agent.", "/dashboard");
+    return expired.length;
   },
 
   /**

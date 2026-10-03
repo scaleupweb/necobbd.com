@@ -38,6 +38,7 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { toMatchLines, snapshot, monthlyLoad, seasons, humanGap, aboutText, MatchLine } from "@/lib/player-insights";
 import { LineChart, BarChart, Gauge, Donut } from "@/components/profile/Charts";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { CONTRACT_DAYS, isFrozen, freezeLeft } from "@/lib/squad";
 import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
@@ -87,7 +88,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
   const s = player.stats;
   const about = aboutText(player, rankInfo.rank, rankInfo.total, lines, snap, titles.length, settings.brand.siteName);
   const contractDays = player.contract?.daysRemaining || 0;
-  const contractPct = contractDays ? Math.min(100, Math.round((contractDays / 365) * 100)) : 0;
+  const contractPct = contractDays ? Math.min(100, Math.round((contractDays / CONTRACT_DAYS) * 100)) : 0;
   const cover = player.coverImage || (club?.banner && !club.banner.startsWith("/images/placeholders") ? club.banner : "");
   const dob = player.dob ? new Date(player.dob).toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "";
   const season = bySeason[0];
@@ -147,6 +148,11 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
                 <span className="px-2.5 py-1 rounded-full bg-slate-900 text-white text-[10px] font-black tracking-widest uppercase">{player.preferredPosition}</span>
                 {player.shirtNo ? <span className="px-2.5 py-1 rounded-full bg-[#C79A3B] text-black text-[10px] font-black">#{player.shirtNo}</span> : null}
                 {player.status !== "ACTIVE" && <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-[10px] font-black">{player.status.replace(/_/g, " ")}</span>}
+                {isFrozen(player.frozenUntil) && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-[10px] font-black" title="Recently joined a club">
+                    ❄ Frozen · {freezeLeft(player.frozenUntil)}
+                  </span>
+                )}
                 {player.club && (
                   <Link href={`/clubs/${player.club.slug}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900 hover:bg-amber-100">
                     <Shield className="w-3 h-3" /> {player.club.name}
@@ -253,7 +259,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
                 <div className="mt-4">
                   <div className="flex justify-between text-[11px] font-bold">
                     <span className="text-slate-500">Contract</span>
-                    <span className="text-black">{contractDays ? `${contractDays} days left` : "Active"}</span>
+                    <span className="text-black">{contractDays ? `${contractDays} of ${CONTRACT_DAYS} days left` : "Active"}</span>
                   </div>
                   <div className="mt-1.5 h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600" style={{ width: `${contractDays ? contractPct : 100}%` }} />

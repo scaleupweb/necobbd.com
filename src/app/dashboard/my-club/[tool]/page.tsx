@@ -17,6 +17,7 @@ import {
   UpdatePlayerInfo,
   RegisterNewPlayer,
 } from "@/components/club-hub/ToolViews";
+import { TransferWindow } from "@/components/club-hub/TransferWindow";
 
 const VIEWS: Record<string, () => React.ReactNode> = {
   squad: () => <SquadRoster />,
@@ -24,6 +25,7 @@ const VIEWS: Record<string, () => React.ReactNode> = {
   "transfer-history": () => <TransferHistory />,
   "update-player": () => <UpdatePlayerInfo />,
   "register-player": () => <RegisterNewPlayer />,
+  "transfer-window": () => <TransferWindow />,
   "change-info": () => <ChangeInfo />,
   "change-logo": () => <ChangeLogo />,
   "access-control": () => <AccessControl />,

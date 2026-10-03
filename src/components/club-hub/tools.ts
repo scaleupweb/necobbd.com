@@ -47,7 +47,7 @@ export const TOOLS: ClubTool[] = [
   { slug: "friendly-challenge", label: "Friendly Challenge", desc: "Challenge another club to a friendly match.", icon: Handshake, group: "team", ready: false },
 
   // Transfers & Roster
-  { slug: "transfer-window", label: "Transfer Window", desc: "Incoming, outgoing and available players.", icon: ArrowLeftRight, group: "transfers", ready: false },
+  { slug: "transfer-window", label: "Transfer Window", desc: "Sign free agents into your squad and make transfer cards.", icon: ArrowLeftRight, group: "transfers", ready: true },
   { slug: "player-loans", label: "Player Loans", desc: "Request loans and answer other clubs' requests.", icon: Repeat, group: "transfers", ready: false },
   { slug: "transfer-history", label: "Transfer History", desc: "Offers you made and their status.", icon: History, group: "transfers", ready: true },
   { slug: "register-player", label: "Register New Player", desc: "Create a new player account directly in your club.", icon: UserPlus, group: "transfers", ready: true },

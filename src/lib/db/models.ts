@@ -59,6 +59,10 @@ const PlayerSchema = new Schema<any>(
     motmCount: { type: Number, default: 0 },
     clubId: { type: ObjectId, ref: "Club" },
     shirtNo: Number,
+    // Main Team Squad seat (1-30) and squad id; frozenUntil = no activity right after joining a club.
+    seat: Number,
+    squad: { type: String, default: "main" },
+    frozenUntil: Date,
     bloodGroup: { type: String, default: "" },
     dob: Date,
     discord: { type: String, default: "" },
@@ -78,6 +82,7 @@ const PlayerSchema = new Schema<any>(
     contract: {
       status: { type: String, default: "FREE_AGENT" },
       durationMonths: { type: Number, default: 0 },
+      startDate: Date,
       endDate: Date,
     },
   },
@@ -268,6 +273,12 @@ const TransferRequestSchema = new Schema<any>(
     message: String,
     status: { type: String, enum: ["PENDING", "ACCEPTED", "REJECTED", "CANCELLED"], default: "PENDING" },
     requesterUserId: { type: ObjectId, ref: "User" },
+    // "OFFER" = transfer-market bid; "SIGNING" = club signs a free agent via the Transfer Window.
+    type: { type: String, enum: ["OFFER", "SIGNING"], default: "OFFER" },
+    squad: { type: String, default: "main" },
+    seat: Number,
+    postLink: { type: String, default: "" },
+    reviewNote: { type: String, default: "" },
   },
   opts
 );

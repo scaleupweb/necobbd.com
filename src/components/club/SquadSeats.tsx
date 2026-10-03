@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Armchair, Plus } from "lucide-react";
-import { SQUAD_LIMIT } from "@/lib/squad";
+import { SQUAD_LIMIT, seatLayout } from "@/lib/squad";
 
 /** "Main Team Squad 23/30" with a fill bar. */
 export function SquadCapacity({ count, className = "" }: { count: number; className?: string }) {
@@ -34,8 +34,7 @@ export function SquadCapacity({ count, className = "" }: { count: number; classN
  * With `openHref`, open seats become "+" buttons linking there (e.g. the transfer window).
  */
 export function SquadSeats({ squad, openHref }: { squad: any[]; openHref?: string }) {
-  const players = [...squad].sort((a, b) => (a.shirtNo || 999) - (b.shirtNo || 999) || a.fullName.localeCompare(b.fullName)).slice(0, SQUAD_LIMIT);
-  const seats = Array.from({ length: SQUAD_LIMIT }, (_, i) => players[i] || null);
+  const seats = seatLayout(squad);
   return (
     <div className="rounded-3xl bg-white border border-slate-200 p-4 sm:p-6 space-y-5">
       <SquadCapacity count={squad.length} />

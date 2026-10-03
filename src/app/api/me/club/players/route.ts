@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, hashPassword } from "@/lib/auth";
 import { ClubRegisterPlayerSchema } from "@/lib/validation";
 import { ok, fail, handle, parseBody, audit, limit } from "@/lib/api";
-import { SQUAD_LIMIT } from "@/lib/squad";
+import { SQUAD_LIMIT, CONTRACT_DAYS, openSeats } from "@/lib/squad";
 
 const RESERVED = new Set(["admin", "administrator", "root", "support", "system", "moderator", "api", "login", "register", "dashboard"]);
 
@@ -60,7 +60,15 @@ export const POST = handle(async (req: NextRequest) => {
     dob: data.dob || undefined,
     clubId,
   });
-  await db.updatePlayer(player.id, { shirtNo: data.shirtNo, "contract.status": "UNDER_CONTRACT" });
+  const now = Date.now();
+  await db.updatePlayer(player.id, {
+    shirtNo: data.shirtNo,
+    seat: openSeats(club.squad)[0],
+    squad: "main",
+    "contract.status": "UNDER_CONTRACT",
+    "contract.startDate": new Date(now),
+    "contract.endDate": new Date(now + CONTRACT_DAYS * 86400000),
+  });
   await db.notify(String(user._id), `Welcome to ${club.name}!`, `${club.name} registered you on the platform. Complete your profile from your dashboard.`, "/dashboard");
   await audit(req, session, "CLUB_REGISTERED_PLAYER", `Club ${club.name}`, `${data.fullName} (@${username})`);
 

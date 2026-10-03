@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, XCircle, X, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, X, Loader2, ExternalLink } from "lucide-react";
+import { toast, confirmDialog } from "@/lib/feedback";
+import { CONTRACT_DAYS, FREEZE_DAYS } from "@/lib/squad";
 import { api, Badge, Button, Empty, Notice, PageHeader, inputCls, statusTone } from "@/components/admin/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -35,12 +37,79 @@ export default function AdminTransfersPage() {
 
   if (!data) return msg ? <Notice kind="err">{msg.text}</Notice> : <div className="py-16 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" /></div>;
 
-  const pending = data.requests.filter((r: any) => r.status === "PENDING");
+  const pending = data.requests.filter((r: any) => r.status === "PENDING" && r.type !== "SIGNING");
+  const signings = data.requests.filter((r: any) => r.status === "PENDING" && r.type === "SIGNING");
+  const decide = async (r: any, status: "ACCEPTED" | "REJECTED") => {
+    const yes = await confirmDialog({
+      title: status === "ACCEPTED" ? `Approve ${r.player?.fullName} → ${r.club?.name}?` : `Reject this transfer request?`,
+      text: status === "ACCEPTED" ? `The player joins seat ${r.seat} on a ${CONTRACT_DAYS}-day contract and is frozen for ${FREEZE_DAYS} days.` : "The club will be notified.",
+      confirmText: status === "ACCEPTED" ? "Approve" : "Reject",
+      danger: status === "REJECTED",
+    });
+    if (!yes) return;
+    try {
+      await api(`/api/admin/transfers/requests/${r.id}`, { method: "PATCH", json: { status } });
+      toast.success(status === "ACCEPTED" ? `${r.player?.fullName} joined ${r.club?.name}` : "Request rejected");
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader title="Transfers" subtitle="Approve club offers, complete listed transfers and review the transfer history. List players from the Players page." />
       {msg && <Notice kind={msg.ok ? "ok" : "err"}>{msg.text}</Notice>}
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-black text-slate-950">Transfer Window requests ({signings.length})</h2>
+        {signings.length === 0 ? (
+          <Empty>No signing requests waiting.</Empty>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {signings.map((r: any) => (
+              <div key={r.id} className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3 text-xs">
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={r.player?.avatar} alt="" className="w-12 h-12 rounded-full object-cover bg-slate-100" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-black text-slate-950 text-sm truncate">{r.player?.fullName}</div>
+                    <div className="text-slate-500 font-mono truncate">{r.player?.konamiId || `@${r.player?.username}`}</div>
+                    {r.player?.clubId && <div className="text-rose-600 font-bold">Already in a club now</div>}
+                  </div>
+                  <span className="text-slate-400 font-black">→</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={r.club?.logo} alt="" className="w-10 h-10 rounded-xl object-cover bg-slate-100" />
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-950 truncate">{r.club?.name}</div>
+                      <div className="text-slate-500">Main Team Squad · Seat {r.seat}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-500">{formatDate(r.createdAt)}</span>
+                    {r.postLink && (
+                      <a href={r.postLink} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100">
+                        <ExternalLink className="w-3.5 h-3.5" /> Facebook post
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button small variant="success" onClick={() => decide(r, "ACCEPTED")}>
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                    </Button>
+                    <Button small variant="secondary" onClick={() => decide(r, "REJECTED")}>
+                      <XCircle className="w-3.5 h-3.5" /> Reject
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-black text-slate-950">Club offers awaiting approval ({pending.length})</h2>
