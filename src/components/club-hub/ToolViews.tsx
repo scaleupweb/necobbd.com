@@ -10,6 +10,7 @@ import { ImageInput } from "@/components/ui/ImageInput";
 import { LocationInput } from "@/components/ui/LocationInput";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useClubHub } from "./ClubHubContext";
+import { ClubToolsMenu } from "./ClubToolsMenu";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
@@ -18,9 +19,12 @@ export function ToolShell({ tool, children }: { tool: ClubTool; children: React.
   const g = GROUPS.find((x) => x.id === tool.group)!;
   return (
     <div className="space-y-5">
-      <Link href="/dashboard/my-club" className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-black">
-        <ArrowLeft className="w-3.5 h-3.5" /> All tools
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/dashboard/my-club" className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-black">
+          <ArrowLeft className="w-3.5 h-3.5" /> All tools
+        </Link>
+        <ClubToolsMenu />
+      </div>
       <div className="flex items-start gap-3.5">
         <span className={`w-12 h-12 rounded-2xl ring-1 flex items-center justify-center shrink-0 ${g.tile}`}>
           <tool.icon className="w-5 h-5" />

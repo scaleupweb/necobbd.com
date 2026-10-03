@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { FitImage } from "@/components/ui/FitImage";
 import { useClubHub } from "@/components/club-hub/ClubHubContext";
 import { GROUPS, TOOLS, canOpen } from "@/components/club-hub/tools";
+import { ClubToolsMenu } from "@/components/club-hub/ClubToolsMenu";
 
 export default function ClubControlCenter() {
   const { club } = useClubHub();
@@ -15,7 +16,7 @@ export default function ClubControlCenter() {
   const tools = useMemo(() => {
     const s = q.trim().toLowerCase();
     return TOOLS.filter((t) => canOpen(t, club.access, club.permissions) && (!s || `${t.label} ${t.desc}`.toLowerCase().includes(s)));
-  }, [q, club.access]);
+  }, [q, club.access, club.permissions]);
 
   return (
     <div className="space-y-5">
@@ -29,8 +30,9 @@ export default function ClubControlCenter() {
       <section className="relative overflow-hidden rounded-3xl bg-[#0B0C0F] text-white">
         <FitImage src={club.banner} className="opacity-30" />
         <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-[#0B0C0F] via-[#0B0C0F]/85 to-[#0B0C0F]/40" />
+        <ClubToolsMenu dark className="absolute top-3 right-3 z-10" />
         <div className="relative p-5 sm:p-7 flex flex-col md:flex-row md:items-center gap-5">
-          <div className="flex items-center gap-4 min-w-0 flex-1">
+          <div className="flex items-center gap-4 min-w-0 flex-1 pr-10 lg:pr-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={club.logo} alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover bg-white ring-4 ring-white/10 shrink-0" />
             <div className="min-w-0">
