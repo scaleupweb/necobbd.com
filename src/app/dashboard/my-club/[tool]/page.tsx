@@ -15,6 +15,7 @@ import {
   AccessControl,
   TournamentRegistration,
   UpdatePlayerInfo,
+  RegisterNewPlayer,
 } from "@/components/club-hub/ToolViews";
 
 const VIEWS: Record<string, () => React.ReactNode> = {
@@ -22,6 +23,7 @@ const VIEWS: Record<string, () => React.ReactNode> = {
   fixtures: () => <ClubFixtures />,
   "transfer-history": () => <TransferHistory />,
   "update-player": () => <UpdatePlayerInfo />,
+  "register-player": () => <RegisterNewPlayer />,
   "change-info": () => <ChangeInfo />,
   "change-logo": () => <ChangeLogo />,
   "access-control": () => <AccessControl />,

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog } from "lucide-react";
 import { DEVICE_MODELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { toast, confirmDialog } from "@/lib/feedback";
+import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { LocationInput } from "@/components/ui/LocationInput";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -219,6 +219,129 @@ function PlayerEditor({ player, squad, onSaved }: { player: any; squad: any[]; o
 
         <div className="flex justify-end">
           <SaveButton busy={busy} />
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- Register New Player
+
+const EMPTY_REG = { avatar: "", email: "", fullName: "", deviceModel: "", password: "", facebookProfile: "", konamiId: "", dob: "", shirtNo: "" };
+
+export function RegisterNewPlayer() {
+  const { club, reload } = useClubHub();
+  const [f, setF] = useState(EMPTY_REG);
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof typeof EMPTY_REG, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const taken = new Set((club.squad || []).map((p: any) => p.shirtNo).filter(Boolean));
+  const freeNumbers = Array.from({ length: 99 }, (_, i) => i + 1).filter((n) => !taken.has(n));
+  const pwOk = f.password.length >= 8 && /[a-z]/.test(f.password) && /[A-Z]/.test(f.password) && /[0-9]/.test(f.password);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!f.avatar) return toast.error("Please upload the player's photo");
+    if (!pwOk) return toast.error("Password needs 8+ characters with uppercase, lowercase and a number");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/me/club/players", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Registration failed");
+      await reload();
+      setF(EMPTY_REG);
+      const esc = (s: string) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+      await infoDialog({
+        icon: "success",
+        title: `${esc(json.data.fullName)} joined ${esc(club.name)}`,
+        html: `The player can sign in with<br/><b>${esc(json.data.email)}</b> or username <b>@${esc(json.data.username)}</b><br/>and the password you set. They can change it from their dashboard.`,
+      });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (club.status !== "ACTIVE") {
+    return <Card className="text-center text-sm text-slate-500 py-12">Your club must be approved by an admin before you can register players.</Card>;
+  }
+
+  const label = (text: string, required = true) => (
+    <span className="text-xs font-bold text-slate-700">
+      {text} {required ? <span className="text-rose-500">*</span> : <span className="font-normal text-slate-400">(optional)</span>}
+    </span>
+  );
+
+  return (
+    <Card>
+      <form onSubmit={submit} className="space-y-5">
+        <div>
+          <h2 className="text-base font-black text-slate-950">Register player — {club.name}</h2>
+          <p className="text-xs text-slate-500">Creates a full player account in your club. The player signs in with the email and password below, like any other player.</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 space-y-1">
+          {label("Player photo")}
+          <p className="text-[11px] text-slate-500 pb-2">Upload a clear face photo. Fake or masked photos will be rejected.</p>
+          <ImageInput label="" value={f.avatar} onChange={(v) => set("avatar", v)} />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <label className="block space-y-1">
+            {label("Player email")}
+            <input type="email" required className={input} value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="Personal email address" autoComplete="off" />
+          </label>
+          <label className="block space-y-1">
+            {label("Full name")}
+            <input required minLength={2} maxLength={60} className={input} value={f.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="Name as on Facebook" />
+          </label>
+          <label className="block space-y-1">
+            {label("Device model")}
+            <input required minLength={2} maxLength={60} list="reg-device-models" className={input} value={f.deviceModel} onChange={(e) => set("deviceModel", e.target.value)} placeholder="e.g. Poco X3 Pro" />
+            <datalist id="reg-device-models">
+              {DEVICE_MODELS.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
+          </label>
+          <label className="block space-y-1">
+            {label("Password")}
+            <input type="password" required className={input} value={f.password} onChange={(e) => set("password", e.target.value)} placeholder="8+ chars, Aa + number" autoComplete="new-password" />
+            {f.password && !pwOk && <span className="block text-[11px] text-rose-600">Use 8+ characters with uppercase, lowercase and a number.</span>}
+          </label>
+          <label className="block space-y-1">
+            {label("Facebook URL")}
+            <input type="url" required className={input} value={f.facebookProfile} onChange={(e) => set("facebookProfile", e.target.value)} placeholder="https://www.facebook.com/…" />
+          </label>
+          <label className="block space-y-1">
+            {label("Konami UID", false)}
+            <input className={`${input} font-mono`} value={f.konamiId} onChange={(e) => set("konamiId", e.target.value)} placeholder="e.g. ASDL-229-704-966" />
+          </label>
+          <label className="block space-y-1">
+            {label("Shirt number")}
+            <select required className={input} value={f.shirtNo} onChange={(e) => set("shirtNo", e.target.value)}>
+              <option value="">Select a number</option>
+              {freeNumbers.map((n) => (
+                <option key={n} value={n}>
+                  #{n}
+                </option>
+              ))}
+            </select>
+            <span className="block text-[11px] text-slate-400">Numbers already worn in your squad are hidden.</span>
+          </label>
+          <label className="block space-y-1">
+            {label("Date of birth", false)}
+            <input type="date" className={input} value={f.dob} onChange={(e) => set("dob", e.target.value)} />
+          </label>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-100">
+          <p className="text-xs text-slate-500">
+            Registering for: <b className="text-slate-900">{club.name}</b>
+          </p>
+          <button disabled={busy} className="px-6 py-3 rounded-xl bg-black text-white text-sm font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Register player
+          </button>
         </div>
       </form>
     </Card>

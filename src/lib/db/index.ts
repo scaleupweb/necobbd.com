@@ -1095,6 +1095,25 @@ export const db = {
     return { managerId: String(player.userId), managerName: player.fullName };
   },
 
+  /** A player leaves their club and becomes a free agent. The main manager must hand over first. */
+  async leaveClub(userId: string) {
+    if (!isId(userId)) throw new ServiceError("Invalid user", 400);
+    await connectDB();
+    const player = await Player.findOne({ userId }, { clubId: 1, fullName: 1 }).lean<any>();
+    if (!player?.clubId) throw new ServiceError("You are not in a club", 400);
+    const club = await Club.findById(player.clubId, { managerId: 1, name: 1 }).lean<any>();
+    if (club && String(club.managerId || "") === userId) {
+      throw new ServiceError("You are the club's main manager. Hand the club over to another player before leaving.", 409);
+    }
+    await Player.updateOne({ _id: player._id }, { $unset: { clubId: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    await User.updateOne({ _id: userId }, { $unset: { clubId: 1 } });
+    if (club) {
+      await Club.updateOne({ _id: club._id }, { $pull: { staff: { userId: oid(userId) } } });
+      if (club.managerId) await db.notify(String(club.managerId), "Player left the club", `${player.fullName} has left ${club.name}.`, "/dashboard/my-club/squad");
+    }
+    return { left: club?.name || "" };
+  },
+
   /** Clubs a user can edit (as manager or staff), used to pick "their" club. */
   async getEditableClubId(userId: string, fallbackClubId?: string) {
     if (!isId(userId)) return fallbackClubId;

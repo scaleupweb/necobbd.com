@@ -153,6 +153,19 @@ export const PlayerSelfUpdateSchema = z.object({
   location: trimmed(80).optional(),
 });
 
+/** A club manager creates a new player account that joins their club. */
+export const ClubRegisterPlayerSchema = z.object({
+  avatar: imageUrl.refine((v) => v !== "", "Please upload a clear face photo"),
+  email: z.string().trim().toLowerCase().email("Please enter a valid email address").max(120),
+  fullName: trimmed(60).min(2, "Full name must be at least 2 characters"),
+  deviceModel: trimmed(60).min(2, "Device model is required"),
+  password,
+  facebookProfile: z.string().trim().max(500).refine((v) => /^https?:\/\//i.test(v), "Facebook URL is required"),
+  konamiId: z.union([trimmed(40).min(5, "Konami UID must be at least 5 characters"), z.literal("")]).optional().default(""),
+  dob: z.union([dob, z.literal("")]).optional().default(""),
+  shirtNo: z.coerce.number().int().min(1, "Pick a shirt number").max(99, "Shirt number must be 1–99"),
+});
+
 /** What a club manager may change on a player in their own squad. */
 export const ClubPlayerUpdateSchema = z.object({
   avatar: imageUrl.optional(),

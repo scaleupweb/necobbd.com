@@ -18,7 +18,7 @@ import {
 import { formatCurrency, getFormColor, formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ImageInput } from "@/components/ui/ImageInput";
-import { toast } from "@/lib/feedback";
+import { toast, confirmDialog } from "@/lib/feedback";
 import { LocationInput } from "@/components/ui/LocationInput";
 
 type Tab = "overview" | "profile" | "security";
@@ -163,6 +163,25 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
     }
   };
 
+  const leaveClub = async () => {
+    const yes = await confirmDialog({
+      title: `Leave ${player.club.name}?`,
+      text: "You become a free agent and can join or be signed by another club.",
+      confirmText: "Leave club",
+      danger: true,
+    });
+    if (!yes) return;
+    try {
+      const res = await fetch("/api/me/leave-club", { method: "POST" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Could not leave the club");
+      toast.success(`You left ${player.club.name}`);
+      reload();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className="lg:col-span-8 space-y-6">
@@ -263,6 +282,16 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
               </div>
               <ArrowRight className="w-4 h-4" />
             </Link>
+          ) : player?.club ? (
+            <Link href={`/clubs/${player.club.slug}`} className="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={player.club.logo} alt="" className="w-10 h-10 rounded-xl object-cover" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-black truncate">{player.club.name}</div>
+                <div className="text-[11px] text-slate-500">You play for this club{player.shirtNo ? ` · #${player.shirtNo}` : ""}</div>
+              </div>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           ) : (
             <div className="space-y-2">
               <p className="text-xs text-slate-500">Own or run a club? Create it from your account — no separate login needed.</p>
@@ -270,6 +299,11 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
                 Create a club <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
+          )}
+          {player?.club && !data.managedClub?.isOwner && (
+            <button onClick={leaveClub} className="w-full text-center text-xs font-bold text-rose-600 hover:underline pt-1">
+              Leave {player.club.name}
+            </button>
           )}
         </Card>
         {player && (
