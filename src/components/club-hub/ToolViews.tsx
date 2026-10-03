@@ -1,0 +1,397 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown } from "lucide-react";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { toast, confirmDialog } from "@/lib/feedback";
+import { ImageInput } from "@/components/ui/ImageInput";
+import { LocationInput } from "@/components/ui/LocationInput";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { useClubHub } from "./ClubHubContext";
+import { GROUPS, type ClubTool } from "./tools";
+
+const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
+
+export function ToolShell({ tool, children }: { tool: ClubTool; children: React.ReactNode }) {
+  const g = GROUPS.find((x) => x.id === tool.group)!;
+  return (
+    <div className="space-y-5">
+      <Link href="/dashboard/my-club" className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-black">
+        <ArrowLeft className="w-3.5 h-3.5" /> All tools
+      </Link>
+      <div className="flex items-start gap-3.5">
+        <span className={`w-12 h-12 rounded-2xl ring-1 flex items-center justify-center shrink-0 ${g.tile}`}>
+          <tool.icon className="w-5 h-5" />
+        </span>
+        <div>
+          <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${g.tone}`}>{g.label}</div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-950">{tool.label}</h1>
+          <p className="text-sm text-slate-500">{tool.desc}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const Card = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <div className={`rounded-3xl bg-white border border-slate-200 p-4 sm:p-6 ${className}`}>{children}</div>
+);
+
+export function ComingSoon({ tool }: { tool: ClubTool }) {
+  return (
+    <Card className="text-center py-14">
+      <span className="mx-auto w-14 h-14 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center">
+        <Hourglass className="w-6 h-6" />
+      </span>
+      <h2 className="mt-4 text-lg font-black text-slate-950">{tool.label} is coming soon</h2>
+      <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">This tool is being built. It will appear here for your club managers as soon as it's ready.</p>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- Squad Roster
+
+export function SquadRoster() {
+  const { club } = useClubHub();
+  const squad = [...(club.squad || [])].sort((a: any, b: any) => (a.shirtNo || 999) - (b.shirtNo || 999));
+  if (!squad.length) return <Card className="text-center text-sm text-slate-500 py-12">No players in your squad yet.</Card>;
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <div className="px-4 sm:px-6 py-3 border-b border-slate-100 text-xs font-bold text-slate-500">{squad.length} players</div>
+      <div className="divide-y divide-slate-100">
+        {squad.map((p: any) => (
+          <div key={p.id} className="flex items-center gap-3 px-4 sm:px-6 py-3">
+            <span className="w-8 text-center text-xs font-black font-mono text-slate-400">{p.shirtNo ? `#${p.shirtNo}` : "—"}</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={p.avatar} alt="" className="w-10 h-10 rounded-full object-cover bg-slate-100" />
+            <div className="min-w-0 flex-1">
+              <Link href={`/players/${p.username}`} className="text-sm font-bold text-slate-950 hover:underline truncate block">{p.fullName}</Link>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 min-w-0">
+                <span className="font-mono truncate">UID {p.konamiId || "—"}</span>
+                {p.konamiId && <CopyButton value={p.konamiId} label="UID copied" className="!w-5 !h-5 !border-0 !bg-transparent" />}
+              </div>
+            </div>
+            <span className="hidden sm:inline px-2 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-black">{p.preferredPosition}</span>
+            <span className="hidden md:inline text-[11px] font-semibold text-emerald-700 w-28 text-right">{(p.contract?.status || "").replace(/_/g, " ").toLowerCase()}</span>
+            <span className="text-xs font-black font-mono bg-slate-100 px-2 py-0.5 rounded">{p.rating}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- Fixtures
+
+export function ClubFixtures() {
+  const { club } = useClubHub();
+  const list = club.fixtures || [];
+  if (!list.length) return <Card className="text-center text-sm text-slate-500 py-12">No fixtures yet. They appear once your club is drawn in a tournament.</Card>;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {list.map((f: any) => (
+        <Link key={f.id} href={`/matches/${f.id}`} className="rounded-2xl bg-white border border-slate-200 hover:border-black p-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-950 truncate">
+              {f.homeClub?.name || f.homePlayer?.fullName} vs {f.awayClub?.name || f.awayPlayer?.fullName}
+            </div>
+            <div className="text-[11px] text-slate-500 flex items-center gap-1">
+              <CalendarDays className="w-3 h-3" /> {formatDate(f.scheduledDate)}
+              {f.tournamentName ? ` · ${f.tournamentName}` : ""}
+            </div>
+          </div>
+          <span className={`text-xs font-black font-mono px-2 py-1 rounded-lg ${f.status === "LIVE" ? "bg-rose-600 text-white" : "bg-slate-100"}`}>
+            {f.result ? `${f.result.homeScore} - ${f.result.awayScore}` : f.status}
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Transfer History
+
+export function TransferHistory() {
+  const { club } = useClubHub();
+  const offers = club.offers || [];
+  if (!offers.length) return <Card className="text-center text-sm text-slate-500 py-12">No transfer offers yet. Make offers from the Transfer Market.</Card>;
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <div className="divide-y divide-slate-100">
+        {offers.map((o: any) => (
+          <div key={o.id} className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 text-sm">
+            <span className="font-bold truncate">{o.player?.fullName}</span>
+            <span className="font-mono">{formatCurrency(o.offeredFee)}</span>
+            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${o.status === "PENDING" ? "bg-amber-50 text-amber-800" : o.status === "ACCEPTED" ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+              {o.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- Change Info / Logo
+
+async function patchClub(body: any) {
+  const res = await fetch("/api/me/club", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || "Save failed");
+}
+
+export function ChangeInfo() {
+  const { club, reload } = useClubHub();
+  const [f, setF] = useState({ slogan: club.slogan || "", location: club.location || "", facebookPage: club.facebookPage || "", description: club.description || "" });
+  const [busy, setBusy] = useState(false);
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await patchClub(f);
+      await reload();
+      toast.success("Club info saved");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <form onSubmit={save} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="block space-y-1">
+            <span className="text-xs font-bold text-slate-700">Slogan</span>
+            <input className={input} value={f.slogan} onChange={(e) => setF({ ...f, slogan: e.target.value })} maxLength={120} />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-bold text-slate-700">Location</span>
+            <LocationInput className={input} value={f.location} onChange={(v) => setF({ ...f, location: v })} />
+          </label>
+          <label className="sm:col-span-2 block space-y-1">
+            <span className="text-xs font-bold text-slate-700">Facebook page</span>
+            <input className={input} value={f.facebookPage} onChange={(e) => setF({ ...f, facebookPage: e.target.value })} placeholder="https://facebook.com/…" />
+          </label>
+          <label className="sm:col-span-2 block space-y-1">
+            <span className="text-xs font-bold text-slate-700">About the club</span>
+            <textarea className={input} rows={5} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} maxLength={1000} />
+          </label>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-500">Club name and tag can only be changed by an admin.</p>
+          <SaveButton busy={busy} />
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+export function ChangeLogo() {
+  const { club, reload } = useClubHub();
+  const clean = (v?: string) => (v && !v.startsWith("/images/placeholders") && !v.startsWith("/api/crest/") ? v : "");
+  const [f, setF] = useState({ logo: clean(club.logo), banner: clean(club.banner) });
+  const [busy, setBusy] = useState(false);
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await patchClub(f);
+      await reload();
+      toast.success("Branding saved");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <form onSubmit={save} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <ImageInput label="Club logo" value={f.logo} onChange={(v) => setF({ ...f, logo: v })} />
+          <ImageInput label="Cover / poster" value={f.banner} onChange={(v) => setF({ ...f, banner: v })} aspect="wide" />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-500">Without a logo your club shows an automatic crest with its tag.</p>
+          <SaveButton busy={busy} />
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+const SaveButton = ({ busy }: { busy: boolean }) => (
+  <button disabled={busy} className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60 shrink-0">
+    {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save changes
+  </button>
+);
+
+// ---------------------------------------------------------------- Access Control
+
+export function AccessControl() {
+  const { club } = useClubHub();
+  const isMain = club.access === "MANAGER";
+  const candidates = (club.squad || []).filter((p: any) => p.userId);
+  const [playerId, setPlayerId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const handOver = async () => {
+    const p = candidates.find((c: any) => c.id === playerId);
+    if (!p) return;
+    const yes = await confirmDialog({
+      title: `Make ${p.fullName} the main manager?`,
+      text: `${p.fullName} will manage ${club.name} from their own account. You will lose main-manager access.`,
+      confirmText: "Hand over",
+      danger: true,
+    });
+    if (!yes) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/me/club/hand-over", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Could not hand over the club");
+      toast.success(`${p.fullName} is now the main manager`);
+      window.location.href = "/dashboard";
+    } catch (e: any) {
+      toast.error(e.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="text-xs font-black uppercase tracking-widest text-slate-400">Main manager</div>
+        <div className="mt-1 text-lg font-black text-slate-950">{club.managerName || "—"}</div>
+        <p className="text-xs text-slate-500">The main manager registers the club for tournaments and can hand the club over.</p>
+      </Card>
+
+      {isMain ? (
+        <Card className="!bg-amber-50/60 !border-amber-200 space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="w-9 h-9 rounded-xl bg-[#C79A3B] text-black flex items-center justify-center shrink-0">
+              <Crown className="w-4 h-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-black text-slate-950">Hand over the club</h2>
+              <p className="text-xs text-slate-600 mt-0.5">Give the main-manager role to a player in your squad. They manage the club from their own player login.</p>
+            </div>
+          </div>
+          {candidates.length ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} className={`${input} !bg-white flex-1`}>
+                <option value="">Choose a squad player…</option>
+                {candidates.map((p: any) => (
+                  <option key={p.id} value={p.id}>
+                    {p.fullName} (@{p.username})
+                  </option>
+                ))}
+              </select>
+              <button onClick={handOver} disabled={!playerId || busy} className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-50">
+                {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Hand over club
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">No squad player with an account yet.</p>
+          )}
+        </Card>
+      ) : (
+        <Card className="text-sm text-slate-600">Only the main manager can hand the club over.</Card>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Tournament Registration
+
+export function TournamentRegistration() {
+  const { club } = useClubHub();
+  const isMain = club.access === "MANAGER";
+  const [list, setList] = useState<any[] | null>(null);
+  const [busy, setBusy] = useState("");
+
+  const load = async () => {
+    const res = await fetch("/api/tournaments", { cache: "no-store" });
+    const json = await res.json();
+    const all = json.success ? json.data : [];
+    setList(all.filter((t: any) => t.isRegistrationOpen || (t.participantClubIds || []).includes(club.id)));
+  };
+
+  useEffect(() => {
+    load().catch(() => setList([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [club.id]);
+
+  const act = async (t: any, entered: boolean) => {
+    const yes = await confirmDialog({
+      title: entered ? `Withdraw ${club.name} from ${t.name}?` : `Register ${club.name} for ${t.name}?`,
+      text: entered ? "You can register again while registration is open." : undefined,
+      confirmText: entered ? "Withdraw" : "Register club",
+      danger: entered,
+    });
+    if (!yes) return;
+    setBusy(t.id);
+    try {
+      const res = await fetch(`/api/tournaments/${t.slug}/join`, { method: entered ? "DELETE" : "POST" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Request failed");
+      toast.success(entered ? "Registration withdrawn" : `${club.name} is registered!`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  if (list === null) return <Card className="text-center py-12"><Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" /></Card>;
+
+  return (
+    <div className="space-y-3">
+      {!isMain && <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900">Only the club's main manager can register or withdraw the club.</div>}
+      {!list.length && <Card className="text-center text-sm text-slate-500 py-12">No tournaments are open for registration right now.</Card>}
+      {list.map((t) => {
+        const entered = (t.participantClubIds || []).includes(club.id);
+        return (
+          <div key={t.id} className="rounded-2xl bg-white border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={t.logo} alt="" className="w-12 h-12 rounded-xl object-cover bg-slate-100 shrink-0" />
+              <div className="min-w-0">
+                <Link href={`/tournaments/${t.slug}`} className="text-sm font-black text-slate-950 hover:underline truncate block">{t.name}</Link>
+                <div className="text-[11px] text-slate-500">
+                  {t.currentParticipants}/{t.maxParticipants} clubs
+                  {t.registrationDeadline ? ` · closes ${formatDate(t.registrationDeadline)}` : ""}
+                  {t.prizePool ? ` · ${t.prizePool}` : ""}
+                </div>
+              </div>
+            </div>
+            {entered ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Registered
+                </span>
+                {isMain && t.status === "REGISTRATION_OPEN" && (
+                  <button onClick={() => act(t, true)} disabled={busy === t.id} className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+                    Withdraw
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => act(t, false)}
+                disabled={!isMain || busy === t.id}
+                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+              >
+                {busy === t.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trophy className="w-3.5 h-3.5" />} Register club
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
