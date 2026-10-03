@@ -29,8 +29,9 @@ export default function ClubControlCenter() {
 
       {/* Club summary */}
       <section className="relative overflow-hidden rounded-3xl bg-[#0B0C0F] text-white">
-        <FitImage src={club.banner} className="opacity-30" />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-[#0B0C0F] via-[#0B0C0F]/85 to-[#0B0C0F]/40" />
+        <FitImage src={club.banner} className="opacity-95" />
+        {/* Light scrim only behind the text so the cover stays clearly visible */}
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-[#0B0C0F]/65 via-[#0B0C0F]/25 to-transparent" />
         <ClubToolsMenu dark className="absolute top-3 right-3 z-10" />
         <div className="relative p-5 sm:p-7 flex flex-col md:flex-row md:items-center gap-5">
           <div className="flex items-center gap-4 min-w-0 flex-1 pr-10 lg:pr-0">
@@ -38,8 +39,8 @@ export default function ClubControlCenter() {
             <img src={club.logo} alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover bg-white ring-4 ring-white/10 shrink-0" />
             <div className="min-w-0">
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#C79A3B]">Club Control Center</div>
-              <h1 className="text-xl sm:text-3xl font-black tracking-tight truncate">{club.name}</h1>
-              <div className="text-xs text-white/55 truncate">
+              <h1 className="text-xl sm:text-3xl font-black tracking-tight truncate [text-shadow:0_2px_10px_rgba(0,0,0,0.6)]">{club.name}</h1>
+              <div className="text-xs text-white/80 truncate [text-shadow:0_1px_6px_rgba(0,0,0,0.7)]">
                 {club.shortName}
                 {club.location ? ` · ${club.location}` : ""}
                 {club.managerName ? ` · Manager: ${club.managerName}` : ""}
