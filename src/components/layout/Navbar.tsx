@@ -373,9 +373,14 @@ export function Navbar({
                     onClick={() => setMobileDrawerOpen(false)}
                     className="flex items-center space-x-2.5"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-[#111111] flex items-center justify-center text-white font-black text-sm">
-                      {brand.logoLine1.charAt(0) || "N"}
-                    </div>
+                    {brand.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={brand.logoUrl} alt={brand.logoLine1} className="w-8 h-8 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-[#111111] flex items-center justify-center text-white font-black text-sm">
+                        {brand.logoLine1.charAt(0) || "N"}
+                      </div>
+                    )}
                     <span className="font-black text-sm text-[#111111] tracking-tight">
                       {brand.logoLine1}<span className="text-[#C79A3B]">.</span>{brand.logoLine2}
                     </span>

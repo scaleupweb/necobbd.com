@@ -7,7 +7,7 @@ import { ChevronDown } from "lucide-react";
 import { SocialIcons, Socials } from "./SocialIcons";
 
 interface FooterProps {
-  brand: { logoLine1: string; logoLine2: string };
+  brand: { logoLine1: string; logoLine2: string; logoUrl?: string };
   footer: { headline: string; text: string; copyright: string; email: string; phone: string; address: string; socials: Socials };
 }
 
@@ -54,11 +54,7 @@ export function Footer({ brand, footer }: FooterProps) {
           {/* Column 1: Brand Info (takes 4 cols) */}
           <div className="md:col-span-4 space-y-3">
             <Link href="/" className="inline-flex items-center space-x-3 group">
-              <div className="w-9 h-9 rounded-xl bg-[#111111] flex items-center justify-center text-white shadow-sm group-hover:bg-zinc-800 transition-colors">
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                  <path d="M4 4h4.5l7 10.5V4H20v16h-4.5l-7-10.5V20H4V4z" />
-                </svg>
-              </div>
+              <BrandMark brand={brand} className="w-9 h-9 rounded-xl" />
               <div className="flex flex-col">
                 <span className="text-sm font-black tracking-wider text-[#111111] leading-none">{brand.logoLine1}</span>
                 <span className="text-sm font-black tracking-wider text-[#111111] leading-none mt-0.5">{brand.logoLine2}</span>
@@ -143,11 +139,7 @@ export function Footer({ brand, footer }: FooterProps) {
           {/* Brand Info */}
           <div className="space-y-2.5">
             <Link href="/" className="inline-flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#111111] flex items-center justify-center text-white">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M4 4h4.5l7 10.5V4H20v16h-4.5l-7-10.5V20H4V4z" />
-                </svg>
-              </div>
+              <BrandMark brand={brand} className="w-8 h-8 rounded-lg" />
               <div className="flex flex-col">
                 <span className="text-xs font-black tracking-wider text-[#111111] leading-none">{brand.logoLine1}</span>
                 <span className="text-xs font-black tracking-wider text-[#111111] leading-none mt-0.5">{brand.logoLine2}</span>
@@ -287,5 +279,20 @@ export function Footer({ brand, footer }: FooterProps) {
 
       </div>
     </footer>
+  );
+}
+
+/** Site logo from admin settings, or the default "N" mark when none is uploaded. */
+function BrandMark({ brand, className }: { brand: FooterProps["brand"]; className: string }) {
+  if (brand.logoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={brand.logoUrl} alt={brand.logoLine1} className={`${className} object-cover`} />;
+  }
+  return (
+    <div className={`${className} bg-[#111111] flex items-center justify-center text-white`}>
+      <svg className="w-1/2 h-1/2 fill-current" viewBox="0 0 24 24">
+        <path d="M4 4h4.5l7 10.5V4H20v16h-4.5l-7-10.5V20H4V4z" />
+      </svg>
+    </div>
   );
 }
