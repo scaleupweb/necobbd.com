@@ -644,7 +644,9 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
-  const [photo, logo] = await Promise.all([loadImage(player.avatar), loadImage(club.logo)]);
+  // Coming from another club → club-to-club poster; otherwise a welcome / new-signing poster.
+  const fromClub = player.club && player.club.id !== club.id ? player.club : null;
+  const [photo, logo, fromLogo] = await Promise.all([loadImage(player.avatar), loadImage(club.logo), fromClub ? loadImage(fromClub.logo) : Promise.resolve(null)]);
   const gold = "#E8B95A";
 
   // Background
@@ -702,87 +704,149 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
+  const FONT = `"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
 
-  // Top label
-  ctx.fillStyle = gold;
-  ctx.font = `800 30px "Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
-  ctx.fillText("O F F I C I A L   T R A N S F E R", W / 2, 110);
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  fitFont(ctx, "WELCOME TO", W - 160, 84);
-  ctx.fillText("WELCOME TO", W / 2, 205);
-  ctx.fillStyle = gold;
-  fitFont(ctx, club.name.toUpperCase(), W - 140, 92);
-  ctx.fillText(club.name.toUpperCase(), W / 2, 305);
-
-  // Player photo
-  const cx = W / 2;
-  const cy = 680;
-  const R = 270;
-  ctx.save();
-  ctx.shadowColor = "rgba(232,185,90,0.6)";
-  ctx.shadowBlur = 60;
-  ctx.beginPath();
-  ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
-  const ring = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-  ring.addColorStop(0, "#F7DC8B");
-  ring.addColorStop(0.5, "#C79A3B");
-  ring.addColorStop(1, "#8a6420");
-  ctx.fillStyle = ring;
-  ctx.fill();
-  ctx.restore();
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = "#1f2937";
-  ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-  if (photo) drawCover(ctx, photo, cx - R, cy - R, R * 2, R * 2);
-  else {
-    ctx.fillStyle = "#fff";
-    ctx.font = `900 200px "Plus Jakarta Sans", Arial, sans-serif`;
-    ctx.fillText((player.fullName || "?").charAt(0).toUpperCase(), cx, cy + 70);
-  }
-  ctx.restore();
-
-  // Club badge on the photo
-  if (logo) {
-    const bs = 190;
-    const bx = cx + R - bs * 0.62;
-    const by = cy + R - bs * 0.72;
+  // Circle photo with a gold ring.
+  const drawPhoto = (cx: number, cy: number, R: number) => {
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.5)";
-    ctx.shadowBlur = 30;
-    roundRect(ctx, bx, by, bs, bs, 40);
-    ctx.fillStyle = "#fff";
+    ctx.shadowColor = "rgba(232,185,90,0.6)";
+    ctx.shadowBlur = 60;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
+    const ring = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+    ring.addColorStop(0, "#F7DC8B");
+    ring.addColorStop(0.5, "#C79A3B");
+    ring.addColorStop(1, "#8a6420");
+    ctx.fillStyle = ring;
     ctx.fill();
     ctx.restore();
     ctx.save();
-    roundRect(ctx, bx + 10, by + 10, bs - 20, bs - 20, 32);
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.clip();
-    drawCover(ctx, logo, bx + 10, by + 10, bs - 20, bs - 20);
+    ctx.fillStyle = "#1f2937";
+    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    if (photo) drawCover(ctx, photo, cx - R, cy - R, R * 2, R * 2);
+    else {
+      ctx.fillStyle = "#fff";
+      ctx.font = `900 ${Math.round(R * 0.75)}px ${FONT}`;
+      ctx.fillText((player.fullName || "?").charAt(0).toUpperCase(), cx, cy + R * 0.26);
+    }
     ctx.restore();
+  };
+
+  // White rounded tile with a club logo.
+  const drawBadge = (img: HTMLImageElement | null, x: number, y: number, size: number, dim = false) => {
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 30;
+    roundRect(ctx, x, y, size, size, size * 0.21);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.restore();
+    if (!img) return;
+    ctx.save();
+    roundRect(ctx, x + 10, y + 10, size - 20, size - 20, size * 0.17);
+    ctx.clip();
+    if (dim) ctx.filter = "grayscale(0.6)";
+    drawCover(ctx, img, x + 10, y + 10, size - 20, size - 20);
+    ctx.restore();
+  };
+
+  const ribbon = (text: string) => {
+    ctx.font = `900 34px ${FONT}`;
+    const rw = Math.max(560, ctx.measureText(text).width + 120);
+    const rx = (W - rw) / 2;
+    roundRect(ctx, rx, 1185, rw, 74, 37);
+    const rib = ctx.createLinearGradient(rx, 0, rx + rw, 0);
+    rib.addColorStop(0, "#F7DC8B");
+    rib.addColorStop(1, "#C79A3B");
+    ctx.fillStyle = rib;
+    ctx.fill();
+    ctx.fillStyle = "#0B0C0F";
+    ctx.fillText(text, W / 2, 1234);
+  };
+
+  // Top label
+  ctx.fillStyle = gold;
+  ctx.font = `800 30px ${FONT}`;
+  ctx.fillText("O F F I C I A L   T R A N S F E R", W / 2, 110);
+
+  if (fromClub) {
+    // ---------- Club to club ----------
+    ctx.fillStyle = "#fff";
+    fitFont(ctx, player.fullName.toUpperCase(), W - 140, 92);
+    ctx.fillText(player.fullName.toUpperCase(), W / 2, 215);
+
+    drawPhoto(W / 2, 520, 215);
+
+    const bs = 220;
+    const by = 800;
+    const lx = 150;
+    const rx2 = W - 150 - bs;
+    drawBadge(fromLogo, lx, by, bs, true);
+    drawBadge(logo, rx2, by, bs);
+
+    // Arrow between the clubs
+    const ay = by + bs / 2;
+    ctx.save();
+    ctx.strokeStyle = gold;
+    ctx.fillStyle = gold;
+    ctx.lineWidth = 10;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(lx + bs + 40, ay);
+    ctx.lineTo(rx2 - 60, ay);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(rx2 - 30, ay);
+    ctx.lineTo(rx2 - 75, ay - 32);
+    ctx.lineTo(rx2 - 75, ay + 32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Club names
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.font = `800 24px ${FONT}`;
+    ctx.fillText("LEAVES", lx + bs / 2, by + bs + 48);
+    ctx.fillStyle = gold;
+    ctx.fillText("JOINS", rx2 + bs / 2, by + bs + 48);
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    fitFont(ctx, fromClub.name.toUpperCase(), 360, 34, 800);
+    ctx.fillText(fromClub.name.toUpperCase(), lx + bs / 2, by + bs + 92);
+    ctx.fillStyle = "#fff";
+    fitFont(ctx, club.name.toUpperCase(), 360, 34, 900);
+    ctx.fillText(club.name.toUpperCase(), rx2 + bs / 2, by + bs + 92);
+
+    ribbon("HERE WE GO!  ·  CLUB TO CLUB");
+  } else {
+    // ---------- New / free signing ----------
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    fitFont(ctx, "WELCOME TO", W - 160, 84);
+    ctx.fillText("WELCOME TO", W / 2, 205);
+    ctx.fillStyle = gold;
+    fitFont(ctx, club.name.toUpperCase(), W - 140, 92);
+    ctx.fillText(club.name.toUpperCase(), W / 2, 305);
+
+    const cx = W / 2;
+    const cy = 680;
+    const R = 270;
+    drawPhoto(cx, cy, R);
+    if (logo) {
+      const bs = 190;
+      drawBadge(logo, cx + R - bs * 0.62, cy + R - bs * 0.72, bs);
+    }
+
+    ctx.fillStyle = "#fff";
+    fitFont(ctx, player.fullName.toUpperCase(), W - 140, 96);
+    ctx.fillText(player.fullName.toUpperCase(), W / 2, 1110);
+
+    ribbon(isFreeAgent(player) ? "HERE WE GO!  ·  FREE AGENT SIGNING" : "HERE WE GO!  ·  NEW SIGNING");
   }
 
-  // Name
-  ctx.fillStyle = "#fff";
-  fitFont(ctx, player.fullName.toUpperCase(), W - 140, 96);
-  ctx.fillText(player.fullName.toUpperCase(), W / 2, 1110);
-
-  // Bottom ribbon
-  const rw = 560;
-  const rx = (W - rw) / 2;
-  roundRect(ctx, rx, 1185, rw, 74, 37);
-  const rib = ctx.createLinearGradient(rx, 0, rx + rw, 0);
-  rib.addColorStop(0, "#F7DC8B");
-  rib.addColorStop(1, "#C79A3B");
-  ctx.fillStyle = rib;
-  ctx.fill();
-  ctx.fillStyle = "#0B0C0F";
-  ctx.font = `900 34px "Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
-  ctx.fillText("HERE WE GO!  ·  NEW SIGNING", W / 2, 1234);
-
   ctx.fillStyle = "rgba(255,255,255,0.45)";
-  ctx.font = `700 24px "Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
+  ctx.font = `700 24px ${FONT}`;
   ctx.fillText("NECOB · NATIONAL eFOOTBALL COMMUNITY OF BANGLADESH", W / 2, 1310);
 }
 
