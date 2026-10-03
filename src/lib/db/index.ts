@@ -1658,6 +1658,62 @@ export const db = {
     return plain(r.toObject());
   },
 
+  /**
+   * Admin moves a player into a club (seat + new 120-day contract) or out of their club,
+   * recording it in the transfer history like any other move.
+   */
+  async adminMovePlayer(playerId: string, clubId: string, adminName: string) {
+    if (!isId(playerId)) throw new ServiceError("Invalid player", 400);
+    await connectDB();
+    const player = await Player.findById(playerId);
+    if (!player) throw new ServiceError("Player not found", 404);
+    const oldClubId = player.clubId ? String(player.clubId) : "";
+    if (oldClubId === (clubId || "")) return;
+    const oldClub = oldClubId ? await Club.findById(oldClubId, { name: 1 }).lean<any>() : null;
+
+    if (!clubId) {
+      player.clubId = undefined;
+      player.seat = undefined;
+      player.shirtNo = undefined;
+      player.set("contract.status", "FREE_AGENT");
+      await player.save();
+      if (player.userId) await User.updateOne({ _id: player.userId }, { $unset: { clubId: 1 } });
+      if (oldClub) await Club.updateOne({ _id: oldClub._id }, { $pull: { staff: { userId: player.userId } } });
+      await TransferHistory.create({ playerId: player._id, playerName: player.fullName, previousClubName: oldClub?.name || "", oldClubId: oldClub?._id, newClubName: "No club", fee: 0, approvedBy: adminName, transferType: "released" });
+      return;
+    }
+
+    if (!isId(clubId)) throw new ServiceError("Invalid club", 400);
+    const club = await Club.findById(clubId);
+    if (!club) throw new ServiceError("Club not found", 404);
+    await assertSquadSpace(club._id, player._id);
+    const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+    const now = Date.now();
+    player.clubId = club._id;
+    player.squad = "main";
+    player.seat = seatLayout(squad).indexOf(null) + 1;
+    if (player.shirtNo && squad.some((p: any) => p.shirtNo === player.shirtNo)) player.shirtNo = undefined; // number already worn there
+    player.contract = { status: "UNDER_CONTRACT", durationMonths: 4, startDate: new Date(now), endDate: new Date(now + CONTRACT_DAYS * 86400000) } as any;
+    await player.save();
+    if (player.userId) await User.updateOne({ _id: player.userId }, { $set: { clubId: club._id } });
+    if (oldClub) await Club.updateOne({ _id: oldClub._id }, { $pull: { staff: { userId: player.userId } } });
+    await TransferRequest.updateMany({ playerId: player._id, status: "PENDING" }, { $set: { status: "CANCELLED" } });
+    await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: oldClub?.name || "No club",
+      oldClubId: oldClub?._id,
+      newClubName: club.name,
+      newClubId: club._id,
+      fee: 0,
+      approvedBy: adminName,
+      transferType: oldClub ? "transfer" : "signing",
+      contractEndDate: player.contract?.endDate,
+      seat: player.seat,
+    });
+    if (player.userId) await db.notify(String(player.userId), `You joined ${club.name}`, `An admin added you to ${club.name} on a ${CONTRACT_DAYS}-day contract.`, `/clubs/${club.slug}`);
+  },
+
   /** Admin approved a signing: the player joins the seat on a 120-day contract, frozen for 3 days. */
   async _executeSigning(r: any, approverName: string) {
     const [player, club] = await Promise.all([Player.findById(r.playerId), Club.findById(r.targetClubId)]);
@@ -2192,6 +2248,120 @@ export const db = {
   },
 
   // ----- Stats -----
+  /** Everything the admin dashboard needs about players, clubs, contracts and transfers. */
+  async getAdminInsights() {
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const now = new Date();
+    const in30 = new Date(Date.now() + 30 * 86400000);
+    const ago7 = new Date(Date.now() - 7 * 86400000);
+    const ago30 = new Date(Date.now() - 30 * 86400000);
+    const [
+      players,
+      inClub,
+      freeAgents,
+      frozen,
+      verified,
+      pendingPlayers,
+      endingSoon,
+      clubs,
+      squadCounts,
+      signingReqs,
+      offerReqs,
+      moves7,
+      moves30,
+      recentMoves,
+      roles,
+      newUsers7,
+      openTournaments,
+    ] = await Promise.all([
+      Player.countDocuments({}),
+      Player.countDocuments({ clubId: { $ne: null } }),
+      Player.countDocuments({ clubId: null, "contract.endDate": { $lt: now } }),
+      Player.countDocuments({ frozenUntil: { $gt: now } }),
+      Player.countDocuments({ isVerified: true }),
+      Player.countDocuments({ status: "PENDING_VERIFICATION" }),
+      Player.find({ clubId: { $ne: null }, "contract.endDate": { $gte: now, $lte: in30 } }, { fullName: 1, username: 1, avatar: 1, clubId: 1, "contract.endDate": 1 })
+        .sort({ "contract.endDate": 1 })
+        .limit(8)
+        .lean<any>(),
+      Club.find({}, { name: 1, slug: 1, logo: 1, shortName: 1, status: 1, managerId: 1, createdAt: 1 }).lean<any>(),
+      Player.aggregate([{ $match: { clubId: { $ne: null } } }, { $group: { _id: "$clubId", n: { $sum: 1 } } }]),
+      TransferRequest.find({ status: "PENDING", type: "SIGNING" }).sort({ createdAt: 1 }).limit(8).lean<any>(),
+      TransferRequest.countDocuments({ status: "PENDING", type: { $ne: "SIGNING" } }),
+      TransferHistory.countDocuments({ transferDate: { $gte: ago7 } }),
+      TransferHistory.countDocuments({ transferDate: { $gte: ago30 } }),
+      TransferHistory.find({}).sort({ transferDate: -1 }).limit(6).lean<any>(),
+      User.aggregate([{ $group: { _id: "$role", n: { $sum: 1 } } }]),
+      User.countDocuments({ createdAt: { $gte: ago7 } }),
+      Tournament.find({ status: { $in: ["REGISTRATION_OPEN", "ONGOING"] } }, { name: 1, slug: 1, status: 1, maxParticipants: 1, clubParticipants: 1, registrationDeadline: 1 }).lean<any>(),
+    ]);
+
+    const cmap = new Map(clubs.map((c: any) => [String(c._id), c]));
+    const sq = new Map(squadCounts.map((x: any) => [String(x._id), x.n as number]));
+    const mini = (c: any) => (c ? clubMini(c) : null);
+    const pendingSignPlayers = await Player.find({ _id: { $in: signingReqs.map((r: any) => r.playerId) } }, { fullName: 1, username: 1, avatar: 1 }).lean<any>();
+    const psp = new Map(pendingSignPlayers.map((p: any) => [String(p._id), p]));
+    const pendingSigning = await TransferRequest.countDocuments({ status: "PENDING", type: "SIGNING" });
+
+    return {
+      players: { total: players, inClub, noClub: players - inClub - freeAgents, freeAgents, frozen, verified, pendingVerification: pendingPlayers },
+      contractsEnding: endingSoon.map((p: any) => ({
+        name: p.fullName,
+        username: p.username,
+        avatar: p.avatar || PLACEHOLDER.avatar,
+        club: mini(cmap.get(String(p.clubId))),
+        endDate: new Date(p.contract.endDate).toISOString(),
+      })),
+      clubs: {
+        total: clubs.length,
+        active: clubs.filter((c: any) => c.status === "ACTIVE").length,
+        pending: clubs
+          .filter((c: any) => c.status === "PENDING")
+          .map((c: any) => ({ ...mini(c), createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : null })),
+        full: clubs.filter((c: any) => (sq.get(String(c._id)) || 0) >= SQUAD_LIMIT).length,
+        withoutManager: clubs.filter((c: any) => !c.managerId).length,
+        squads: clubs
+          .filter((c: any) => c.status === "ACTIVE")
+          .map((c: any) => ({ ...mini(c), count: sq.get(String(c._id)) || 0 }))
+          .sort((a: any, b: any) => b.count - a.count),
+      },
+      transfers: {
+        pendingSigning,
+        pendingOffers: offerReqs,
+        last7: moves7,
+        last30: moves30,
+        requests: signingReqs.map((r: any) => {
+          const p: any = psp.get(String(r.playerId)) || {};
+          return {
+            id: String(r._id),
+            createdAt: new Date(r.createdAt).toISOString(),
+            seat: r.seat,
+            player: { name: p.fullName, username: p.username, avatar: p.avatar || PLACEHOLDER.avatar },
+            club: mini(cmap.get(String(r.targetClubId))),
+          };
+        }),
+        recent: recentMoves.map((m: any) => ({
+          id: String(m._id),
+          date: new Date(m.transferDate).toISOString(),
+          type: m.transferType || "free",
+          player: m.playerName,
+          from: m.oldClubId ? mini(cmap.get(String(m.oldClubId))) : null,
+          to: m.newClubId ? mini(cmap.get(String(m.newClubId))) : null,
+        })),
+      },
+      users: { roles: Object.fromEntries(roles.map((r: any) => [r._id, r.n])), newLast7: newUsers7 },
+      tournaments: openTournaments.map((t: any) => ({
+        name: t.name,
+        slug: t.slug,
+        status: t.status,
+        clubs: (t.clubParticipants || []).filter((c: any) => c.status !== "REMOVED").length,
+        max: t.maxParticipants || 0,
+        deadline: t.registrationDeadline ? new Date(t.registrationDeadline).toISOString() : null,
+      })),
+    };
+  },
+
   async getPlatformStats() {
     await connectDB();
     const [players, clubs, finished, live, activeTourn, refs, transfers, goals, users, pendingResults] = await Promise.all([

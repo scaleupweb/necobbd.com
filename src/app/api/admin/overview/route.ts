@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 export const GET = handle(async () => {
   const session = await requireRole(STAFF_ROLES);
   const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
-  const [stats, auditLogs, upcoming, liveFixtures, pendingResults, settings, recentUsers] = await Promise.all([
+  const [insights, stats, auditLogs, upcoming, liveFixtures, pendingResults, settings, recentUsers] = await Promise.all([
+    db.getAdminInsights(),
     db.getPlatformStats(),
     isAdmin ? db.getAuditLogs(8) : [],
     db.getFixtures({ status: "SCHEDULED", limit: 200 }),
@@ -17,6 +18,8 @@ export const GET = handle(async () => {
     isAdmin ? db.listUsers({}) : [],
   ]);
   return ok({
+    insights,
+    isAdmin,
     stats,
     auditLogs,
     pendingFixtures: upcoming.sort((a: any, b: any) => +new Date(a.scheduledDate) - +new Date(b.scheduledDate)).slice(0, 8),

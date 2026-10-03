@@ -16,7 +16,12 @@ export const PATCH = handle(async (req: NextRequest, { params }: Ctx) => {
   if (session.role === "MODERATOR") {
     for (const k of ["rating", "marketValue", "clubId"]) delete data[k];
   }
-  const updated = await db.updatePlayer(id, data);
+  // Club changes go through the same rules as a signing: seat, 120-day contract, history.
+  if ("clubId" in data) {
+    await db.adminMovePlayer(id, data.clubId || "", session.fullName);
+    delete data.clubId;
+  }
+  const updated = Object.keys(data).length ? await db.updatePlayer(id, data) : await db.getPlayerById(id);
   if ("status" in data && updated?.userId) {
     const userStatus = data.status === "PENDING_VERIFICATION" ? "PENDING" : data.status;
     await db.updateUser(String(updated.userId), { status: userStatus });
