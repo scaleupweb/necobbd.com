@@ -8,6 +8,7 @@ import { FitImage } from "@/components/ui/FitImage";
 import { useClubHub } from "@/components/club-hub/ClubHubContext";
 import { GROUPS, TOOLS, canOpen } from "@/components/club-hub/tools";
 import { ClubToolsMenu } from "@/components/club-hub/ClubToolsMenu";
+import { SQUAD_LIMIT } from "@/lib/squad";
 
 export default function ClubControlCenter() {
   const { club } = useClubHub();
@@ -47,7 +48,7 @@ export default function ClubControlCenter() {
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-3 shrink-0">
             {[
-              ["Squad", club.squad?.length ?? 0],
+              ["Squad", `${club.squad?.length ?? 0}/${SQUAD_LIMIT}`],
               ["Points", club.points ?? 0],
               ["Value", formatCurrency(club.marketValue)],
             ].map(([k, v]) => (

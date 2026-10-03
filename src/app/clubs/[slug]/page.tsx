@@ -28,6 +28,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { Donut, Gauge } from "@/components/profile/Charts";
 import { FitImage } from "@/components/ui/FitImage";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { SquadCapacity } from "@/components/club/SquadSeats";
+import { SQUAD_LIMIT } from "@/lib/squad";
 
 export const dynamic = "force-dynamic";
 
@@ -163,7 +165,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
             <div className="mt-6 max-w-3xl mx-auto grid grid-cols-5 rounded-2xl border border-slate-200 bg-slate-50/60 divide-x divide-slate-200">
               {[
                 ["Rank", rank?.rank ? `#${rank.rank}` : "—"],
-                ["Squad", club.squadCount],
+                ["Squad", `${club.squadCount}/${SQUAD_LIMIT}`],
                 ["Matches", st.matches],
                 ["Wins", st.wins],
                 ["Points", club.points],
@@ -357,7 +359,8 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
 
           {/* Squad */}
           <section id="squad" className="scroll-mt-32">
-            <Title icon={Users} title="Squad" subtitle={`${squad.length} registered player${squad.length === 1 ? "" : "s"}`} />
+            <Title icon={Users} title="Main Team Squad" subtitle={`${squad.length} of ${SQUAD_LIMIT} seats filled`} />
+            <SquadCapacity count={squad.length} className="mb-4 rounded-2xl bg-white border border-slate-200 p-4" />
             {squad.length ? (
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {squad.map((p: any) => {

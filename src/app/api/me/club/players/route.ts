@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, hashPassword } from "@/lib/auth";
 import { ClubRegisterPlayerSchema } from "@/lib/validation";
 import { ok, fail, handle, parseBody, audit, limit } from "@/lib/api";
+import { SQUAD_LIMIT } from "@/lib/squad";
 
 const RESERVED = new Set(["admin", "administrator", "root", "support", "system", "moderator", "api", "login", "register", "dashboard"]);
 
@@ -35,6 +36,7 @@ export const POST = handle(async (req: NextRequest) => {
   if (!club) return fail("Club not found", 404, "NOT_FOUND");
   if (club.status !== "ACTIVE") return fail("Your club must be approved before registering players", 409, "CONFLICT");
 
+  if (club.squad.length >= SQUAD_LIMIT) return fail(`Main Team Squad is full (${club.squad.length}/${SQUAD_LIMIT}). Release a player first.`, 409, "CONFLICT");
   if (await db.getUserByEmailOrUsername(data.email)) return fail("An account with this email already exists", 409, "CONFLICT");
   const worn = club.squad.find((p: any) => p.shirtNo === data.shirtNo);
   if (worn) return fail(`#${data.shirtNo} is already worn by ${worn.fullName}`, 409, "CONFLICT");

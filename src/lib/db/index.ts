@@ -28,6 +28,7 @@ import { calculateNewRating, updateFormHistory } from "../ranking/engine";
 import { calculatePlayerMarketValue } from "../valuation/engine";
 import { DEFAULT_SITE_SETTINGS, mergeSettings, SiteSettings } from "../site-settings";
 import { clubLogo } from "../crest";
+import { SQUAD_LIMIT } from "../squad";
 
 export { isId, slugify };
 
@@ -116,6 +117,15 @@ function shapePlayer(p: any, clubs: Map<string, any>) {
 }
 
 export const MAX_CLUB_STAFF = 10;
+
+/** Throws when the club's Main Team Squad already has SQUAD_LIMIT players (ignoring `playerId`). */
+async function assertSquadSpace(clubId: any, playerId?: any) {
+  if (!clubId || !isId(String(clubId))) return;
+  const q: any = { clubId };
+  if (playerId) q._id = { $ne: playerId };
+  const n = await Player.countDocuments(q);
+  if (n >= SQUAD_LIMIT) throw new ServiceError(`Main Team Squad is full (${n}/${SQUAD_LIMIT}). Release a player first.`, 409);
+}
 
 /** Tools a custom staff member may use. Legacy "info_change" staff keep their club info/logo rights. */
 function staffPermissions(s: any): string[] {
@@ -435,6 +445,7 @@ export const db = {
 
   async createPlayer(data: any) {
     await connectDB();
+    if (data.clubId && isId(String(data.clubId))) await assertSquadSpace(data.clubId);
     const player = await Player.create({
       userId: data.userId,
       username: data.username,
@@ -475,6 +486,10 @@ export const db = {
       if (v === undefined) continue;
       if (k === "clubId" && (v === "" || v === null)) unset.clubId = 1;
       else set[k] = v;
+    }
+    if (set.clubId) {
+      const cur = await Player.findById(id, { clubId: 1 }).lean<any>();
+      if (String(cur?.clubId || "") !== String(set.clubId)) await assertSquadSpace(set.clubId, id);
     }
     const p = await Player.findByIdAndUpdate(id, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true }).lean<any>();
     if (!p) throw new ServiceError("Player not found", 404);
@@ -1543,6 +1558,7 @@ export const db = {
     const [player, club] = await Promise.all([Player.findById(playerId), Club.findById(clubId)]);
     if (!player || !club) throw new ServiceError("Player or club not found", 404);
     if (player.clubId && String(player.clubId) === clubId) throw new ServiceError("Player already belongs to this club", 409);
+    await assertSquadSpace(club._id, player._id);
     const oldClub = player.clubId ? await Club.findById(player.clubId, { name: 1 }).lean<any>() : null;
     player.clubId = club._id;
     player.contract = { status: "UNDER_CONTRACT", durationMonths: 12, endDate: new Date(Date.now() + 365 * 86400000) } as any;

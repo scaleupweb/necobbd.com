@@ -11,6 +11,8 @@ import { LocationInput } from "@/components/ui/LocationInput";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useClubHub } from "./ClubHubContext";
 import { ClubToolsMenu } from "./ClubToolsMenu";
+import { SquadSeats, SquadCapacity } from "@/components/club/SquadSeats";
+import { SQUAD_LIMIT } from "@/lib/squad";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
@@ -61,8 +63,10 @@ export function ComingSoon({ tool }: { tool: ClubTool }) {
 export function SquadRoster() {
   const { club } = useClubHub();
   const squad = [...(club.squad || [])].sort((a: any, b: any) => (a.shirtNo || 999) - (b.shirtNo || 999));
-  if (!squad.length) return <Card className="text-center text-sm text-slate-500 py-12">No players in your squad yet.</Card>;
+  if (!squad.length) return <SquadSeats squad={[]} />;
   return (
+    <div className="space-y-4">
+    <SquadSeats squad={squad} />
     <Card className="!p-0 overflow-hidden">
       <div className="px-4 sm:px-6 py-3 border-b border-slate-100 text-xs font-bold text-slate-500">{squad.length} players</div>
       <div className="divide-y divide-slate-100">
@@ -85,6 +89,7 @@ export function SquadRoster() {
         ))}
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -269,6 +274,14 @@ export function RegisterNewPlayer() {
   if (club.status !== "ACTIVE") {
     return <Card className="text-center text-sm text-slate-500 py-12">Your club must be approved by an admin before you can register players.</Card>;
   }
+  if ((club.squad || []).length >= SQUAD_LIMIT) {
+    return (
+      <Card className="space-y-4">
+        <SquadCapacity count={club.squad.length} />
+        <p className="text-sm text-slate-600">Your Main Team Squad is full. Release a player before registering a new one.</p>
+      </Card>
+    );
+  }
 
   const label = (text: string, required = true) => (
     <span className="text-xs font-bold text-slate-700">
@@ -279,6 +292,7 @@ export function RegisterNewPlayer() {
   return (
     <Card>
       <form onSubmit={submit} className="space-y-5">
+        <SquadCapacity count={(club.squad || []).length} />
         <div>
           <h2 className="text-base font-black text-slate-950">Register player — {club.name}</h2>
           <p className="text-xs text-slate-500">Creates a full player account in your club. The player signs in with the email and password below, like any other player.</p>
