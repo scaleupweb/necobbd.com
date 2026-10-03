@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Armchair } from "lucide-react";
+import { Armchair, Plus } from "lucide-react";
 import { SQUAD_LIMIT } from "@/lib/squad";
 
 /** "Main Team Squad 23/30" with a fill bar. */
@@ -29,8 +29,11 @@ export function SquadCapacity({ count, className = "" }: { count: number; classN
   );
 }
 
-/** All 30 seats of the Main Team Squad: filled seats show the player, the rest are open. */
-export function SquadSeats({ squad }: { squad: any[] }) {
+/**
+ * All 30 seats of the Main Team Squad: filled seats show the player, the rest are open.
+ * With `openHref`, open seats become "+" buttons linking there (e.g. the transfer window).
+ */
+export function SquadSeats({ squad, openHref }: { squad: any[]; openHref?: string }) {
   const players = [...squad].sort((a, b) => (a.shirtNo || 999) - (b.shirtNo || 999) || a.fullName.localeCompare(b.fullName)).slice(0, SQUAD_LIMIT);
   const seats = Array.from({ length: SQUAD_LIMIT }, (_, i) => players[i] || null);
   return (
@@ -48,6 +51,13 @@ export function SquadSeats({ squad }: { squad: any[] }) {
                 ) : null}
               </span>
               <span className="w-full text-center text-[10px] font-bold text-slate-700 truncate group-hover:underline">{p.fullName.split(" ")[0]}</span>
+            </Link>
+          ) : openHref ? (
+            <Link key={`open-${i}`} href={openHref} title={`Seat ${i + 1} is open — sign a player`} className="group flex flex-col items-center gap-1">
+              <span className="w-11 h-11 sm:w-12 sm:h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 group-hover:border-[#C79A3B] group-hover:bg-amber-50 group-hover:text-[#B0852A] transition-colors">
+                <Plus className="w-5 h-5" />
+              </span>
+              <span className="text-[10px] font-semibold text-slate-400 group-hover:text-[#B0852A]">Seat {i + 1}</span>
             </Link>
           ) : (
             <div key={`open-${i}`} className="flex flex-col items-center gap-1">

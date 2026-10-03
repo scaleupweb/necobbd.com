@@ -63,10 +63,10 @@ export function ComingSoon({ tool }: { tool: ClubTool }) {
 export function SquadRoster() {
   const { club } = useClubHub();
   const squad = [...(club.squad || [])].sort((a: any, b: any) => (a.shirtNo || 999) - (b.shirtNo || 999));
-  if (!squad.length) return <SquadSeats squad={[]} />;
+  if (!squad.length) return <SquadSeats squad={[]} openHref="/dashboard/my-club/transfer-window" />;
   return (
     <div className="space-y-4">
-    <SquadSeats squad={squad} />
+    <SquadSeats squad={squad} openHref="/dashboard/my-club/transfer-window" />
     <Card className="!p-0 overflow-hidden">
       <div className="px-4 sm:px-6 py-3 border-b border-slate-100 text-xs font-bold text-slate-500">{squad.length} players</div>
       <div className="divide-y divide-slate-100">
