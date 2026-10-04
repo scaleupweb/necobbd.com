@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Search, Lock, Unlock, X, Loader2, CheckCircle2, Clock, XCircle, Snowflake, FileSignature, Image as ImageIcon, Download, Share2, ExternalLink, UserPlus, LayoutGrid, Table2 } from "lucide-react";
 import { toast } from "@/lib/feedback";
@@ -407,9 +408,11 @@ function SignSheet({ player, club, pending, onClose, onDone }: { player: any; cl
   );
 
   return (
+    // Rendered on <body> so it always sits above the page and the phone's bottom bar.
+    createPortal(
     <div className="fixed inset-0 flex items-end sm:items-center justify-center sm:p-6" style={{ zIndex: 200 }}>
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/55 backdrop-blur-sm" />
-      <div className="relative w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
+      <div style={{ maxHeight: "92dvh" }} className="relative w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center gap-3 px-5 py-4 bg-white border-b border-slate-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -540,7 +543,7 @@ function SignSheet({ player, club, pending, onClose, onDone }: { player: any; cl
           )}
         </div>
 
-        <div className="sticky bottom-0 px-5 py-4 bg-white border-t border-slate-100 flex items-center justify-end gap-2">
+        <div className="sticky bottom-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white border-t border-slate-100 flex items-center justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-100 text-xs font-bold">Cancel</button>
           <button
             onClick={submit}
@@ -551,7 +554,9 @@ function SignSheet({ player, club, pending, onClose, onDone }: { player: any; cl
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
+    )
   );
 }
 
