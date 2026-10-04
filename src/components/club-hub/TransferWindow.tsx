@@ -741,12 +741,13 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
     fitFont(ctx, player.fullName.toUpperCase(), W - 140, 92);
     ctx.fillText(player.fullName.toUpperCase(), W / 2, 215);
 
-    drawPhoto(W / 2, 520, 215);
+    // Bigger player photo, smaller club badges underneath.
+    drawPhoto(W / 2, 560, 275);
 
-    const bs = 220;
-    const by = 800;
-    const lx = 150;
-    const rx2 = W - 150 - bs;
+    const bs = 150;
+    const by = 885;
+    const lx = W / 2 - 270 - bs / 2;
+    const rx2 = W / 2 + 270 - bs / 2;
     drawBadge(fromLogo, lx, by, bs, true);
     drawBadge(logo, rx2, by, bs);
 
@@ -755,32 +756,32 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
     ctx.save();
     ctx.strokeStyle = gold;
     ctx.fillStyle = gold;
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 8;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(lx + bs + 40, ay);
-    ctx.lineTo(rx2 - 60, ay);
+    ctx.moveTo(lx + bs + 34, ay);
+    ctx.lineTo(rx2 - 52, ay);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(rx2 - 30, ay);
-    ctx.lineTo(rx2 - 75, ay - 32);
-    ctx.lineTo(rx2 - 75, ay + 32);
+    ctx.moveTo(rx2 - 24, ay);
+    ctx.lineTo(rx2 - 62, ay - 26);
+    ctx.lineTo(rx2 - 62, ay + 26);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
 
     // Club names
     ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.font = `800 24px ${FONT}`;
-    ctx.fillText("LEAVES", lx + bs / 2, by + bs + 48);
+    ctx.font = `800 22px ${FONT}`;
+    ctx.fillText("LEAVES", lx + bs / 2, by + bs + 40);
     ctx.fillStyle = gold;
-    ctx.fillText("JOINS", rx2 + bs / 2, by + bs + 48);
+    ctx.fillText("JOINS", rx2 + bs / 2, by + bs + 40);
     ctx.fillStyle = "rgba(255,255,255,0.8)";
-    fitFont(ctx, fromClub.name.toUpperCase(), 360, 34, 800);
-    ctx.fillText(fromClub.name.toUpperCase(), lx + bs / 2, by + bs + 92);
+    fitFont(ctx, fromClub.name.toUpperCase(), 380, 32, 800);
+    ctx.fillText(fromClub.name.toUpperCase(), lx + bs / 2, by + bs + 80);
     ctx.fillStyle = "#fff";
-    fitFont(ctx, club.name.toUpperCase(), 360, 34, 900);
-    ctx.fillText(club.name.toUpperCase(), rx2 + bs / 2, by + bs + 92);
+    fitFont(ctx, club.name.toUpperCase(), 380, 32, 900);
+    ctx.fillText(club.name.toUpperCase(), rx2 + bs / 2, by + bs + 80);
 
     ribbon("HERE WE GO!  ·  CLUB TO CLUB");
   } else {
