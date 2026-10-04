@@ -19,6 +19,10 @@ export default function ClubControlCenter() {
     return TOOLS.filter((t) => canOpen(t, club.access, club.permissions) && (!s || `${t.label} ${t.desc}`.toLowerCase().includes(s)));
   }, [q, club.access, club.permissions]);
 
+  // The most used tools, shown as big buttons (only those this person can open).
+  const QUICK = ["transfer-window", "register-player", "update-player", "tournament-registration"];
+  const quick = TOOLS.filter((t) => QUICK.includes(t.slug) && t.ready && canOpen(t, club.access, club.permissions));
+
   return (
     <div className="space-y-5">
       {club.status === "PENDING" && (
@@ -64,48 +68,71 @@ export default function ClubControlCenter() {
         </div>
       </section>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search tools…"
-          className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white border border-slate-200 text-sm focus:outline-none focus:border-black"
-        />
+      {/* Quick actions + search */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3 items-stretch">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          {quick.map((t) => {
+            const g = GROUPS.find((x) => x.id === t.group)!;
+            return (
+              <Link
+                key={t.slug}
+                href={`/dashboard/my-club/${t.slug}`}
+                className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${g.head} p-4 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all`}
+              >
+                <t.icon className="w-6 h-6" />
+                <div className="mt-6 text-sm font-black leading-tight">{t.label}</div>
+                <ArrowUpRight className="absolute top-3 right-3 w-4 h-4 text-white/60 group-hover:text-white" />
+                <t.icon aria-hidden className="absolute -right-3 -bottom-3 w-20 h-20 text-white/10" />
+              </Link>
+            );
+          })}
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find a tool…"
+            className="w-full h-full min-h-[48px] pl-11 pr-4 rounded-2xl bg-white border border-slate-200 text-sm focus:outline-none focus:border-black"
+          />
+        </div>
       </div>
 
-      {/* Tool groups */}
-      {GROUPS.map((g) => {
-        const items = tools.filter((t) => t.group === g.id);
-        if (!items.length) return null;
-        return (
-          <section key={g.id} className="space-y-3">
-            <h2 className={`text-xs font-black uppercase tracking-[0.18em] ${g.tone}`}>{g.label}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {items.map((t) => (
-                <Link
-                  key={t.slug}
-                  href={`/dashboard/my-club/${t.slug}`}
-                  className="group relative flex items-start gap-3.5 rounded-2xl bg-white border border-slate-200 p-4 hover:border-slate-900 hover:shadow-md transition-all"
-                >
-                  <span className={`w-11 h-11 rounded-xl ring-1 flex items-center justify-center shrink-0 ${g.tile}`}>
-                    <t.icon className="w-5 h-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="text-sm font-black text-slate-950">{t.label}</span>
-                      {!t.ready && <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-[9px] font-black uppercase text-slate-500">Soon</span>}
+      {/* Tool panels */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {GROUPS.map((g) => {
+          const items = tools.filter((t) => t.group === g.id);
+          if (!items.length) return null;
+          return (
+            <section key={g.id} className="rounded-3xl bg-white border border-slate-200 overflow-hidden">
+              <div className={`flex items-center justify-between gap-3 px-5 py-4 bg-gradient-to-r ${g.head} text-white`}>
+                <div>
+                  <h2 className="text-base font-black tracking-tight">{g.label}</h2>
+                  <p className="text-[11px] text-white/75">{g.blurb}</p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-white/20 text-[11px] font-black">{items.length} tools</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 bg-white -mr-px -mb-px">
+                {items.map((t) => (
+                  <Link
+                    key={t.slug}
+                    href={`/dashboard/my-club/${t.slug}`}
+                    title={t.desc}
+                    className="group relative flex flex-col items-center text-center gap-2 bg-white px-3 py-5 border-r border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                  >
+                    <span className={`w-12 h-12 rounded-2xl ring-1 flex items-center justify-center ${g.tile} group-hover:scale-110 transition-transform`}>
+                      <t.icon className="w-5 h-5" />
                     </span>
-                    <span className="block text-xs text-slate-500 mt-0.5 leading-relaxed">{t.desc}</span>
-                  </span>
-                  <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-slate-900 transition-colors shrink-0" />
-                </Link>
-              ))}
-            </div>
-          </section>
-        );
-      })}
+                    <span className="text-[13px] font-black text-slate-900 leading-tight">{t.label}</span>
+                    <span className="text-[11px] text-slate-500 leading-snug line-clamp-2">{t.desc}</span>
+                    {!t.ready && <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-slate-100 text-[9px] font-black uppercase text-slate-400">Coming</span>}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
 
       {!tools.length && <div className="py-10 text-center text-sm text-slate-500">No tools match “{q}”.</div>}
     </div>
