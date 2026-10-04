@@ -129,6 +129,25 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Looping strip: pauses while hovered or focused; speed set with --marquee-duration */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-loop var(--marquee-duration, 60s) linear infinite;
+}
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+  .marquee {
+    overflow-x: auto;
+  }
+}
+
 /* Infinite Marquee Looping Animation */
 @keyframes marquee-loop {
   0% {

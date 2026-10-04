@@ -175,8 +175,19 @@ export async function getHomepageData(settings: SiteSettings) {
   const clubPlayers = clubs.reduce((a: number, c: any) => a + (c.squadCount || 0), 0);
   const newestPlayers = [...players]
     .sort((a: any, b: any) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0))
-    .slice(0, 8)
-    .map((p: any) => ({ username: p.username, name: p.fullName, avatar: p.avatar, club: p.club?.shortName || "", position: p.preferredPosition }));
+    .slice(0, 16)
+    .map((p: any) => ({
+      username: p.username,
+      name: p.fullName,
+      avatar: p.avatar,
+      club: p.club?.shortName || "",
+      clubName: p.club?.name || "",
+      clubLogo: p.club?.logo || "",
+      position: p.preferredPosition,
+      rating: p.rating || 0,
+      verified: !!p.isVerified,
+      joinedAt: p.createdAt ? new Date(p.createdAt).toISOString() : "",
+    }));
 
   let transferPlayers = listings.slice(0, 5).map((l: any) => ({
     id: l.player.id,
