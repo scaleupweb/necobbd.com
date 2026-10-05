@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Save, Loader2, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { api, Button, Field, inputCls, Notice, PageHeader, Toggle } from "@/components/admin/ui";
 import { ImageInput } from "@/components/ui/ImageInput";
+import { MailTestButton } from "@/components/admin/MailTestButton";
 import type { SiteSettings } from "@/lib/site-settings";
 
 const TABS = [
@@ -94,6 +95,7 @@ export default function SiteContentPage() {
             <Link href="/" target="_blank" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:border-black">
               <ExternalLink className="w-3.5 h-3.5" /> View site
             </Link>
+            <MailTestButton />
             <Button onClick={save} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save changes
             </Button>
