@@ -178,8 +178,8 @@
   right: 22px; /* apex sits on the eye button's centre */
   pointer-events: none;
   clip-path: polygon(100% 50%, 0 0, 0 100%);
-  background: linear-gradient(to left, rgba(232, 190, 92, 0.75), rgba(214, 170, 72, 0.35) 45%, rgba(199, 154, 59, 0.08) 85%, transparent);
-  mix-blend-mode: multiply;
+  background: linear-gradient(to left, rgba(255, 221, 128, 0.95), rgba(245, 200, 96, 0.55) 40%, rgba(232, 182, 76, 0.18) 80%, transparent);
+  filter: drop-shadow(0 0 10px rgba(245, 200, 96, 0.45));
   transform: scaleX(0);
   transform-origin: right center;
   opacity: 0;
@@ -209,4 +209,32 @@
   .pw-beam-on {
     animation: none;
   }
+  .pw-dark {
+    transition: none;
+  }
+}
+
+/* The room goes dark while the flashlight is on, so the lit password stands out. */
+.pw-dark {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 9, 12, 0.86);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.pw-dark-on {
+  opacity: 1;
+}
+.pw-lit main {
+  z-index: 70 !important;
+}
+.pw-input-lit {
+  background-color: #0b0c0f !important;
+  border-color: rgba(199, 154, 59, 0.6) !important;
+  color: #fff3d1 !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px rgba(255, 214, 120, 0.55);
 }
