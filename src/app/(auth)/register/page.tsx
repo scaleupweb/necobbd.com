@@ -239,12 +239,13 @@ function PlayerRegisterForm() {
                 <label className="block text-slate-700 font-bold mb-1">Konami ID / In-Game UID *</label>
                 <input
                   type="text"
-                  placeholder="e.g. 984-721-032"
+                  placeholder="e.g. ASEV-130-051-751"
                   value={formData.konamiId}
-                  onChange={(e) => setFormData({ ...formData, konamiId: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white font-mono text-xs"
+                  onChange={(e) => setFormData({ ...formData, konamiId: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white font-mono text-xs uppercase"
                   required
                 />
+                <p className="mt-1 text-[11px] text-slate-500">Your own eFootball User ID (4 letters + 9 numbers). Each UID can only be registered once.</p>
               </div>
 
               <div>

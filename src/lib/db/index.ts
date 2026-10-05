@@ -294,6 +294,15 @@ function shapeTournament(t: any, prog?: { total: number; completed: number }) {
 // Service
 // ---------------------------------------------------------------------------
 
+/** Konami UID compared without dashes/spaces/case: "asev 130-051751" == "ASEV-130-051-751". */
+const konamiKey = (v: unknown) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const KONAMI_RE = /^[A-Z]{4}\d{9}$/;
+/** Store UIDs in eFootball's own format: ASEV-130-051-751. */
+const formatKonamiId = (v: unknown) => {
+  const k = konamiKey(v);
+  return KONAMI_RE.test(k) ? `${k.slice(0, 4)}-${k.slice(4, 7)}-${k.slice(7, 10)}-${k.slice(10)}` : String(v ?? "").trim();
+};
+
 export const db = {
   // ----- Users -----
   async getUserByEmailOrUsername(emailOrUsername: string, withSecrets = false) {
@@ -476,8 +485,41 @@ export const db = {
     return shapePlayer(p, await clubMap([p.clubId]));
   },
 
+  /**
+   * A Konami UID must look like one and belong to only one player.
+   * Throws a clear message when it's malformed or already registered to someone else.
+   */
+  async assertKonamiIdUsable(uid: unknown, exceptPlayerId?: string) {
+    const k = konamiKey(uid);
+    if (!k) return;
+    if (!KONAMI_RE.test(k)) {
+      throw new ServiceError(
+        `"${String(uid).trim()}" doesn't look like a Konami UID. Copy it from eFootball (it looks like ASEV-130-051-751: 4 letters and 9 numbers).`,
+        400,
+        "INVALID_KONAMI_ID"
+      );
+    }
+    await connectDB();
+    // Match however it was typed (with or without dashes/spaces, any case).
+    const pattern = new RegExp(`^[^A-Za-z0-9]*${k.split("").join("[^A-Za-z0-9]*")}[^A-Za-z0-9]*$`, "i");
+    const q: any = { konamiId: pattern };
+    if (exceptPlayerId && isId(exceptPlayerId)) q._id = { $ne: exceptPlayerId };
+    const other = await Player.findOne(q, { username: 1 }).lean<any>();
+    if (other) {
+      throw new ServiceError(
+        `This Konami UID (${formatKonamiId(k)}) is already registered to another player (@${other.username}). Every player needs their own UID — please check yours in eFootball and enter it again.`,
+        409,
+        "KONAMI_ID_TAKEN"
+      );
+    }
+  },
+
   async createPlayer(data: any) {
     await connectDB();
+    if (data.konamiId) {
+      await db.assertKonamiIdUsable(data.konamiId);
+      data = { ...data, konamiId: formatKonamiId(data.konamiId) };
+    }
     if (data.clubId && isId(String(data.clubId))) await assertSquadSpace(data.clubId);
     const player = await Player.create({
       userId: data.userId,
@@ -523,6 +565,16 @@ export const db = {
     if (set.clubId) {
       const cur = await Player.findById(id, { clubId: 1 }).lean<any>();
       if (String(cur?.clubId || "") !== String(set.clubId)) await assertSquadSpace(set.clubId, id);
+    }
+    // Only a new or changed UID is checked, so old records can still save their other details.
+    if (typeof set.konamiId === "string" && set.konamiId.trim()) {
+      const cur = await Player.findById(id, { konamiId: 1 }).lean<any>();
+      if (konamiKey(cur?.konamiId) !== konamiKey(set.konamiId)) {
+        await db.assertKonamiIdUsable(set.konamiId, id);
+        set.konamiId = formatKonamiId(set.konamiId);
+      } else {
+        set.konamiId = cur?.konamiId ?? set.konamiId;
+      }
     }
     const p = await Player.findByIdAndUpdate(id, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true }).lean<any>();
     if (!p) throw new ServiceError("Player not found", 404);

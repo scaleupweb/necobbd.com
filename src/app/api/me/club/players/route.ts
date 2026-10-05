@@ -42,6 +42,8 @@ export const POST = handle(async (req: NextRequest) => {
   if (worn) return fail(`#${data.shirtNo} is already worn by ${worn.fullName}`, 409, "CONFLICT");
 
   const username = await freeUsername(data.fullName);
+  // Check the Konami UID first so a refused UID never leaves a half-created account.
+  await db.assertKonamiIdUsable(data.konamiId);
   const user = await db.createUser({
     email: data.email,
     username,

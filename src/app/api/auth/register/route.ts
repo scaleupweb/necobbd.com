@@ -21,6 +21,8 @@ export const POST = handle(async (req: NextRequest) => {
   }
 
   const passwordHash = await hashPassword(data.password);
+  // Check the Konami UID first so a refused UID never leaves a half-created account.
+  await db.assertKonamiIdUsable(data.konamiId);
   const user = await db.createUser({
     email: data.email,
     username: data.username,

@@ -22,6 +22,8 @@ export const POST = handle(async (req: NextRequest) => {
   const exists = (await db.getUserByEmailOrUsername(data.email)) || (await db.getUserByEmailOrUsername(data.username));
   if (exists) return fail("Email or username already in use", 409, "CONFLICT");
 
+  // Check the Konami UID first so a refused UID never leaves a half-created account.
+  if (data.createPlayerProfile) await db.assertKonamiIdUsable(data.konamiId);
   const user = await db.createUser({
     email: data.email,
     username: data.username,
