@@ -23,9 +23,11 @@ export function LoginStage({ children }: { children: ReactNode }) {
     const pwInput = () => el.querySelector<HTMLInputElement>('input[autocomplete="current-password"], input[autocomplete="new-password"]');
     const update = () => {
       const input = pwInput();
-      // the field or its eye button counts as "in use"
-      const focused = !!input && !!input.parentElement?.contains(document.activeElement);
-      setShy(focused ? (input!.type === "text" ? "peek" : "cover") : "none");
+      if (!input) return setShy("none");
+      // Password shown as text → he peeks (even if you click elsewhere while it's shown).
+      if (input.type === "text") return setShy("peek");
+      // Typing a hidden password (the field or its eye button in use) → he covers his eyes.
+      setShy(input.parentElement?.contains(document.activeElement) ? "cover" : "none");
     };
     const later = () => setTimeout(update, 0);
     // the eye button changes the input type; watch for that too
@@ -57,7 +59,7 @@ export function LoginStage({ children }: { children: ReactNode }) {
         <Footballer3D
           onPull={onPull}
           shy={shy}
-          className="hidden lg:block absolute bottom-[-18px] right-full mr-1 w-[340px] h-[430px] pointer-events-none select-none [mask-image:linear-gradient(to_right,transparent,black_18%)]"
+          className="ls-3d hidden lg:block absolute bottom-[-18px] right-full mr-1 w-[340px] h-[430px] pointer-events-none select-none [mask-image:linear-gradient(to_right,transparent,black_18%)]"
         />
       )}
       <div className="ls-card relative">{children}</div>

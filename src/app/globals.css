@@ -384,3 +384,9 @@
     animation: ls-card-rise 0.5s ease-out both;
   }
 }
+
+/* When the password flashlight darkens the page, keep the footballer lit (above the dark layer
+   and the beam) so he can be seen peeking. */
+.pw-lit .ls-3d {
+  z-index: 62;
+}
