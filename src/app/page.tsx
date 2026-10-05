@@ -81,7 +81,7 @@ export default async function HomePage() {
         />
       )}
 
-      {data && s.transfers.show && <TransferMarketSection content={s.transfers} players={data.transferPlayers} />}
+      {data && s.transfers.show && <TransferMarketSection content={s.transfers} players={data.transferPlayers} stats={data.transferStats} />}
 
       {data && (s.news.show || s.events.show) && (data.news.length > 0 || data.events.length > 0) && (
         <NewsAndEvents

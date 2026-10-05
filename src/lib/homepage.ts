@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { SiteSettings } from "@/lib/site-settings";
+import { isFreeAgent } from "@/lib/squad";
 
 export interface HomeMatch {
   id: string;
@@ -190,22 +191,44 @@ export async function getHomepageData(settings: SiteSettings) {
       joinedAt: p.createdAt ? new Date(p.createdAt).toISOString() : "",
     }));
 
-  let transferPlayers = listings.slice(0, 5).map((l: any) => ({
+  // Players a club can sign: listed players first, then players without a club.
+  // "Free Agent" = their contract ran out; players who never signed are "Unsigned".
+  const hasPhoto = (p: any) => p.avatar && !String(p.avatar).startsWith("/images/placeholders");
+  const listed = listings.slice(0, 6).map((l: any) => ({
     id: l.player.id,
     username: l.player.username,
     name: l.player.fullName,
     avatar: l.player.avatar,
-    status: "Transfer Listed",
-    marketValue: formatCurrency(l.askingPrice),
+    position: l.player.preferredPosition || "",
+    device: l.player.deviceModel || "",
+    status: "Listed" as const,
+    note: l.askingPrice ? `Asking ${formatCurrency(l.askingPrice)}` : "On the transfer list",
+    verified: !!l.player.isVerified,
   }));
-  if (transferPlayers.length < 5) {
-    const listedIds = new Set(transferPlayers.map((p) => p.id));
-    const extra = players
-      .filter((p: any) => !listedIds.has(p.id) && p.contract.status === "FREE_AGENT")
-      .slice(0, 5 - transferPlayers.length)
-      .map((p: any) => ({ id: p.id, username: p.username, name: p.fullName, avatar: p.avatar, status: "Free Agent", marketValue: formatCurrency(p.marketValue) }));
-    transferPlayers = [...transferPlayers, ...extra];
-  }
+  const listedIds = new Set(listed.map((p: any) => p.id));
+  const available = players.filter((p: any) => !p.club && !listedIds.has(p.id));
+  const freeAgents = available.filter((p: any) => isFreeAgent(p));
+  const pickOrder = [...available].sort(
+    (a: any, b: any) =>
+      Number(isFreeAgent(b)) - Number(isFreeAgent(a)) ||
+      Number(hasPhoto(b)) - Number(hasPhoto(a)) ||
+      +new Date(b.contract?.endDate || b.createdAt || 0) - +new Date(a.contract?.endDate || a.createdAt || 0)
+  );
+  const transferPlayers = [
+    ...listed,
+    ...pickOrder.slice(0, Math.max(0, 6 - listed.length)).map((p: any) => ({
+      id: p.id,
+      username: p.username,
+      name: p.fullName,
+      avatar: p.avatar,
+      position: p.preferredPosition || "",
+      device: p.deviceModel || "",
+      status: (isFreeAgent(p) ? "Free Agent" : "Unsigned") as "Free Agent" | "Unsigned",
+      note: isFreeAgent(p) ? `Contract ended ${formatDate(p.contract.endDate)}` : "Never signed · ready to join",
+      verified: !!p.isVerified,
+    })),
+  ];
+  const transferStats = { available: available.length + listed.length, freeAgents: freeAgents.length, listed: listed.length };
 
   const upcomingEvents = events.filter((e: any) => e.status === "ACTIVE" && new Date(e.eventDate).getTime() > Date.now()).slice(0, 3);
 
@@ -275,6 +298,7 @@ export async function getHomepageData(settings: SiteSettings) {
       points: c.points,
     })),
     transferPlayers,
+    transferStats,
     clubsSpotlight: {
       totalClubs: clubs.length,
       clubPlayers,
