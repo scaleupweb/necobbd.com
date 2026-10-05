@@ -126,7 +126,9 @@ export function SquadRoster() {
 function SquadSheetButton({ club, squad }: { club: any; squad: any[] }) {
   const [busy, setBusy] = useState(false);
   const [withPhone, setWithPhone] = useState(false);
-  const hasPhones = squad.some((p) => p.phone);
+  const phoneCount = squad.filter((p) => p.phone).length;
+  // Phones are only sent to the main manager / full-control staff, so this also hides the option from others.
+  const canSeePhones = phoneCount > 0;
   const make = async () => {
     setBusy(true);
     try {
@@ -143,10 +145,13 @@ function SquadSheetButton({ club, squad }: { club: any; squad: any[] }) {
   };
   return (
     <div className="flex items-center gap-3">
-      {hasPhones && (
+      {canSeePhones && (
         <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer select-none" title="Phone numbers are private — only add them if the group is private">
           <input type="checkbox" checked={withPhone} onChange={(e) => setWithPhone(e.target.checked)} className="w-3.5 h-3.5 accent-[#C79A3B]" />
           Include phone numbers
+          <span className="text-slate-400 font-semibold">
+            ({phoneCount}/{squad.length} saved)
+          </span>
         </label>
       )}
       <button

@@ -310,7 +310,13 @@ export async function renderSquadSheet(canvas: HTMLCanvasElement, club: any, squ
   ctx.fillRect(0, HEADER - 66, W, 66);
   ctx.fillStyle = "#F7DC8B";
   ctx.font = `700 21px ${FONT}`;
-  ctx.fillText("Please check your details. Wrong name, UID or device? Tell your club manager.", 56, HEADER - 26);
+  ctx.fillText(
+    opts.includePhone
+      ? "Please check your details. Wrong or missing name, UID, phone or device? Tell your club manager."
+      : "Please check your details. Wrong name, UID or device? Tell your club manager.",
+    56,
+    HEADER - 26
+  );
 
   // ---- column headings
   const X = { seat: 40, avatar: 118, name: 206, uid: 640, device: 880, pos: 1120, contract: 1200 };
@@ -326,6 +332,7 @@ export async function renderSquadSheet(canvas: HTMLCanvasElement, club: any, squ
     ["POS", X.pos],
     ["CONTRACT", X.contract],
   ];
+  if (opts.includePhone) head[2] = ["KONAMI UID / PHONE", X.uid];
   for (const [t, x] of head) ctx.fillText(t, x, HEADER + 36);
 
   // ---- rows
@@ -369,14 +376,15 @@ export async function renderSquadSheet(canvas: HTMLCanvasElement, club: any, squ
     ctx.fillText(ellipsize(ctx, `@${p.username || ""}`, X.uid - X.name - 30), X.name, mid + 24);
 
     // UID (+ phone)
-    const withPhone = !!(opts.includePhone && p.phone);
+    const withPhone = !!opts.includePhone;
     ctx.fillStyle = p.konamiId ? "#0F172A" : "#CBD5E1";
     ctx.font = `800 20px ${MONO}`;
     ctx.fillText(ellipsize(ctx, p.konamiId || "missing", X.device - X.uid - 20), X.uid, withPhone ? mid - 6 : mid + 7);
     if (withPhone) {
-      ctx.fillStyle = "#64748B";
-      ctx.font = `600 17px ${MONO}`;
-      ctx.fillText(ellipsize(ctx, `Tel ${p.phone}`, X.device - X.uid - 20), X.uid, mid + 24);
+      // Shown for everyone when phones are included, so players without one know to add it.
+      ctx.fillStyle = p.phone ? "#334155" : "#E11D48";
+      ctx.font = `700 17px ${MONO}`;
+      ctx.fillText(ellipsize(ctx, `Tel ${p.phone || "missing"}`, X.device - X.uid - 20), X.uid, mid + 24);
     }
 
     // device
