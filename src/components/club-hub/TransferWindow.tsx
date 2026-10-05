@@ -615,208 +615,366 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
   // Coming from another club → club-to-club poster; otherwise a welcome / new-signing poster.
   const fromClub = player.club && player.club.id !== club.id ? player.club : null;
   const [photo, logo, fromLogo] = await Promise.all([loadImage(player.avatar), loadImage(club.logo), fromClub ? loadImage(fromClub.logo) : Promise.resolve(null)]);
+  const FONT = `"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
   const gold = "#E8B95A";
+  const goldGrad = (x0: number, y0: number, x1: number, y1: number) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, "#FFE9A8");
+    g.addColorStop(0.45, "#E8B95A");
+    g.addColorStop(1, "#9A6E22");
+    return g;
+  };
 
-  // Background
+  // Name split: smaller first names, a big surname.
+  const parts = String(player.fullName || "").trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const surname = parts.length > 1 ? parts.pop()! : parts[0] || "";
+  const firstNames = parts.length && parts[0] !== surname ? parts.join(" ") : "";
+
+  // ---------------------------------------------------------------- background
   const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, "#0B0C0F");
-  bg.addColorStop(0.55, "#121318");
-  bg.addColorStop(1, "#1d1606");
+  bg.addColorStop(0, "#07080B");
+  bg.addColorStop(0.5, "#101116");
+  bg.addColorStop(1, "#1a1407");
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
-  // Club colours glow (blurred crest)
+
+  // Club colours: the crest blown up and blurred.
   if (logo) {
     ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.filter = "blur(70px)";
-    drawCover(ctx, logo, -200, 150, W + 400, 900);
+    ctx.globalAlpha = 0.38;
+    ctx.filter = "blur(90px) saturate(1.4)";
+    drawCover(ctx, logo, -260, 120, W + 520, 1000);
     ctx.restore();
   }
-  const glow = ctx.createRadialGradient(W / 2, 560, 50, W / 2, 560, 620);
-  glow.addColorStop(0, "rgba(232,185,90,0.35)");
-  glow.addColorStop(1, "rgba(232,185,90,0)");
-  ctx.fillStyle = glow;
+
+  // Spotlight from above.
+  const spot = ctx.createRadialGradient(W / 2, 520, 40, W / 2, 520, 700);
+  spot.addColorStop(0, "rgba(255,214,120,0.32)");
+  spot.addColorStop(0.5, "rgba(232,185,90,0.10)");
+  spot.addColorStop(1, "rgba(232,185,90,0)");
+  ctx.fillStyle = spot;
   ctx.fillRect(0, 0, W, H);
-  // Light streaks
+
+  // Light beams fanning down-left from the top-right corner.
   ctx.save();
-  ctx.globalAlpha = 0.08;
-  ctx.fillStyle = "#fff";
-  for (let i = 0; i < 5; i++) {
+  ctx.globalCompositeOperation = "lighter";
+  const ox = W + 40;
+  const oy = -40;
+  const len = 1900;
+  for (let i = 0; i < 6; i++) {
+    const t = ((118 + i * 7) * Math.PI) / 180; // y grows downward, so these point down-left
+    const half = 0.022;
+    const g = ctx.createLinearGradient(ox, oy, ox + Math.cos(t) * len, oy + Math.sin(t) * len);
+    g.addColorStop(0, `rgba(255,220,140,${0.1 - i * 0.01})`);
+    g.addColorStop(1, "rgba(255,220,140,0)");
+    ctx.fillStyle = g;
     ctx.beginPath();
-    const x = 120 + i * 210;
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + 40, 0);
-    ctx.lineTo(x - 260, H);
-    ctx.lineTo(x - 300, H);
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(ox + Math.cos(t - half) * len, oy + Math.sin(t - half) * len);
+    ctx.lineTo(ox + Math.cos(t + half) * len, oy + Math.sin(t + half) * len);
     ctx.closePath();
     ctx.fill();
   }
   ctx.restore();
-  // Faint grid
+
+  // Halftone dots in two corners.
+  const halftone = (ox: number, oy: number, size: number, dirX: number, dirY: number) => {
+    ctx.save();
+    ctx.fillStyle = "rgba(232,185,90,0.16)";
+    for (let y = 0; y < size; y += 22) {
+      for (let x = 0; x < size; x += 22) {
+        const d = 1 - Math.hypot(x, y) / size;
+        if (d <= 0) continue;
+        ctx.beginPath();
+        ctx.arc(ox + dirX * x, oy + dirY * y, 1 + d * 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  };
+  halftone(40, 40, 360, 1, 1);
+  halftone(W - 40, H - 40, 360, -1, -1);
+
+  // Huge outlined surname behind the player.
   ctx.save();
-  ctx.globalAlpha = 0.05;
-  ctx.strokeStyle = "#fff";
-  for (let x = 0; x <= W; x += 54) {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ghost = surname || "SIGNED";
+  const gs = fitFont(ctx, ghost, W * 1.25, 300, 900, FONT);
+  ctx.font = `900 ${gs}px ${FONT}`;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(255,255,255,0.09)";
+  ctx.strokeText(ghost, W / 2, fromClub ? 560 : 700);
+  ctx.strokeText(ghost, W / 2, (fromClub ? 560 : 700) + gs * 0.92);
+  ctx.restore();
+
+  // Vignette.
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.78);
+  vig.addColorStop(0, "rgba(0,0,0,0)");
+  vig.addColorStop(1, "rgba(0,0,0,0.65)");
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // Thin gold frame with corner accents.
+  ctx.save();
+  ctx.strokeStyle = "rgba(232,185,90,0.35)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 28, 28, W - 56, H - 56, 26);
+  ctx.stroke();
+  ctx.strokeStyle = gold;
+  ctx.lineWidth = 6;
+  ctx.lineCap = "round";
+  const c = 70;
+  for (const [x, y, sx, sy] of [
+    [28, 28, 1, 1],
+    [W - 28, 28, -1, 1],
+    [28, H - 28, 1, -1],
+    [W - 28, H - 28, -1, -1],
+  ] as const) {
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
-    ctx.stroke();
-  }
-  for (let y = 0; y <= H; y += 54) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
+    ctx.moveTo(x + sx * 4, y + sy * c);
+    ctx.lineTo(x + sx * 4, y + sy * 4);
+    ctx.lineTo(x + sx * c, y + sy * 4);
     ctx.stroke();
   }
   ctx.restore();
 
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  const FONT = `"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
 
-  // Circle photo with a gold ring.
-  const drawPhoto = (cx: number, cy: number, R: number) => {
+  // ---------------------------------------------------------------- pieces
+  /** Rounded-square portrait with a gold frame, glow and a dark fade at the bottom. */
+  const drawPortrait = (x: number, y: number, size: number) => {
+    const r = size * 0.09;
     ctx.save();
-    ctx.shadowColor = "rgba(232,185,90,0.6)";
-    ctx.shadowBlur = 60;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R + 14, 0, Math.PI * 2);
-    const ring = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-    ring.addColorStop(0, "#F7DC8B");
-    ring.addColorStop(0.5, "#C79A3B");
-    ring.addColorStop(1, "#8a6420");
-    ctx.fillStyle = ring;
+    ctx.shadowColor = "rgba(232,185,90,0.55)";
+    ctx.shadowBlur = 80;
+    roundRect(ctx, x - 12, y - 12, size + 24, size + 24, r + 10);
+    ctx.fillStyle = goldGrad(x, y, x + size, y + size);
     ctx.fill();
     ctx.restore();
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    roundRect(ctx, x, y, size, size, r);
     ctx.clip();
     ctx.fillStyle = "#1f2937";
-    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-    if (photo) drawCover(ctx, photo, cx - R, cy - R, R * 2, R * 2);
+    ctx.fillRect(x, y, size, size);
+    if (photo) drawCover(ctx, photo, x, y, size, size);
     else {
       ctx.fillStyle = "#fff";
-      ctx.font = `900 ${Math.round(R * 0.75)}px ${FONT}`;
-      ctx.fillText((player.fullName || "?").charAt(0).toUpperCase(), cx, cy + R * 0.26);
+      ctx.font = `900 ${Math.round(size * 0.4)}px ${FONT}`;
+      ctx.fillText((player.fullName || "?").charAt(0).toUpperCase(), x + size / 2, y + size * 0.64);
+    }
+    const fade = ctx.createLinearGradient(0, y + size * 0.62, 0, y + size);
+    fade.addColorStop(0, "rgba(7,8,11,0)");
+    fade.addColorStop(1, "rgba(7,8,11,0.7)");
+    ctx.fillStyle = fade;
+    ctx.fillRect(x, y, size, size);
+    // glossy sheen
+    const sheen = ctx.createLinearGradient(x, y, x + size, y + size);
+    sheen.addColorStop(0, "rgba(255,255,255,0.14)");
+    sheen.addColorStop(0.35, "rgba(255,255,255,0)");
+    ctx.fillStyle = sheen;
+    ctx.fillRect(x, y, size, size);
+    ctx.restore();
+  };
+
+  /** White rounded tile with a club crest. */
+  const drawBadge = (img: HTMLImageElement | null, x: number, y: number, size: number, dim = false) => {
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 36;
+    roundRect(ctx, x - 6, y - 6, size + 12, size + 12, size * 0.24);
+    ctx.fillStyle = dim ? "#9ca3af" : goldGrad(x, y, x + size, y + size);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    roundRect(ctx, x, y, size, size, size * 0.21);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    if (img) {
+      roundRect(ctx, x + 8, y + 8, size - 16, size - 16, size * 0.17);
+      ctx.clip();
+      if (dim) ctx.filter = "grayscale(0.7)";
+      drawCover(ctx, img, x + 8, y + 8, size - 16, size - 16);
     }
     ctx.restore();
   };
 
-  // White rounded tile with a club logo.
-  const drawBadge = (img: HTMLImageElement | null, x: number, y: number, size: number, dim = false) => {
+  /** Tilted gold tag, e.g. "HERE WE GO!". */
+  const tag = (text: string, x: number, y: number, angle = -0.07) => {
     ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.font = `900 40px ${FONT}`;
+    const tw = ctx.measureText(text).width + 64;
     ctx.shadowColor = "rgba(0,0,0,0.5)";
-    ctx.shadowBlur = 30;
-    roundRect(ctx, x, y, size, size, size * 0.21);
-    ctx.fillStyle = "#fff";
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.moveTo(-tw / 2 + 18, -36);
+    ctx.lineTo(tw / 2, -36);
+    ctx.lineTo(tw / 2 - 18, 36);
+    ctx.lineTo(-tw / 2, 36);
+    ctx.closePath();
+    ctx.fillStyle = goldGrad(-tw / 2, -36, tw / 2, 36);
     ctx.fill();
-    ctx.restore();
-    if (!img) return;
-    ctx.save();
-    roundRect(ctx, x + 10, y + 10, size - 20, size - 20, size * 0.17);
-    ctx.clip();
-    if (dim) ctx.filter = "grayscale(0.6)";
-    drawCover(ctx, img, x + 10, y + 10, size - 20, size - 20);
-    ctx.restore();
-  };
-
-  const ribbon = (text: string) => {
-    ctx.font = `900 34px ${FONT}`;
-    const rw = Math.max(560, ctx.measureText(text).width + 120);
-    const rx = (W - rw) / 2;
-    roundRect(ctx, rx, 1185, rw, 74, 37);
-    const rib = ctx.createLinearGradient(rx, 0, rx + rw, 0);
-    rib.addColorStop(0, "#F7DC8B");
-    rib.addColorStop(1, "#C79A3B");
-    ctx.fillStyle = rib;
-    ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#0B0C0F";
-    ctx.fillText(text, W / 2, 1234);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 0, 3);
+    ctx.restore();
   };
 
-  // Top label
-  ctx.fillStyle = gold;
-  ctx.font = `800 30px ${FONT}`;
-  ctx.fillText("O F F I C I A L   T R A N S F E R", W / 2, 110);
+  /** Row of outlined info chips, centred. */
+  const chips = (items: string[], y: number) => {
+    const list = items.filter(Boolean);
+    if (!list.length) return;
+    ctx.font = `800 26px ${FONT}`;
+    const pad = 30;
+    const gap = 16;
+    const widths = list.map((t) => ctx.measureText(t).width + pad * 2);
+    let x = (W - widths.reduce((a, b) => a + b, 0) - gap * (list.length - 1)) / 2;
+    list.forEach((t, i) => {
+      ctx.save();
+      roundRect(ctx, x, y, widths[i], 56, 28);
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(232,185,90,0.55)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(t, x + widths[i] / 2, y + 30);
+      ctx.restore();
+      x += widths[i] + gap;
+    });
+  };
+
+  /** Spaced-out small heading with gold rules either side. */
+  const kicker = (text: string, y: number) => {
+    ctx.save();
+    ctx.font = `800 26px ${FONT}`;
+    const spaced = text.split("").join(String.fromCharCode(8202));
+    ctx.fillStyle = gold;
+    ctx.fillText(spaced, W / 2, y);
+    const tw = ctx.measureText(spaced).width;
+    ctx.strokeStyle = "rgba(232,185,90,0.6)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - tw / 2 - 90, y - 9);
+    ctx.lineTo(W / 2 - tw / 2 - 24, y - 9);
+    ctx.moveTo(W / 2 + tw / 2 + 24, y - 9);
+    ctx.lineTo(W / 2 + tw / 2 + 90, y - 9);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  /** First names small, surname big in gold. */
+  const nameBlock = (yFirst: number, ySurname: number, size: number) => {
+    if (firstNames) {
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      fitFont(ctx, firstNames, W - 200, Math.round(size * 0.45), 800, FONT);
+      ctx.fillText(firstNames, W / 2, yFirst);
+    }
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 20;
+    fitFont(ctx, surname, W - 140, size, 900, FONT);
+    ctx.fillStyle = goldGrad(0, ySurname - size, 0, ySurname);
+    ctx.fillText(surname, W / 2, firstNames ? ySurname : ySurname - size * 0.25);
+    ctx.restore();
+  };
+
+  const month = new Date().toLocaleDateString("en-GB", { month: "short", year: "numeric" }).toUpperCase();
+  const position = player.preferredPosition ? String(player.preferredPosition).toUpperCase() : "";
 
   if (fromClub) {
     // ---------- Club to club ----------
+    kicker("OFFICIAL · CLUB TO CLUB", 112);
     ctx.fillStyle = "#fff";
-    fitFont(ctx, player.fullName.toUpperCase(), W - 140, 92);
-    ctx.fillText(player.fullName.toUpperCase(), W / 2, 215);
+    fitFont(ctx, "TRANSFER COMPLETE", W - 200, 74, 900, FONT);
+    ctx.fillText("TRANSFER COMPLETE", W / 2, 200);
 
-    // Bigger player photo, smaller club badges underneath.
-    drawPhoto(W / 2, 560, 275);
+    const size = 500;
+    const px = (W - size) / 2;
+    const py = 250;
+    drawPortrait(px, py, size);
+    tag("HERE WE GO!", px + 40, py + 10);
 
-    const bs = 150;
-    const by = 885;
-    const lx = W / 2 - 270 - bs / 2;
-    const rx2 = W / 2 + 270 - bs / 2;
+    nameBlock(py + size + 76, py + size + 176, 110);
+
+    // From → To
+    const bs = 128;
+    const by = 1000;
+    const lx = W / 2 - 250 - bs / 2;
+    const rx = W / 2 + 250 - bs / 2;
     drawBadge(fromLogo, lx, by, bs, true);
-    drawBadge(logo, rx2, by, bs);
-
-    // Arrow between the clubs
+    drawBadge(logo, rx, by, bs);
     const ay = by + bs / 2;
     ctx.save();
-    ctx.strokeStyle = gold;
+    const arrow = ctx.createLinearGradient(lx + bs, 0, rx, 0);
+    arrow.addColorStop(0, "rgba(232,185,90,0.25)");
+    arrow.addColorStop(1, gold);
+    ctx.strokeStyle = arrow;
     ctx.fillStyle = gold;
     ctx.lineWidth = 8;
     ctx.lineCap = "round";
+    ctx.setLineDash([2, 18]);
     ctx.beginPath();
-    ctx.moveTo(lx + bs + 34, ay);
-    ctx.lineTo(rx2 - 52, ay);
+    ctx.moveTo(lx + bs + 40, ay);
+    ctx.lineTo(rx - 60, ay);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.beginPath();
-    ctx.moveTo(rx2 - 24, ay);
-    ctx.lineTo(rx2 - 62, ay - 26);
-    ctx.lineTo(rx2 - 62, ay + 26);
+    ctx.moveTo(rx - 26, ay);
+    ctx.lineTo(rx - 64, ay - 26);
+    ctx.lineTo(rx - 64, ay + 26);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
 
-    // Club names
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.font = `800 22px ${FONT}`;
-    ctx.fillText("LEAVES", lx + bs / 2, by + bs + 40);
+    ctx.font = `800 20px ${FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fillText("FROM", lx + bs / 2, by + bs + 38);
     ctx.fillStyle = gold;
-    ctx.fillText("JOINS", rx2 + bs / 2, by + bs + 40);
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    fitFont(ctx, fromClub.name.toUpperCase(), 380, 32, 800);
-    ctx.fillText(fromClub.name.toUpperCase(), lx + bs / 2, by + bs + 80);
+    ctx.fillText("TO", rx + bs / 2, by + bs + 38);
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    fitFont(ctx, fromClub.name.toUpperCase(), 360, 28, 800, FONT);
+    ctx.fillText(fromClub.name.toUpperCase(), lx + bs / 2, by + bs + 74);
     ctx.fillStyle = "#fff";
-    fitFont(ctx, club.name.toUpperCase(), 380, 32, 900);
-    ctx.fillText(club.name.toUpperCase(), rx2 + bs / 2, by + bs + 80);
-
-    ribbon("HERE WE GO!  ·  CLUB TO CLUB");
+    fitFont(ctx, club.name.toUpperCase(), 360, 28, 900, FONT);
+    ctx.fillText(club.name.toUpperCase(), rx + bs / 2, by + bs + 74);
   } else {
     // ---------- New / free signing ----------
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    fitFont(ctx, "WELCOME TO", W - 160, 84);
-    ctx.fillText("WELCOME TO", W / 2, 205);
-    ctx.fillStyle = gold;
-    fitFont(ctx, club.name.toUpperCase(), W - 140, 92);
-    ctx.fillText(club.name.toUpperCase(), W / 2, 305);
-
-    const cx = W / 2;
-    const cy = 680;
-    const R = 270;
-    drawPhoto(cx, cy, R);
-    if (logo) {
-      const bs = 190;
-      drawBadge(logo, cx + R - bs * 0.62, cy + R - bs * 0.72, bs);
-    }
-
+    kicker(isFreeAgent(player) ? "OFFICIAL · FREE AGENT SIGNING" : "OFFICIAL · NEW SIGNING", 112);
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.font = `800 46px ${FONT}`;
+    ctx.fillText("WELCOME TO", W / 2, 186);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 18;
+    fitFont(ctx, club.name.toUpperCase(), W - 160, 84, 900, FONT);
     ctx.fillStyle = "#fff";
-    fitFont(ctx, player.fullName.toUpperCase(), W - 140, 96);
-    ctx.fillText(player.fullName.toUpperCase(), W / 2, 1110);
+    ctx.fillText(club.name.toUpperCase(), W / 2, 274);
+    ctx.restore();
 
-    ribbon(isFreeAgent(player) ? "HERE WE GO!  ·  FREE AGENT SIGNING" : "HERE WE GO!  ·  NEW SIGNING");
+    const size = 600;
+    const px = (W - size) / 2;
+    const py = 320;
+    drawPortrait(px, py, size);
+    tag("HERE WE GO!", px + 50, py + 14);
+    if (logo) drawBadge(logo, px + size - 120, py + size - 120, 170);
+
+    nameBlock(py + size + 78, py + size + 182, 118);
+    chips([position, `${CONTRACT_DAYS}-DAY CONTRACT`, month], py + size + 220);
   }
 
   ctx.fillStyle = "rgba(255,255,255,0.45)";
-  ctx.font = `700 24px ${FONT}`;
-  ctx.fillText("NECOB · NATIONAL eFOOTBALL COMMUNITY OF BANGLADESH", W / 2, 1310);
+  ctx.font = `700 22px ${FONT}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("NECOB · NATIONAL eFOOTBALL COMMUNITY OF BANGLADESH", W / 2, H - 52);
 }
 
 function TransferCard() {
