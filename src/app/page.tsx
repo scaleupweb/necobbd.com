@@ -30,6 +30,10 @@ export default async function HomePage() {
     <div className="w-full bg-[#F6F7F9] min-h-screen text-[#111111]">
       <Hero hero={settings.hero} stats={data?.stats || []} />
 
+      {data && s.partners.show && data.partners.length > 0 && (
+        <PartnersSection title={s.partners.title} subtitle={s.partners.subtitle} partners={data.partners} />
+      )}
+
       {/* The banner disappears on its own once the deadline has passed. */}
       {settings.countdown.enabled && settings.countdown.targetDate && new Date(settings.countdown.targetDate).getTime() > Date.now() && (
         <CountdownBanner countdown={settings.countdown} tournament={data?.countdownTournament || null} />
@@ -87,10 +91,6 @@ export default async function HomePage() {
           news={data.news}
           events={data.events}
         />
-      )}
-
-      {data && s.partners.show && data.partners.length > 0 && (
-        <PartnersSection title={s.partners.title} subtitle={s.partners.subtitle} partners={data.partners} />
       )}
 
       {settings.cta.show && <CommunityCTA cta={settings.cta} />}
