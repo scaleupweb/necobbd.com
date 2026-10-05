@@ -14,6 +14,32 @@ const Footballer3D = dynamic(() => import("./Footballer3D").then((m) => m.Footba
 export function LoginStage({ children }: { children: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);
   const [show3d, setShow3d] = useState(false);
+  const [shy, setShy] = useState<"none" | "cover" | "peek">("none");
+
+  // He covers his eyes while the password field has focus, and peeks when it's shown as text.
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const pwInput = () => el.querySelector<HTMLInputElement>('input[autocomplete="current-password"], input[autocomplete="new-password"]');
+    const update = () => {
+      const input = pwInput();
+      // the field or its eye button counts as "in use"
+      const focused = !!input && !!input.parentElement?.contains(document.activeElement);
+      setShy(focused ? (input!.type === "text" ? "peek" : "cover") : "none");
+    };
+    const later = () => setTimeout(update, 0);
+    // the eye button changes the input type; watch for that too
+    const mo = new MutationObserver(update);
+    const input = pwInput();
+    if (input) mo.observe(input, { attributes: true, attributeFilter: ["type"] });
+    el.addEventListener("focusin", update);
+    el.addEventListener("focusout", later);
+    return () => {
+      mo.disconnect();
+      el.removeEventListener("focusin", update);
+      el.removeEventListener("focusout", later);
+    };
+  }, []);
 
   useEffect(() => {
     const wide = window.matchMedia("(min-width: 1024px)").matches;
@@ -30,6 +56,7 @@ export function LoginStage({ children }: { children: ReactNode }) {
       {show3d && (
         <Footballer3D
           onPull={onPull}
+          shy={shy}
           className="hidden lg:block absolute bottom-[-18px] right-full mr-1 w-[340px] h-[430px] pointer-events-none select-none [mask-image:linear-gradient(to_right,transparent,black_18%)]"
         />
       )}

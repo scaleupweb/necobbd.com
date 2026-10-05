@@ -11,9 +11,20 @@ import type { Group, Material, Mesh } from "three";
  *               juggles the ball (keepy-uppies) and waves now and then.
  * The character is built from primitives, so there is no model file to download.
  */
-export function Footballer3D({ onPull, className = "" }: { onPull: () => void; className?: string }) {
+export function Footballer3D({
+  onPull,
+  shy = "none",
+  className = "",
+}: {
+  onPull: () => void;
+  /** "cover": hands over his eyes (password being typed); "peek": peeking through his fingers (password shown). */
+  shy?: "none" | "cover" | "peek";
+  className?: string;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const pulled = useRef(false);
+  const shyRef = useRef(shy);
+  shyRef.current = shy;
 
   useEffect(() => {
     const el = host.current;
@@ -279,6 +290,8 @@ export function Footballer3D({ onPull, className = "" }: { onPull: () => void; c
       let last = performance.now();
       const t0 = last;
       let ballSpin = 0;
+      let cover = 0; // 0 = hands down, 1 = hands over the eyes
+      let peek = 0; // 0 = fingers closed, 1 = one hand lowered a little to peek
 
       const frame = (now: number) => {
         const t = reduce ? 99 : (now - t0) / 1000;
@@ -384,6 +397,27 @@ export function Footballer3D({ onPull, className = "" }: { onPull: () => void; c
               arms[1].elbow.rotation.z = Math.sin(w * Math.PI * 6) * 0.35 * up;
             }
           }
+        }
+
+        // ---- shy: cover the eyes while the password is typed (eases in and out)
+        const want = t >= RUN_END && shyRef.current !== "none" ? 1 : 0;
+        cover += (want - cover) * Math.min(1, dt * 9);
+        peek += ((shyRef.current === "peek" ? 1 : 0) - peek) * Math.min(1, dt * 7);
+        if (cover > 0.001) {
+          const k = ease(cover);
+          for (let i = 0; i < 2; i++) {
+            const s = i === 0 ? -1 : 1;
+            const a = arms[i];
+            // the peeking hand (his left) drops a little and turns out
+            const pk = s < 0 ? peek : 0;
+            a.shoulder.rotation.x = lerp(a.shoulder.rotation.x, -2.05 + 0.35 * pk, k);
+            a.shoulder.rotation.z = lerp(a.shoulder.rotation.z, s * -0.42, k);
+            a.elbow.rotation.x = lerp(a.elbow.rotation.x, -1.75 + 0.25 * pk, k);
+            a.elbow.rotation.z = lerp(a.elbow.rotation.z, 0, k);
+          }
+          head.rotation.x = lerp(head.rotation.x, 0.12, k);
+          head.rotation.y = lerp(head.rotation.y, 0, k);
+          chest.rotation.x = lerp(chest.rotation.x, 0.06, k);
         }
 
         renderer.render(scene, camera);
