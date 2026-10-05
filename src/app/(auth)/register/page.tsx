@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { User, Mail, Lock, Smartphone, Shield, ArrowRight, CheckCircle2 } from "lucide-react";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ClubRegisterForm } from "./ClubRegisterForm";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function RegisterPage() {
   const [type, setType] = useState<"player" | "club">("player");
@@ -178,8 +179,7 @@ function PlayerRegisterForm() {
 
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Password *</label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -201,8 +201,7 @@ function PlayerRegisterForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Confirm Password *</label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

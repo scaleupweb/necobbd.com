@@ -15,6 +15,7 @@ import { renderPlayerCard, downloadCanvas } from "./canvas";
 import { SquadSeats, SquadCapacity } from "@/components/club/SquadSeats";
 import { SQUAD_LIMIT, isFrozen, freezeLeft, contractDaysLeft } from "@/lib/squad";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
 
@@ -356,7 +357,7 @@ export function RegisterNewPlayer() {
           </label>
           <label className="block space-y-1">
             {label("Password")}
-            <input type="password" required className={input} value={f.password} onChange={(e) => set("password", e.target.value)} placeholder="8+ chars, Aa + number" autoComplete="new-password" />
+            <PasswordInput required className={input} value={f.password} onChange={(e) => set("password", e.target.value)} placeholder="8+ chars, Aa + number" autoComplete="new-password" />
             {f.password && !pwOk && <span className="block text-[11px] text-rose-600">Use 8+ characters with uppercase, lowercase and a number.</span>}
           </label>
           <label className="block space-y-1">

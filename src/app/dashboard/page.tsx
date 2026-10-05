@@ -21,6 +21,7 @@ import { ImageInput } from "@/components/ui/ImageInput";
 import { toast, confirmDialog } from "@/lib/feedback";
 import { LocationInput } from "@/components/ui/LocationInput";
 import { noClubLabel } from "@/lib/squad";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type Tab = "overview" | "profile" | "security";
 
@@ -593,13 +594,13 @@ function SecurityForm() {
       <h2 className="text-sm font-black text-black">Change password</h2>
       {msg && <div className={`p-3 rounded-xl font-semibold ${msg.ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>{msg.text}</div>}
       <Field label="Current password">
-        <input type="password" autoComplete="current-password" className={input} value={currentPassword} onChange={(e) => setCurrent(e.target.value)} required />
+        <PasswordInput autoComplete="current-password" className={input} value={currentPassword} onChange={(e) => setCurrent(e.target.value)} required />
       </Field>
       <Field label="New password (8+ chars, upper, lower, number)">
-        <input type="password" autoComplete="new-password" className={input} value={newPassword} onChange={(e) => setNew(e.target.value)} required minLength={8} />
+        <PasswordInput autoComplete="new-password" className={input} value={newPassword} onChange={(e) => setNew(e.target.value)} required minLength={8} />
       </Field>
       <Field label="Confirm new password">
-        <input type="password" autoComplete="new-password" className={input} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        <PasswordInput autoComplete="new-password" className={input} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
       </Field>
       <button disabled={busy} className="px-5 py-2.5 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 disabled:opacity-60">
         {busy ? "Updating…" : "Update password"}

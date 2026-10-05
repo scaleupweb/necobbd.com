@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { LocationInput } from "@/components/ui/LocationInput";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const input =
   "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-black focus:bg-white text-xs";
@@ -137,7 +138,7 @@ export function ClubRegisterForm() {
               </label>
               <label className="block space-y-1">
                 <span className="block text-slate-700 font-bold">Password *</span>
-                <input type="password" className={input} value={f.password} onChange={(e) => set("password", e.target.value)} required autoComplete="new-password" />
+                <PasswordInput className={input} value={f.password} onChange={(e) => set("password", e.target.value)} required autoComplete="new-password" />
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {pwChecks.map((c) => (
                     <span key={c.label} className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.ok ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
@@ -148,7 +149,7 @@ export function ClubRegisterForm() {
               </label>
               <label className="block space-y-1">
                 <span className="block text-slate-700 font-bold">Confirm password *</span>
-                <input type="password" className={input} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required autoComplete="new-password" />
+                <PasswordInput className={input} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required autoComplete="new-password" />
               </label>
             </div>
             </>

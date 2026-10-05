@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Lock, CheckCircle2, ArrowRight } from "lucide-react";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -10,6 +11,15 @@ export default function ResetPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [token, setToken] = useState("");
+
+  // Keep the one-time token in memory and take it out of the address bar / history.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("token") || "";
+    if (!t) return; // already moved into state (effects can run twice in development)
+    setToken(t);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +28,6 @@ export default function ResetPasswordPage() {
       setError("Passwords do not match.");
       return;
     }
-    const token = new URLSearchParams(window.location.search).get("token") || "";
     if (!token) {
       setError("This reset link is missing its token. Request a new one.");
       return;
@@ -73,9 +82,8 @@ export default function ResetPasswordPage() {
               <div>
                 <label className="block text-slate-700 font-bold mb-1">New Password</label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+                  <PasswordInput
                     placeholder="••••••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -89,9 +97,8 @@ export default function ResetPasswordPage() {
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Confirm New Password</label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+                  <PasswordInput
                     placeholder="••••••••••••"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
