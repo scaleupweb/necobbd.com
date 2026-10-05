@@ -2,6 +2,34 @@
 
 import { useState } from "react";
 import { ResourceManager } from "@/components/admin/ResourceManager";
+import { api, Toggle } from "@/components/admin/ui";
+import { toast } from "@/lib/feedback";
+
+/** On/off switch for showing one partner or sponsor on the homepage. */
+function HomeSwitch({ resource, row, reload }: { resource: "partners" | "sponsors"; row: any; reload: () => void }) {
+  const [on, setOn] = useState(row.showOnHome !== false);
+  const [busy, setBusy] = useState(false);
+  const flip = async (v: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setOn(v);
+    try {
+      await api(`/api/admin/resources/${resource}/${row.id}`, { method: "PATCH", json: { showOnHome: v } });
+      toast.success(v ? `${row.name} is now on the homepage` : `${row.name} is hidden from the homepage`);
+      reload();
+    } catch (e: any) {
+      setOn(!v);
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span title={on ? "Shown on the homepage" : "Hidden from the homepage"} className="mr-1">
+      <Toggle checked={on} onChange={flip} label={on ? "On" : "Off"} />
+    </span>
+  );
+}
 
 const TABS = [
   ["partners", "Partners"],
@@ -33,7 +61,8 @@ export default function AdminPartnersPage() {
           resource="partners"
           title="Partners"
           singular="partner"
-          subtitle="Shown in the homepage marquee and on the Partners page."
+          subtitle="Switch each partner on or off for the homepage strip. All partners are listed on the Partners page."
+          rowActions={(r, reload) => <HomeSwitch resource="partners" row={r} reload={reload} />}
           fields={[
             { name: "name", label: "Name", type: "text", required: true },
             { name: "category", label: "Category", type: "text", default: "Partner", placeholder: "Title Partner, University…" },
@@ -41,11 +70,13 @@ export default function AdminPartnersPage() {
             { name: "order", label: "Sort order", type: "number", default: 0 },
             { name: "logo", label: "Logo", type: "image" },
             { name: "description", label: "Description", type: "textarea" },
+            { name: "showOnHome", label: "Show on homepage", type: "checkbox", default: true },
           ]}
           columns={[
             { label: "Partner", render: (r) => <div className="flex items-center gap-2"><Logo src={r.logo} /><span className="font-bold">{r.name}</span></div> },
             { label: "Category", render: (r) => r.category },
             { label: "Order", render: (r) => r.order },
+            { label: "Homepage", render: (r) => (r.showOnHome !== false ? <span className="text-emerald-700 font-bold">Shown</span> : <span className="text-slate-400 font-bold">Hidden</span>) },
           ]}
         />
       )}
@@ -56,18 +87,21 @@ export default function AdminPartnersPage() {
           resource="sponsors"
           title="Sponsors"
           singular="sponsor"
-          subtitle="Listed on the Partners page."
+          subtitle="Switch each sponsor on or off for the homepage strip. All sponsors are listed on the Partners page."
+          rowActions={(r, reload) => <HomeSwitch resource="sponsors" row={r} reload={reload} />}
           fields={[
             { name: "name", label: "Name", type: "text", required: true },
             { name: "placement", label: "Placement", type: "text", default: "Homepage" },
             { name: "website", label: "Website", type: "text", placeholder: "https://" },
             { name: "priority", label: "Priority (lower = first)", type: "number", default: 0 },
             { name: "logo", label: "Logo", type: "image" },
+            { name: "showOnHome", label: "Show on homepage", type: "checkbox", default: true },
           ]}
           columns={[
             { label: "Sponsor", render: (r) => <div className="flex items-center gap-2"><Logo src={r.logo} /><span className="font-bold">{r.name}</span></div> },
             { label: "Placement", render: (r) => r.placement },
             { label: "Priority", render: (r) => r.priority },
+            { label: "Homepage", render: (r) => (r.showOnHome !== false ? <span className="text-emerald-700 font-bold">Shown</span> : <span className="text-slate-400 font-bold">Hidden</span>) },
           ]}
         />
       )}

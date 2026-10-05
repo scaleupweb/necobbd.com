@@ -86,7 +86,12 @@ function PartnerCard({ p, badge, hidden }: { p: Partner; badge: string; hidden: 
       <span className="min-w-0">
         <span className="block text-sm font-black text-[#111111] truncate group-hover:text-[#8a6420] transition-colors">{p.name}</span>
         {p.category && (
-          <span className="mt-1 inline-block px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-[#5F6368] truncate max-w-full">
+          <span
+            className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-bold truncate max-w-full ${
+              p.sponsor ? "bg-gradient-to-r from-[#F7DC8B] to-[#C79A3B] text-[#0B0C0F]" : "bg-white border border-slate-200 text-[#5F6368]"
+            }`}
+          >
+            {p.sponsor && "★ "}
             {p.category}
           </span>
         )}

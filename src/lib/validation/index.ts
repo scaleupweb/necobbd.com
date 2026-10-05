@@ -284,6 +284,7 @@ export const PartnerSchema = z.object({
   website: optionalUrl,
   description: trimmed(300).optional().default(""),
   order: z.coerce.number().int().optional().default(0),
+  showOnHome: z.boolean().optional().default(true),
 });
 
 export const SponsorSchema = z.object({
@@ -292,6 +293,7 @@ export const SponsorSchema = z.object({
   website: optionalUrl,
   placement: trimmed(40).optional().default("Homepage"),
   priority: z.coerce.number().int().optional().default(0),
+  showOnHome: z.boolean().optional().default(true),
 });
 
 export const LeaderSchema = z.object({

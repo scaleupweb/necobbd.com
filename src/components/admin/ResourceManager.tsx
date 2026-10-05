@@ -74,7 +74,8 @@ export function ResourceManager({
   const openForm = (row: any | null) => {
     const f: Record<string, any> = {};
     for (const fd of fields) {
-      const v = row ? row[fd.name] : fd.default;
+      // Older records may lack a field added later; fall back to its default.
+      const v = row && row[fd.name] !== undefined ? row[fd.name] : fd.default;
       if (fd.type === "datetime") f[fd.name] = toLocalInput(v);
       else if (fd.type === "checkbox") f[fd.name] = !!v;
       else if (fd.type === "tags") f[fd.name] = Array.isArray(v) ? v.join(", ") : v || "";

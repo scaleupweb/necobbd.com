@@ -142,6 +142,7 @@ export async function getHomepageData(settings: SiteSettings) {
     db.getEvents(),
     db.getPartners(),
   ]);
+  const sponsors = await db.getSponsors();
 
   const live = fixtures.filter((f: any) => f.status === "LIVE");
   const upcoming = fixtures
@@ -298,7 +299,10 @@ export async function getHomepageData(settings: SiteSettings) {
       isRegistrationOpen: e.isRegistrationOpen,
       badgeType: ["gold", "purple", "blue"][i % 3],
     })),
-    partners: partners.map((p: any) => ({ name: p.name, category: p.category, logo: p.logo, website: p.website })),
+    partners: [
+      ...sponsors.filter((x: any) => x.showOnHome !== false).map((x: any) => ({ name: x.name, category: "Official Sponsor", logo: x.logo, website: x.website, sponsor: true })),
+      ...partners.filter((p: any) => p.showOnHome !== false).map((p: any) => ({ name: p.name, category: p.category, logo: p.logo, website: p.website, sponsor: false })),
+    ],
     countdownTournament: countdownTournament
       ? { slug: countdownTournament.slug, name: countdownTournament.name, currentParticipants: countdownTournament.currentParticipants, maxParticipants: countdownTournament.maxParticipants }
       : null,

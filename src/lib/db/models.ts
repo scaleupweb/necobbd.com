@@ -409,6 +409,7 @@ const PartnerSchema = new Schema<any>(
     website: String,
     description: String,
     order: { type: Number, default: 0 },
+    showOnHome: { type: Boolean, default: true },
   },
   opts
 );
@@ -420,6 +421,7 @@ const SponsorSchema = new Schema<any>(
     website: String,
     placement: { type: String, default: "Homepage" },
     priority: { type: Number, default: 0 },
+    showOnHome: { type: Boolean, default: true },
   },
   opts
 );

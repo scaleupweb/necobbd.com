@@ -704,8 +704,8 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
   ctx.font = `900 ${gs}px ${FONT}`;
   ctx.lineWidth = 3;
   ctx.strokeStyle = "rgba(255,255,255,0.09)";
-  ctx.strokeText(ghost, W / 2, fromClub ? 560 : 700);
-  ctx.strokeText(ghost, W / 2, (fromClub ? 560 : 700) + gs * 0.92);
+  ctx.strokeText(ghost, W / 2, 700);
+  ctx.strokeText(ghost, W / 2, 700 + gs * 0.92);
   ctx.restore();
 
   // Vignette.
@@ -889,84 +889,72 @@ async function renderCard(canvas: HTMLCanvasElement, player: any, club: any) {
   const month = new Date().toLocaleDateString("en-GB", { month: "short", year: "numeric" }).toUpperCase();
   const position = player.preferredPosition ? String(player.preferredPosition).toUpperCase() : "";
 
+  // One layout for every signing; only the top label and the bottom row change.
+  kicker(fromClub ? "OFFICIAL · CLUB TO CLUB" : isFreeAgent(player) ? "OFFICIAL · FREE AGENT SIGNING" : "OFFICIAL · NEW SIGNING", 112);
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.font = `800 46px ${FONT}`;
+  ctx.fillText("WELCOME TO", W / 2, 186);
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 18;
+  fitFont(ctx, club.name.toUpperCase(), W - 160, 84, 900, FONT);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(club.name.toUpperCase(), W / 2, 274);
+  ctx.restore();
+
+  const size = 600;
+  const px = (W - size) / 2;
+  const py = 320;
+  drawPortrait(px, py, size);
+  tag("HERE WE GO!", px + 50, py + 14);
+  if (logo) drawBadge(logo, px + size - 120, py + size - 120, 170);
+
+  nameBlock(py + size + 78, py + size + 182, 118);
+
   if (fromClub) {
-    // ---------- Club to club ----------
-    kicker("OFFICIAL · CLUB TO CLUB", 112);
-    ctx.fillStyle = "#fff";
-    fitFont(ctx, "TRANSFER COMPLETE", W - 200, 74, 900, FONT);
-    ctx.fillText("TRANSFER COMPLETE", W / 2, 200);
-
-    const size = 500;
-    const px = (W - size) / 2;
-    const py = 250;
-    drawPortrait(px, py, size);
-    tag("HERE WE GO!", px + 40, py + 10);
-
-    nameBlock(py + size + 76, py + size + 176, 110);
-
-    // From → To
-    const bs = 128;
-    const by = 1000;
-    const lx = W / 2 - 250 - bs / 2;
-    const rx = W / 2 + 250 - bs / 2;
-    drawBadge(fromLogo, lx, by, bs, true);
-    drawBadge(logo, rx, by, bs);
-    const ay = by + bs / 2;
+    // FROM old club → TO new club, as one strip.
+    const sy = py + size + 212;
+    const sh = 84;
+    const sx = 110;
+    const sw = W - 220;
     ctx.save();
-    const arrow = ctx.createLinearGradient(lx + bs, 0, rx, 0);
-    arrow.addColorStop(0, "rgba(232,185,90,0.25)");
-    arrow.addColorStop(1, gold);
-    ctx.strokeStyle = arrow;
-    ctx.fillStyle = gold;
-    ctx.lineWidth = 8;
-    ctx.lineCap = "round";
-    ctx.setLineDash([2, 18]);
-    ctx.beginPath();
-    ctx.moveTo(lx + bs + 40, ay);
-    ctx.lineTo(rx - 60, ay);
+    roundRect(ctx, sx, sy, sw, sh, sh / 2);
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(232,185,90,0.55)";
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.restore();
+    const bs = 60;
+    const by = sy + (sh - bs) / 2;
+    const half = sw / 2;
+    const side = (img: HTMLImageElement | null, name: string, label: string, x0: number, dim: boolean) => {
+      drawBadge(img, x0 + 18, by, bs, dim);
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.font = `800 17px ${FONT}`;
+      ctx.fillStyle = dim ? "rgba(255,255,255,0.45)" : gold;
+      ctx.fillText(label, x0 + 18 + bs + 18, sy + 34);
+      ctx.fillStyle = dim ? "rgba(255,255,255,0.8)" : "#fff";
+      fitFont(ctx, name.toUpperCase(), half - bs - 110, 24, dim ? 800 : 900, FONT);
+      ctx.fillText(name.toUpperCase(), x0 + 18 + bs + 18, sy + 64);
+      ctx.restore();
+    };
+    side(fromLogo, fromClub.name, "FROM", sx, true);
+    side(logo, club.name, "TO", sx + half + 10, false);
+    // arrow in the middle
+    const ax = sx + half - 6;
+    const ay = sy + sh / 2;
+    ctx.save();
+    ctx.fillStyle = gold;
     ctx.beginPath();
-    ctx.moveTo(rx - 26, ay);
-    ctx.lineTo(rx - 64, ay - 26);
-    ctx.lineTo(rx - 64, ay + 26);
+    ctx.moveTo(ax + 14, ay);
+    ctx.lineTo(ax - 10, ay - 16);
+    ctx.lineTo(ax - 10, ay + 16);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
-
-    ctx.font = `800 20px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.fillText("FROM", lx + bs / 2, by + bs + 38);
-    ctx.fillStyle = gold;
-    ctx.fillText("TO", rx + bs / 2, by + bs + 38);
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    fitFont(ctx, fromClub.name.toUpperCase(), 360, 28, 800, FONT);
-    ctx.fillText(fromClub.name.toUpperCase(), lx + bs / 2, by + bs + 74);
-    ctx.fillStyle = "#fff";
-    fitFont(ctx, club.name.toUpperCase(), 360, 28, 900, FONT);
-    ctx.fillText(club.name.toUpperCase(), rx + bs / 2, by + bs + 74);
   } else {
-    // ---------- New / free signing ----------
-    kicker(isFreeAgent(player) ? "OFFICIAL · FREE AGENT SIGNING" : "OFFICIAL · NEW SIGNING", 112);
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.font = `800 46px ${FONT}`;
-    ctx.fillText("WELCOME TO", W / 2, 186);
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.5)";
-    ctx.shadowBlur = 18;
-    fitFont(ctx, club.name.toUpperCase(), W - 160, 84, 900, FONT);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(club.name.toUpperCase(), W / 2, 274);
-    ctx.restore();
-
-    const size = 600;
-    const px = (W - size) / 2;
-    const py = 320;
-    drawPortrait(px, py, size);
-    tag("HERE WE GO!", px + 50, py + 14);
-    if (logo) drawBadge(logo, px + size - 120, py + size - 120, 170);
-
-    nameBlock(py + size + 78, py + size + 182, 118);
     chips([position, `${CONTRACT_DAYS}-DAY CONTRACT`, month], py + size + 220);
   }
 
