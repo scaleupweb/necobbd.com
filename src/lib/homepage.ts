@@ -259,6 +259,9 @@ export async function getHomepageData(settings: SiteSettings) {
           unit: featured.participantType === "CLUB" ? "clubs" : "players",
           prizePool: featured.prizePool,
           isRegistrationOpen: featured.isRegistrationOpen,
+          status: featured.status as string,
+          registrationDeadline: featured.registrationDeadline ? new Date(featured.registrationDeadline).toISOString() : "",
+          startDate: featured.startDate ? new Date(featured.startDate).toISOString() : "",
         }
       : null,
     tournamentsList: active
@@ -270,9 +273,11 @@ export async function getHomepageData(settings: SiteSettings) {
         subtitle: `${statusLabel[t.status] || t.status} • ${t.currentParticipants}/${t.maxParticipants} ${t.participantType === "CLUB" ? "clubs" : "players"}`,
         badgeType: badges[i % badges.length],
       })),
-    activities: activity.slice(0, 5).map((a: any) => ({
+    activities: activity.slice(0, 6).map((a: any) => ({
       id: a.id,
       text: a.title,
+      detail: a.description || "",
+      type: (a.type || "") as string,
       createdAt: a.createdAt,
       avatar: a.avatar || "/images/placeholders/avatar.svg",
       href: a.targetUrl,
