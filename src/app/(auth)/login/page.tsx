@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Lock, Mail, User, ShieldAlert, ArrowRight, Sparkles } from "lucide-react";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { LoginStage } from "@/components/auth/LoginStage";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -46,7 +47,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 overflow-x-clip">
       <div className="w-full max-w-md space-y-6">
         
         {/* Header */}
@@ -58,7 +59,8 @@ export default function LoginPage() {
           <p className="text-xs text-slate-500">Access your athlete profile, match reports & club portal</p>
         </div>
 
-        {/* Form Card */}
+        {/* Form Card (a footballer pulls it into place on wide screens) */}
+        <LoginStage>
         <div className="rounded-3xl bg-white border border-slate-200 p-8 shadow-sm space-y-5">
           {error && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
@@ -120,6 +122,7 @@ export default function LoginPage() {
             </Link>
           </div>
         </div>
+        </LoginStage>
 
       </div>
     </div>
