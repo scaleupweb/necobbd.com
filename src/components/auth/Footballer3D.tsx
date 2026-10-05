@@ -176,6 +176,7 @@ export function Footballer3D({
       fringe.scale.set(1.6, 0.55, 1);
       fringe.position.set(0.03, 0.33, 0.13);
       head.add(fringe);
+      const eyes: { s: number; eye: Mesh; shine: Mesh }[] = [];
       for (const s of [-1, 1]) {
         const ear = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), mat.skin));
         ear.position.set(s * 0.198, 0.16, 0);
@@ -187,6 +188,7 @@ export function Footballer3D({
         const shine = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), mat.white);
         shine.position.set(s * 0.068 + 0.009, 0.195, 0.2);
         head.add(shine);
+        eyes.push({ s, eye, shine });
         const brow = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.011, 0.012), mat.hair);
         brow.position.set(s * 0.07, 0.235, 0.176);
         brow.rotation.z = s * -0.12;
@@ -301,6 +303,7 @@ export function Footballer3D({
         // reset pose each frame
         for (const a of arms) {
           a.shoulder.rotation.x = 0;
+          a.shoulder.rotation.y = 0;
           a.elbow.rotation.x = 0;
           a.elbow.rotation.z = 0;
         }
@@ -406,18 +409,27 @@ export function Footballer3D({
         if (cover > 0.001) {
           const k = ease(cover);
           for (let i = 0; i < 2; i++) {
-            const s = i === 0 ? -1 : 1;
+            const sd = i === 0 ? -1 : 1;
             const a = arms[i];
-            // the peeking hand (his left) drops a little and turns out
-            const pk = s < 0 ? peek : 0;
-            a.shoulder.rotation.x = lerp(a.shoulder.rotation.x, -2.05 + 0.35 * pk, k);
-            a.shoulder.rotation.z = lerp(a.shoulder.rotation.z, s * -0.42, k);
-            a.elbow.rotation.x = lerp(a.elbow.rotation.x, -1.75 + 0.25 * pk, k);
+            // Angles found by solving for "hand in front of the eye, elbow out in front of the chest".
+            // The peeking hand (his left) drops a little so one eye shows.
+            const pk = sd < 0 ? peek : 0;
+            a.shoulder.rotation.x = lerp(a.shoulder.rotation.x, -2.3 + 0.32 * pk, k);
+            a.shoulder.rotation.y = lerp(a.shoulder.rotation.y, -0.3 * sd, k);
+            a.shoulder.rotation.z = lerp(a.shoulder.rotation.z, -0.35 * sd, k);
+            a.elbow.rotation.x = lerp(a.elbow.rotation.x, -0.5, k);
             a.elbow.rotation.z = lerp(a.elbow.rotation.z, 0, k);
           }
-          head.rotation.x = lerp(head.rotation.x, 0.12, k);
+          head.rotation.x = lerp(head.rotation.x, 0.1, k);
           head.rotation.y = lerp(head.rotation.y, 0, k);
-          chest.rotation.x = lerp(chest.rotation.x, 0.06, k);
+          chest.rotation.x = lerp(chest.rotation.x, 0.05, k);
+        }
+        // eyes squeeze shut while covered; the peeking eye opens
+        for (const e of eyes) {
+          const shut = cover * (e.s < 0 ? 1 - peek : 1);
+          const open = 1 - 0.85 * ease(shut);
+          e.eye.scale.y = open;
+          e.shine.visible = open > 0.5;
         }
 
         renderer.render(scene, camera);
