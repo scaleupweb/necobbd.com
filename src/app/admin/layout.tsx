@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   ShieldAlert,
   LogOut,
+  UserRound,
   Palette,
   Timer,
   Newspaper,
@@ -109,6 +110,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
           <div className="md:hidden flex items-center gap-1.5">
+            {me?.playerProfileId && (
+              <Link href="/dashboard" className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-[#F7DC8B] bg-[#0B0C0F]">
+                <UserRound className="w-3.5 h-3.5" /> Profile
+              </Link>
+            )}
             <Link href="/" className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200">
               <ArrowLeft className="w-3.5 h-3.5" /> Site
             </Link>
@@ -151,6 +157,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="px-3 text-[11px] text-slate-500 truncate">
               Signed in as <strong className="text-slate-900">{me.fullName}</strong>
             </div>
+          )}
+          {me?.playerProfileId && (
+            <Link href="/dashboard" className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-[#F7DC8B] bg-[#0B0C0F] hover:bg-black">
+              <UserRound className="w-4 h-4" /> My player profile
+            </Link>
           )}
           <Link href="/" className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-black hover:bg-slate-100 border border-slate-200">
             <ArrowLeft className="w-4 h-4" /> Back to website

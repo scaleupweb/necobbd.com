@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   ExternalLink,
+  ShieldAlert,
 } from "lucide-react";
 import { formatCurrency, getFormColor, formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
@@ -64,6 +65,7 @@ export default function DashboardPage() {
   }
 
   const { user, player } = data;
+  const isStaff = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE"].includes(user.role);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -73,7 +75,7 @@ export default function DashboardPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={player?.avatar || user.avatar || "/images/placeholders/avatar.svg"} alt="" className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-slate-200" />
           <div>
-            <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">{user.role.replace(/_/g, " ")}</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">{player ? "Player" : user.role.replace(/_/g, " ")}</div>
             <h1 className="text-xl sm:text-3xl font-black text-slate-950">Hi, {user.fullName.split(" ")[0]}!</h1>
             <div className="text-xs text-slate-500 font-mono">@{user.username}</div>
           </div>
@@ -104,10 +106,19 @@ export default function DashboardPage() {
             <Icon className="w-3.5 h-3.5" /> {label}
           </button>
         ))}
-        {player && (
-          <Link href={`/players/${player.username}`} className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white border border-slate-200 hover:border-black whitespace-nowrap">
-            <ExternalLink className="w-3.5 h-3.5" /> View public profile
-          </Link>
+        {(player || isStaff) && (
+          <div className="ml-auto flex items-center gap-2">
+            {isStaff && (
+              <Link href="/admin" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#0B0C0F] text-[#F7DC8B] hover:bg-black whitespace-nowrap">
+                <ShieldAlert className="w-3.5 h-3.5" /> Admin Panel
+              </Link>
+            )}
+            {player && (
+              <Link href={`/players/${player.username}`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white border border-slate-200 hover:border-black whitespace-nowrap">
+                <ExternalLink className="w-3.5 h-3.5" /> View public profile
+              </Link>
+            )}
+          </div>
         )}
       </div>
 

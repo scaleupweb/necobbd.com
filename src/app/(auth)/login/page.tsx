@@ -31,8 +31,10 @@ export default function LoginPage() {
         const next = new URLSearchParams(window.location.search).get("next") || "";
         const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "";
         const staff = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "TOURNAMENT_OFFICIAL", "SENIOR_REFEREE", "REFEREE"];
+        const isStaff = staff.includes(json.data.role);
         window.location.href =
-          safeNext || (staff.includes(json.data.role) ? "/admin" : json.data.role === "CLUB_MANAGER" ? "/dashboard/my-club" : "/dashboard");
+          safeNext ||
+          (isStaff && !json.data.playerProfileId ? "/admin" : json.data.role === "CLUB_MANAGER" ? "/dashboard/my-club" : "/dashboard");
       } else {
         setError(json.error?.message || "Invalid credentials.");
       }
