@@ -380,9 +380,13 @@
   }
 }
 @media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
-  .ls-stage .ls-card {
+  .ls-stage:not([data-anim="done"]) .ls-card {
     animation: ls-card-rise 0.5s ease-out both;
   }
+}
+/* After it lands the card has no animation at all (see LoginStage). */
+.ls-stage[data-anim="done"] .ls-card {
+  animation: none;
 }
 
 /* When the password flashlight darkens the page, keep the footballer lit (above the dark layer

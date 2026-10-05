@@ -43,6 +43,19 @@ export function LoginStage({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Once the card has arrived, drop its animation entirely: a finished-but-held animation keeps the
+  // card in its own stacking layer, which would trap the password flashlight under the dark overlay.
+  useEffect(() => {
+    const el = stage.current;
+    const card = el?.querySelector<HTMLElement>(".ls-card");
+    if (!el || !card) return;
+    const done = (e: AnimationEvent) => {
+      if (e.target === card) el.setAttribute("data-anim", "done");
+    };
+    card.addEventListener("animationend", done);
+    return () => card.removeEventListener("animationend", done);
+  }, []);
+
   useEffect(() => {
     const wide = window.matchMedia("(min-width: 1024px)").matches;
     const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
