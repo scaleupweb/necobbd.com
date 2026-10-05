@@ -184,7 +184,7 @@ export async function getHomepageData(settings: SiteSettings) {
       clubName: p.club?.name || "",
       clubLogo: p.club?.logo || "",
       position: p.preferredPosition,
-      rating: p.rating || 0,
+      rating: p.stats?.matchesPlayed ? p.rating : 0,
       verified: !!p.isVerified,
       joinedAt: p.createdAt ? new Date(p.createdAt).toISOString() : "",
     }));

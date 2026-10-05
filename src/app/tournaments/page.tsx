@@ -41,7 +41,7 @@ export default function TournamentsPage() {
             National <span className="text-slate-500">eFootball Tournaments</span>
           </h1>
           <p className="text-sm text-slate-600 mt-1 max-w-xl">
-            Tier-1 esports tournaments, grassroots community cups, double-elimination dynamic brackets, and cash prize pools.
+            Official tournaments: register your club, follow the fixtures and see the results.
           </p>
         </div>
       </div>

@@ -21,7 +21,7 @@ export default async function DisciplinaryPage() {
           Public <span className="text-slate-500">Disciplinary Register</span>
         </h1>
         <p className="text-sm text-slate-600 mt-1 max-w-xl">
-          Official transparency log of warnings, match bans, and competitive suspensions issued by the Disciplinary Committee.
+          Warnings, match bans and suspensions issued by the admin team, published for transparency.
         </p>
       </div>
 
@@ -39,6 +39,14 @@ export default async function DisciplinaryPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-700">
+            {records.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-14 px-5 text-center text-slate-500">
+                  <div className="font-black text-slate-950 text-sm">Clean record</div>
+                  No warnings or bans have been issued.
+                </td>
+              </tr>
+            )}
             {records.map((r: any) => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="py-4 px-5 font-bold text-slate-950">

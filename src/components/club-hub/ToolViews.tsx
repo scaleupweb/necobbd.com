@@ -13,7 +13,7 @@ import { useClubHub } from "./ClubHubContext";
 import { ClubToolsMenu } from "./ClubToolsMenu";
 import { renderPlayerCard, downloadCanvas } from "./canvas";
 import { SquadSeats, SquadCapacity } from "@/components/club/SquadSeats";
-import { SQUAD_LIMIT, isFrozen, freezeLeft, contractDaysLeft } from "@/lib/squad";
+import { SQUAD_LIMIT, isFrozen, freezeLeft, contractDaysLeft, ratingText } from "@/lib/squad";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
@@ -93,7 +93,7 @@ export function SquadRoster() {
             <span className="hidden md:inline text-[11px] font-semibold text-emerald-700 w-28 text-right">
               {p.contract?.endDate ? `${contractDaysLeft(p.contract.endDate)}d contract left` : "under contract"}
             </span>
-            <span className="text-xs font-black font-mono bg-slate-100 px-2 py-0.5 rounded">{p.rating}</span>
+            <span className="text-xs font-black font-mono bg-slate-100 px-2 py-0.5 rounded">{ratingText(p)}</span>
           </div>
         ))}
       </div>

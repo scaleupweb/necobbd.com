@@ -17,7 +17,7 @@ export const NAV_LINKS = [
 export const MORE_LINKS = [
   { label: "Referees & Officials", href: "/referees" },
   { label: "Events & LAN", href: "/events" },
-  { label: "Partners & Universities", href: "/partners" },
+  { label: "Partners & Sponsors", href: "/partners" },
   { label: "Disciplinary Register", href: "/disciplinary" },
   { label: "Rulebook & Fair Play", href: "/rules" },
 ];

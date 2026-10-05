@@ -126,7 +126,7 @@ function PlayerRegisterForm() {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl font-black text-slate-950">Register as eFootball Athlete</h1>
-          <p className="text-xs text-slate-500">Join the official Bangladesh eFootball Championship and get an accredited Elo ranking</p>
+          <p className="text-xs text-slate-500">Create your player profile, join a club and earn a rating from official matches</p>
         </div>
 
         {/* Card */}
@@ -329,7 +329,7 @@ function PlayerRegisterForm() {
               disabled={loading}
               className="w-full py-3.5 rounded-xl bg-black text-white font-bold text-xs hover:bg-zinc-800 shadow-sm transition-all flex items-center justify-center space-x-2 mt-2"
             >
-              <span>{loading ? "Creating Profile..." : "Complete Registration & Get Certified"}</span>
+              <span>{loading ? "Creating Profile..." : "Create my profile"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

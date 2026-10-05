@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Target, Trophy, ArrowLeft } from "lucide-react";
 import { noClubLabel } from "@/lib/squad";
 
@@ -37,12 +38,14 @@ export default function TopScorersPage() {
         </div>
         <div>
           <h1 className="text-3xl font-black text-black">Golden Boot: Top Goal Scorers</h1>
-          <p className="text-xs text-slate-500">Official tournament goal tally across all national divisions.</p>
+          <p className="text-xs text-slate-500">Goals scored in approved official matches.</p>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center py-20 text-slate-600 font-bold animate-pulse text-xs">Loading Golden Boot Standings...</div>
+      ) : scorers.length === 0 ? (
+        <EmptyState icon={Target} title="No goals yet" text="The Golden Boot table fills up after the first approved official match." />
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white border border-slate-200 shadow-sm">
           <table className="w-full text-left border-collapse">

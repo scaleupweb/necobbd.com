@@ -40,7 +40,7 @@ export default function RankingsPage() {
           fetch("/api/rankings?type=players"),
           fetch("/api/rankings?type=clubs"),
         ]);
-        const [pJson, cJson] = await pRes.json();
+        const [pJson, cJson] = await Promise.all([pRes.json(), cRes.json()]);
         if (pJson.success) setPlayers(pJson.data);
         if (cJson.success) setClubs(cJson.data);
       } catch (err) {
@@ -74,7 +74,7 @@ export default function RankingsPage() {
             Championship <span className="text-slate-500">Leaderboards</span>
           </h1>
           <p className="text-sm text-slate-600 mt-1 max-w-xl">
-            Live Elo algorithm ratings calculated from official tournament matches, verified win records, and certified referee reports.
+            Ratings update after every approved official match. A player or club appears here once they have played.
           </p>
         </div>
       </div>
@@ -132,7 +132,17 @@ export default function RankingsPage() {
       {/* Leaderboard Table */}
       {loading ? (
         <div className="text-center py-20 text-slate-600 font-bold animate-pulse text-xs">
-          Calculating Elo Rating Standings...
+          Loading rankings…
+        </div>
+      ) : (viewType === "players" ? filteredPlayers : clubs).length === 0 ? (
+        <div className="py-16 px-6 text-center rounded-2xl border border-dashed border-slate-300 bg-white">
+          <Trophy className="w-8 h-8 mx-auto text-slate-300" />
+          <div className="mt-3 text-sm font-black text-slate-950">{search ? "No match for your search" : "No rankings yet"}</div>
+          <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
+            {search
+              ? "Try another name."
+              : `Rankings start after the first approved official match. Every ${viewType === "players" ? "player" : "club"} who plays will show up here.`}
+          </p>
         </div>
       ) : viewType === "players" ? (
         <div className="overflow-x-auto rounded-2xl bg-white border border-slate-200 shadow-sm">
@@ -254,7 +264,7 @@ export default function RankingsPage() {
                       <span className="font-bold text-black">{club.name}</span>
                     </Link>
                   </td>
-                  <td className="py-3.5 px-4 text-center font-mono text-slate-700">{club.stats?.matches || 16}</td>
+                  <td className="py-3.5 px-4 text-center font-mono text-slate-700">{club.stats?.matches || 0}</td>
                   <td className="py-3.5 px-4 text-center font-mono text-slate-700">
                     {club.stats?.wins || 0} - {club.stats?.draws || 0} - {club.stats?.losses || 0}
                   </td>

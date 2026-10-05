@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Award, ArrowLeft } from "lucide-react";
 import { noClubLabel } from "@/lib/squad";
 
@@ -37,12 +38,14 @@ export default function MotmLeaderboardPage() {
         </div>
         <div>
           <h1 className="text-3xl font-black text-black">Man of the Match (MOTM) Leaders</h1>
-          <p className="text-xs text-slate-500">Most official player-of-the-match accolades certified by accredited referees.</p>
+          <p className="text-xs text-slate-500">Man of the Match awards from approved official matches.</p>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center py-20 text-slate-600 font-bold animate-pulse text-xs">Loading MOTM Honors...</div>
+      ) : leaders.length === 0 ? (
+        <EmptyState icon={Award} title="No awards yet" text="Man of the Match awards appear here after the first approved official match." />
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white border border-slate-200 shadow-sm">
           <table className="w-full text-left border-collapse">

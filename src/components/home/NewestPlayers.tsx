@@ -91,7 +91,7 @@ function Card({ p, band, hidden }: { p: P; band: string; hidden: boolean }) {
         </div>
 
         <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px]">
-          <span className="font-black font-mono text-slate-700">★ {p.rating}</span>
+          {p.rating > 0 && <span className="font-black font-mono text-slate-700">★ {p.rating}</span>}
           <span className="font-semibold text-slate-400">{p.joinedAt ? `joined ${formatRelativeTime(p.joinedAt)}` : ""}</span>
         </div>
       </div>

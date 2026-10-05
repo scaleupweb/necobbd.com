@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Search, X, User, Shield, Trophy, Swords, Newspaper, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { noClubLabel } from "@/lib/squad";
+import { isRated, noClubLabel } from "@/lib/squad";
 
 export function CommandSearch({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
@@ -140,7 +140,7 @@ export function CommandSearch({ isOpen, onClose }: { isOpen: boolean; onClose: (
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
-                        {p.rating} ELO
+                        {isRated(p) ? `${p.rating} ELO` : "New"}
                       </span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-black" />
                     </div>

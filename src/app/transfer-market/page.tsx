@@ -17,7 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
-import { CONTRACT_DAYS, contractDaysLeft, isFreeAgent } from "@/lib/squad";
+import { CONTRACT_DAYS, contractDaysLeft, isFreeAgent, ratingText } from "@/lib/squad";
 import { toast, promptDialog } from "@/lib/feedback";
 
 type Tab = "moves" | "available" | "ending" | "listed";
@@ -411,7 +411,7 @@ function Available({ players }: { players: any[] }) {
                 </span>
                 <div className="mt-2.5 text-sm font-black text-slate-950 truncate group-hover:underline">{p.fullName}</div>
                 <div className="text-[11px] text-slate-500 truncate">
-                  {p.preferredPosition} · {p.rating}
+                  {p.preferredPosition} · {ratingText(p)}
                 </div>
                 <span className={`mt-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-black ${fa ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700"}`}>{fa ? "Free Agent" : "No club"}</span>
               </Link>

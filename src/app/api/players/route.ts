@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { ok, handle } from "@/lib/api";
+import { publicPlayer } from "@/lib/public";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,6 @@ export const GET = handle(async (req: NextRequest) => {
   });
 
   // Public listing never exposes contact details.
-  const safe = players.map(({ phone, userId, ...p }: any) => p);
+  const safe = players.map(publicPlayer);
   return ok(safe, 200, { count: safe.length });
 });

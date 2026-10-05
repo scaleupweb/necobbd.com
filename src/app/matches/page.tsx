@@ -63,13 +63,13 @@ export default function MatchCentrePage() {
         <div>
           <div className="inline-flex items-center space-x-2 text-xs font-bold text-slate-700 uppercase tracking-widest mb-1.5">
             <Swords className="w-4 h-4 text-black" />
-            <span>Match Operations Desk</span>
+            <span>Matches</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-black tracking-tight">
             Official <span className="text-slate-500">Match Centre</span>
           </h1>
           <p className="text-sm text-slate-600 mt-1 max-w-xl">
-            Live broadcast scores, upcoming fixtures, referee reports, and verified match results across all tournament divisions.
+            Upcoming fixtures, live scores and approved results from official tournaments.
           </p>
         </div>
       </div>

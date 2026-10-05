@@ -29,7 +29,7 @@ import { Donut, Gauge } from "@/components/profile/Charts";
 import { FitImage } from "@/components/ui/FitImage";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { SquadCapacity } from "@/components/club/SquadSeats";
-import { SQUAD_LIMIT } from "@/lib/squad";
+import { SQUAD_LIMIT, ratingText } from "@/lib/squad";
 
 export const dynamic = "force-dynamic";
 
@@ -268,7 +268,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={p.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
                     <span className="flex-1 text-sm font-bold text-black truncate group-hover:underline">{p.fullName}</span>
-                    <span className="text-xs font-black font-mono text-slate-600">{p.rating}</span>
+                    <span className="text-xs font-black font-mono text-slate-600">{ratingText(p)}</span>
                   </Link>
                 ))}
               </div>
@@ -372,7 +372,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
                     >
                       {/* Rating + position */}
                       <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-[10px] sm:text-[11px] font-black font-mono">
-                        <Sparkles className="w-3 h-3" /> {p.rating}
+                        <Sparkles className="w-3 h-3" /> {ratingText(p)}
                       </span>
                       <span className="absolute top-2.5 right-2.5 px-1.5 py-0.5 rounded-lg bg-slate-900 text-white text-[10px] font-black">{p.preferredPosition}</span>
 

@@ -15,19 +15,24 @@ export default async function PartnersPage() {
       <div className="pb-6 border-b border-slate-200 text-center space-y-2">
         <div className="inline-flex items-center space-x-2 text-xs font-bold text-slate-600 uppercase tracking-widest mb-1">
           <GraduationCap className="w-4 h-4 text-black" />
-          <span>Institutional & Commercial Alliance</span>
+          <span>Our supporters</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
-          University Esports & <span className="text-slate-500">Partner Network</span>
+          Partners & <span className="text-slate-500">Sponsors</span>
         </h1>
         <p className="text-sm text-slate-600 max-w-xl mx-auto">
-          Collaborating with premier universities, collegiate guilds, technology brands, and media partners across the nation.
+          The organisations and people who support our community and tournaments.
         </p>
       </div>
 
-      {/* Collegiate Partners Grid */}
+      {partners.length === 0 && sponsors.length === 0 && (
+        <p className="text-center text-sm text-slate-500 py-10">No partners or sponsors listed yet.</p>
+      )}
+
+      {/* Partners Grid */}
+      {partners.length > 0 && (
       <div className="space-y-4">
-        <h2 className="text-base font-bold text-slate-950 uppercase tracking-wider">Collegiate & Community Partners</h2>
+        <h2 className="text-base font-bold text-slate-950 uppercase tracking-wider">Partners</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {partners.map((p: any) => (
             <div
@@ -58,9 +63,12 @@ export default async function PartnersPage() {
         </div>
       </div>
 
+      )}
+
       {/* Sponsors Grid */}
+      {sponsors.length > 0 && (
       <div className="space-y-4 pt-4">
-        <h2 className="text-base font-bold text-slate-950 uppercase tracking-wider">Official Tournament Sponsors</h2>
+        <h2 className="text-base font-bold text-slate-950 uppercase tracking-wider">Sponsors</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {sponsors.map((s: any) => (
             <div
@@ -70,12 +78,13 @@ export default async function PartnersPage() {
               <img src={s.logo} alt={s.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
               <div>
                 <h3 className="text-sm font-bold text-slate-950 group-hover:text-black">{s.name}</h3>
-                <div className="text-xs text-slate-500">Official {s.placement} Partner</div>
+                <div className="text-xs text-slate-500 capitalize">{String(s.placement || "").toLowerCase()} sponsor</div>
               </div>
             </div>
           ))}
         </div>
       </div>
+      )}
 
     </div>
   );

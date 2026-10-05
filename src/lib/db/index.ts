@@ -2011,7 +2011,7 @@ export const db = {
     await db.releaseExpiredContracts().catch(() => 0);
     const moves = await TransferHistory.find({}).sort({ transferDate: -1 }).limit(limit).lean<any>();
     const [players, clubs] = await Promise.all([
-      Player.find({ _id: { $in: moves.map((m: any) => m.playerId).filter(Boolean) } }, { fullName: 1, username: 1, avatar: 1, preferredPosition: 1, rating: 1 }).lean<any>(),
+      Player.find({ _id: { $in: moves.map((m: any) => m.playerId).filter(Boolean) } }, { fullName: 1, username: 1, avatar: 1, preferredPosition: 1, rating: 1, "stats.matchesPlayed": 1 }).lean<any>(),
       clubMap(moves.flatMap((m: any) => [m.newClubId, m.oldClubId]).filter(Boolean)),
     ]);
     const pm = new Map(players.map((p: any) => [String(p._id), p]));
@@ -2024,7 +2024,7 @@ export const db = {
         id: String(m._id),
         date: new Date(m.transferDate).toISOString(),
         type: type === "registered" ? "free" : type,
-        player: { fullName: p.fullName || m.playerName, username: p.username || "", avatar: p.avatar || PLACEHOLDER.avatar, position: p.preferredPosition || "", rating: p.rating || 0 },
+        player: { fullName: p.fullName || m.playerName, username: p.username || "", avatar: p.avatar || PLACEHOLDER.avatar, position: p.preferredPosition || "", rating: p.stats?.matchesPlayed ? p.rating : 0 },
         from: type === "expired" || type === "released" || type === "transfer" ? side(m.oldClubId, m.previousClubName) : { name: type === "signing" ? m.previousClubName || "No club" : "No club" },
         to: type === "expired" ? { name: "Free Agent" } : type === "released" ? { name: "No club" } : side(m.newClubId, m.newClubName),
         contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,

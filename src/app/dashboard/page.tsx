@@ -20,7 +20,7 @@ import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { toast, confirmDialog } from "@/lib/feedback";
 import { LocationInput } from "@/components/ui/LocationInput";
-import { noClubLabel } from "@/lib/squad";
+import { noClubLabel, ratingText } from "@/lib/squad";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
 type Tab = "overview" | "profile" | "security";
@@ -80,7 +80,7 @@ export default function DashboardPage() {
         </div>
         {player && (
           <div className="grid grid-cols-3 gap-2.5 w-full md:w-auto">
-            <Kpi label="Rating" value={player.rating} />
+            <Kpi label="Rating" value={ratingText(player)} />
             <Kpi label="Value" value={formatCurrency(player.marketValue)} />
             <Kpi label="Win rate" value={`${player.stats.winRate}%`} />
           </div>

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { ok, fail, handle } from "@/lib/api";
+import { publicClub } from "@/lib/public";
 
 export const dynamic = "force-dynamic";
 
@@ -9,5 +10,5 @@ export const GET = handle(async (_req: NextRequest, { params }: { params: Promis
   const club = await db.getClubBySlug(slug);
   if (!club) return fail("Club not found", 404, "NOT_FOUND");
   const fixtures = await db.getFixtures({ clubId: club.id, limit: 50 });
-  return ok({ ...club, fixtures });
+  return ok({ ...publicClub(club), fixtures });
 });

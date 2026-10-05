@@ -38,7 +38,7 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { toMatchLines, snapshot, monthlyLoad, seasons, humanGap, aboutText, MatchLine } from "@/lib/player-insights";
 import { LineChart, BarChart, Gauge, Donut } from "@/components/profile/Charts";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { CONTRACT_DAYS, isFrozen, freezeLeft, isFreeAgent, noClubLabel } from "@/lib/squad";
+import { CONTRACT_DAYS, isFrozen, freezeLeft, isFreeAgent, isRated, noClubLabel } from "@/lib/squad";
 import { FitImage } from "@/components/ui/FitImage";
 
 export const dynamic = "force-dynamic";
@@ -277,7 +277,14 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
 
           {/* Rating gauge */}
           <div className="rounded-3xl bg-[#0B0C0F] text-white p-5">
-            <Gauge value={player.rating} min={500} max={1300} label="Rating" />
+            {isRated(player) ? (
+              <Gauge value={player.rating} min={500} max={1300} label="Rating" />
+            ) : (
+              <div className="py-6 text-center">
+                <div className="text-3xl font-black">New</div>
+                <div className="text-[11px] text-white/50 mt-1">Rating appears after the first official match</div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 mt-3 text-center">
               <div className="rounded-xl bg-white/5 py-2">
                 <div className="text-[10px] text-white/50 font-bold">MARKET VALUE</div>

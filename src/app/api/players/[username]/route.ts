@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { ok, fail, handle } from "@/lib/api";
+import { publicPlayer } from "@/lib/public";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,8 @@ export const GET = handle(async (_req: NextRequest, { params }: { params: Promis
     db.getActivityForUser(userId, player.id, 40),
   ]);
 
-  const { phone, ...publicPlayer } = player as any;
   return ok({
-    ...publicPlayer,
+    ...publicPlayer(player),
     fixtures,
     tournaments,
     events: events.map((e: any) => ({ id: e.id, name: e.name, slug: e.slug, eventDate: e.eventDate, venue: e.venue, banner: e.banner, status: e.status })),

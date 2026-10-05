@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Shield, ArrowLeft } from "lucide-react";
 import { noClubLabel } from "@/lib/squad";
 
@@ -37,12 +38,14 @@ export default function CleanSheetsPage() {
         </div>
         <div>
           <h1 className="text-3xl font-black text-black">Golden Glove: Clean Sheet Standings</h1>
-          <p className="text-xs text-slate-500">Top goalkeepers and defensive anchors with zero-goal matches.</p>
+          <p className="text-xs text-slate-500">Approved official matches where the player conceded no goals.</p>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center py-20 text-slate-600 font-bold animate-pulse text-xs">Loading Clean Sheet Records...</div>
+      ) : defenders.length === 0 ? (
+        <EmptyState icon={Shield} title="No clean sheets yet" text="Clean sheets appear here after the first approved official match." />
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white border border-slate-200 shadow-sm">
           <table className="w-full text-left border-collapse">

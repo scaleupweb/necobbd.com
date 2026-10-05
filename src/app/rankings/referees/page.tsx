@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Scale, Star, ArrowLeft, Shield } from "lucide-react";
 
 export default function RefereeRankingsPage() {
@@ -36,12 +37,14 @@ export default function RefereeRankingsPage() {
         </div>
         <div>
           <h1 className="text-3xl font-black text-black">Match Official & Referee Performance Tiers</h1>
-          <p className="text-xs text-slate-500">Accredited Tier 1-3 tournament adjudicators ranked by performance integrity and match volume.</p>
+          <p className="text-xs text-slate-500">Match officials ranked by the matches they have handled.</p>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center py-20 text-slate-600 font-bold animate-pulse text-xs">Loading Referee Accreditations...</div>
+      ) : referees.length === 0 ? (
+        <EmptyState icon={Scale} title="No match officials yet" text="Officials appear here once the admin team adds them." />
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white border border-slate-200 shadow-sm">
           <table className="w-full text-left border-collapse">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Scale, Star, ShieldCheck, Award, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +19,14 @@ export default async function RefereesPage() {
           <span>Governance & Match Integrity</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
-          Accredited <span className="text-slate-500">Match Officials</span>
+          Match <span className="text-slate-500">Match Officials</span>
         </h1>
         <p className="text-sm text-slate-600 mt-1 max-w-xl">
-          Certified Tier 1 to Tier 3 match referees enforcing tournament fairness, verifying score proofs, and arbitrating disputes.
+          The officials who check match proof and approve results in official tournaments.
         </p>
       </div>
 
+      {referees.length === 0 && <EmptyState icon={Scale} title="No match officials yet" text="Officials will be listed here once the admin team adds them." />}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {referees.map((ref: any) => (
           <div
@@ -74,7 +76,7 @@ export default async function RefereesPage() {
             </div>
 
             <div className="text-[11px] text-slate-500 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span>Accredited since {formatDate(ref.joinedDate)}</span>
+              <span>Official since {formatDate(ref.joinedDate)}</span>
               <span className="text-emerald-700 font-bold">Active Ref</span>
             </div>
           </div>

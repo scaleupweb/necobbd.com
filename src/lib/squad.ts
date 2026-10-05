@@ -59,3 +59,9 @@ export function freezeLeft(frozenUntil?: string | Date | null) {
   const h = Math.floor((ms % DAY) / 3600000);
   return d ? `${d}d ${h}h` : `${Math.max(1, h)}h`;
 }
+
+/** Everyone starts on the same base rating, so it is only shown once a player has played an official match. */
+export const isRated = (p?: any) => (p?.stats?.matchesPlayed || 0) > 0;
+
+/** The rating to show, or "New" before the player's first official match. */
+export const ratingText = (p?: any) => (isRated(p) ? String(p.rating) : "New");

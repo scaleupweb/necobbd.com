@@ -27,9 +27,9 @@ export default async function AboutPage() {
           <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-900">
             <Trophy className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-slate-950">Championship Integrity</h3>
+          <h3 className="text-lg font-bold text-slate-950">Fair Results</h3>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Eliminating disputed results through our 3-tier certified referee program, transparent screenshot proof auditing, and dynamic Elo rating recalculation.
+            Every official result is checked by the admin team before it counts. Player and club ratings update automatically after each approved match.
           </p>
         </div>
 
@@ -37,9 +37,9 @@ export default async function AboutPage() {
           <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-900">
             <Users className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-slate-950">Athlete Pathway</h3>
+          <h3 className="text-lg font-bold text-slate-950">Clubs & Transfers</h3>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Providing grassroots mobile players with an official pathway to sign with top tier esports clubs, compete in LAN arena stages, and gain national recognition.
+            Clubs build a 30-player Main Team Squad. Signings go through the Transfer Window with a 120-day contract and admin approval, and every move is kept in the player's history.
           </p>
         </div>
 
@@ -47,9 +47,9 @@ export default async function AboutPage() {
           <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-900">
             <HeartHandshake className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-slate-950">Collegiate Network</h3>
+          <h3 className="text-lg font-bold text-slate-950">Player Profiles</h3>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Partnering with top universities and esports guilds across all 8 administrative divisions of Bangladesh to foster healthy competitive gaming culture.
+            Every player gets a public profile with their Konami ID, device, club, contract, transfer history and match record.
           </p>
         </div>
       </div>
@@ -59,7 +59,7 @@ export default async function AboutPage() {
       <div className="space-y-6 pt-6">
         <div className="text-center space-y-1">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-950">Founders & Executive Council</h2>
-          <p className="text-xs text-slate-500">The leadership team directing national tournament operations and fair play governance.</p>
+          <p className="text-xs text-slate-500">The people who run {settings.brand.siteName.trim()}.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

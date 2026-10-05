@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
+import { isRated } from "@/lib/squad";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Search, User, Shield, Trophy, Swords, ArrowRight } from "lucide-react";
@@ -79,7 +80,7 @@ function SearchContent() {
                         <div className="text-xs text-slate-500">@{p.username} • {p.preferredPosition}</div>
                       </div>
                     </div>
-                    <span className="text-xs font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{p.rating} ELO</span>
+                    <span className="text-xs font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{isRated(p) ? `${p.rating} ELO` : "New"}</span>
                   </Link>
                 ))}
               </div>

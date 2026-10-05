@@ -13,7 +13,8 @@ function renameIds(v: any): any {
     const out: Record<string, any> = {};
     for (const [k, val] of Object.entries(v)) {
       if (k === "_id") out.id = val;
-      else if (k === "__v" || k === "passwordHash" || k === "passwordResetTokenHash") continue;
+      // `legacy` is old-site import data, read only from raw documents on the server.
+      else if (k === "__v" || k === "passwordHash" || k === "passwordResetTokenHash" || k === "legacy") continue;
       else out[k] = renameIds(val);
     }
     return out;

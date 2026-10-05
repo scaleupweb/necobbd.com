@@ -6,7 +6,7 @@ import { Search, Users, Shield, UserX, BadgeCheck, Sparkles, ArrowUpRight, Smart
 import { PLAYER_POSITIONS } from "@/lib/constants";
 import { getFormColor } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { isFreeAgent, noClubLabel } from "@/lib/squad";
+import { isFreeAgent, noClubLabel, ratingText } from "@/lib/squad";
 
 const PAGE = 48;
 
@@ -219,7 +219,7 @@ function PlayerCard({ p }: { p: any }) {
     <div className="group relative flex flex-col rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 text-center shadow-sm hover:shadow-lg hover:border-[#C79A3B]/60 hover:-translate-y-0.5 transition-all">
       {/* Top chips */}
       <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-amber-50 text-amber-800 text-[10px] sm:text-[11px] font-black font-mono">
-        <Sparkles className="w-3 h-3" /> {p.rating}
+        <Sparkles className="w-3 h-3" /> {ratingText(p)}
       </span>
       <span className="absolute top-2.5 right-2.5 px-1.5 py-0.5 rounded-lg bg-slate-900 text-white text-[10px] font-black">{p.preferredPosition}</span>
 

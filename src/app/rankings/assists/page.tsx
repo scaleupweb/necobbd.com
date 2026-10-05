@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Zap, ArrowLeft } from "lucide-react";
 import { noClubLabel } from "@/lib/squad";
 
@@ -37,12 +38,14 @@ export default function AssistsRankingPage() {
         </div>
         <div>
           <h1 className="text-3xl font-black text-black">Playmaker Leaderboard: Top Assists</h1>
-          <p className="text-xs text-slate-500">Master creators with highest key pass assists in official matches.</p>
+          <p className="text-xs text-slate-500">Assists recorded in approved official matches.</p>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center py-20 text-slate-600 font-bold animate-pulse text-xs">Loading Playmaker Standings...</div>
+      ) : assists.length === 0 ? (
+        <EmptyState icon={Zap} title="No assists yet" text="Assists appear here after the first approved official match." />
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white border border-slate-200 shadow-sm">
           <table className="w-full text-left border-collapse">
