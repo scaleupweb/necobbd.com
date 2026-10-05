@@ -10,7 +10,7 @@ export function Hero({ hero, stats }: { hero: SiteSettings["hero"]; stats: { val
   return (
     <section className="relative w-full pt-2 sm:pt-4 pb-4 sm:pb-6">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-3xl bg-[#0B0C0F] text-white ring-1 ring-black/5 shadow-xl">
+        <div className="relative overflow-hidden rounded-[28px] bg-[#0B0C0F] text-white ring-1 ring-black/5 shadow-xl">
           {/* Background: faint grid + warm glow */}
           <div
             aria-hidden

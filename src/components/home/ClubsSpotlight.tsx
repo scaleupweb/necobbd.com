@@ -20,9 +20,9 @@ export function ClubsSpotlight({ title, data }: { title: string; data: HomepageD
   const max = Math.max(1, ...data.clubs.map((c) => c.squadCount || 0));
 
   return (
-    <section className="w-full py-8">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative rounded-[2rem] overflow-hidden bg-[#0B0C0F] text-white p-4 sm:p-8">
+        <div className="relative rounded-[28px] overflow-hidden bg-[#0B0C0F] text-white p-4 sm:p-8">
           <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_at_100%_0%,rgba(199,154,59,0.22),transparent_50%),radial-gradient(ellipse_at_0%_100%,rgba(16,185,129,0.14),transparent_45%)]" />
           <div
             aria-hidden

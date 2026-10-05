@@ -25,7 +25,7 @@ function Header({ title, href }: { icon?: React.ReactNode; title: string; href: 
       title={title}
       subtitle={scorers ? "Most goals in official matches" : "League points table"}
       href={href}
-      accent={scorers ? "bg-rose-500 text-white" : "bg-black text-white"}
+
     />
   );
 }
@@ -50,13 +50,13 @@ export function TopScorersAndClubs({
   if (!sc && !cl) return null;
 
   return (
-    <section className="w-full py-6">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className={`grid grid-cols-1 ${sc && cl ? "lg:grid-cols-2" : ""} gap-6`}>
           {sc && (
             <div className="space-y-3.5">
               <Header icon={<Flame className="w-4 h-4 text-rose-500" />} title={scorersTitle} href="/rankings/scorers" />
-              <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto no-scrollbar">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#F7F8FA] text-[#5F6368] font-bold uppercase text-[10px] tracking-wider border-b border-[#E5E7EB]">
@@ -95,7 +95,7 @@ export function TopScorersAndClubs({
           {cl && (
             <div className="space-y-3.5">
               <Header icon={<Trophy className="w-4 h-4 text-[#111111]" />} title={clubsTitle} href="/rankings" />
-              <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto no-scrollbar">
                   <table className="w-full text-left text-xs min-w-[440px]">
                     <thead className="bg-[#F7F8FA] text-[#5F6368] font-bold uppercase text-[10px] tracking-wider border-b border-[#E5E7EB]">
@@ -113,7 +113,7 @@ export function TopScorersAndClubs({
                       {clubRankings.map((c) => (
                         <tr key={c.rank} className="hover:bg-[#F7F8FA]/70 transition-colors">
                           <td className="py-2.5 px-3.5 text-center font-bold text-[#5F6368]">
-                            {c.rank === 1 ? <span className="inline-flex w-5 h-5 rounded-full bg-[#111111] text-white text-[10px] font-black items-center justify-center">1</span> : c.rank}
+                            {c.rank === 1 ? <span className="inline-flex w-5 h-5 rounded-full bg-gradient-to-br from-[#F7DC8B] to-[#C79A3B] text-[#0B0C0F] text-[10px] font-black items-center justify-center">1</span> : c.rank}
                           </td>
                           <td className="py-2.5 px-3.5 font-bold text-[#111111]">
                             <Link href={`/clubs/${c.slug}`} className="flex items-center space-x-2.5 hover:underline">

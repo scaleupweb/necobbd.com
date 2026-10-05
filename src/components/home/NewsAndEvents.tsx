@@ -5,21 +5,10 @@ import { SectionHeader as Header } from "./SectionHeader";
 import type { HomepageData } from "@/lib/homepage";
 
 function EventBadge({ badgeType }: { badgeType?: string }) {
-  if (badgeType === "gold")
-    return (
-      <div className="w-10 h-10 rounded-xl bg-[#2A1D06] border border-[#F59E0B]/30 flex items-center justify-center text-[#FBBF24] shrink-0 shadow-inner">
-        <Trophy className="w-4.5 h-4.5" />
-      </div>
-    );
-  if (badgeType === "purple")
-    return (
-      <div className="w-10 h-10 rounded-xl bg-[#220B2E] border border-[#A855F7]/30 flex items-center justify-center text-[#C084FC] shrink-0 shadow-inner">
-        <Swords className="w-4.5 h-4.5" />
-      </div>
-    );
+  const Icon = badgeType === "gold" ? Trophy : badgeType === "purple" ? Swords : Users;
   return (
-    <div className="w-10 h-10 rounded-xl bg-[#0B1E38] border border-[#3B82F6]/30 flex items-center justify-center text-[#60A5FA] shrink-0 shadow-inner">
-      <Users className="w-4.5 h-4.5" />
+    <div className="w-10 h-10 rounded-xl bg-[#0B0C0F] ring-1 ring-[#C79A3B]/30 flex items-center justify-center text-[#F7DC8B] shrink-0">
+      <Icon className="w-4 h-4" />
     </div>
   );
 }
@@ -32,7 +21,6 @@ function SectionHeader({ title, href }: { title: string; href: string }) {
       title={title}
       subtitle={isNews ? "Stories, announcements and reports" : "Mark your calendar"}
       href={href}
-      accent={isNews ? "bg-rose-500 text-white" : "bg-amber-400 text-black"}
     />
   );
 }
@@ -57,7 +45,7 @@ export function NewsAndEvents({
   if (!n && !e) return null;
 
   return (
-    <section className="w-full py-6">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {n && (
@@ -68,7 +56,7 @@ export function NewsAndEvents({
                   <Link
                     key={item.slug}
                     href={`/news/${item.slug}`}
-                    className="group bg-white border border-[#E5E7EB] hover:border-[#111111] rounded-2xl overflow-hidden flex flex-col transition-all duration-300 shadow-sm hover:shadow-md h-full"
+                    className="group home-card overflow-hidden flex flex-col h-full"
                   >
                     {/* Posters come in any shape: show the whole image, with a blurred copy filling the spare space. */}
                     <div className="relative aspect-[4/3] w-full bg-[#111111] overflow-hidden">
@@ -77,7 +65,10 @@ export function NewsAndEvents({
                     </div>
                     <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
                       <h3 className="text-xs sm:text-sm font-black text-[#111111] leading-snug line-clamp-2">{item.title}</h3>
-                      <div className="text-[11px] text-[#6B7280] font-medium pt-3 mt-auto">{item.date}</div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-[#6B7280] font-semibold pt-3 mt-auto">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#C79A3B]" /> {item.date}
+                        <span className="ml-auto text-[#111111] font-black opacity-0 group-hover:opacity-100 transition-opacity">Read →</span>
+                      </div>
                     </div>
                   </Link>
                 ))}
@@ -88,7 +79,7 @@ export function NewsAndEvents({
           {e && (
             <div className={`${n ? "lg:col-span-4" : "lg:col-span-12"} flex flex-col`}>
               <SectionHeader title={eventsTitle} href="/events" />
-              <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 sm:p-5 shadow-sm divide-y divide-[#F1F3F5] flex-1 flex flex-col">
+              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-sm divide-y divide-slate-100 flex-1 flex flex-col">
                 {events.map((ev) => (
                   <div key={ev.slug} className="py-3 sm:py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
                     <div className="flex items-center space-x-3 min-w-0">
@@ -103,7 +94,7 @@ export function NewsAndEvents({
                     </div>
                     <Link
                       href={`/events#${ev.slug}`}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#111111] border border-[#E5E7EB] transition-colors shrink-0"
+                      className="px-3.5 py-1.5 rounded-full text-xs font-black bg-[#0B0C0F] hover:bg-black text-white transition-colors shrink-0"
                     >
                       {ev.isRegistrationOpen ? "Register" : "Details"}
                     </Link>

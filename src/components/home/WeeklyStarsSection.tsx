@@ -21,16 +21,16 @@ function CategoryIcon({ iconType }: { iconType?: string }) {
 
 export function WeeklyStarsSection({ title, subtitle, stars }: { title: string; subtitle: string; stars: HomeStar[] }) {
   return (
-    <section className="w-full py-6">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader icon={Crown} title={title} subtitle={subtitle} href="/rankings" accent="bg-[#C79A3B] text-black" />
+        <SectionHeader icon={Crown} title={title} subtitle={subtitle} href="/rankings" />
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           {stars.map((star) => (
             <Link
               key={star.id}
               href={`/players/${star.username}`}
-              className="group bg-white border border-[#E5E7EB] hover:border-[#111111] rounded-2xl p-3 sm:p-4 flex flex-col justify-between transition-all duration-300 shadow-sm hover:shadow-md h-full"
+              className="group home-card p-3 sm:p-4 flex flex-col justify-between h-full"
             >
               <div className="flex items-center space-x-1.5 text-xs font-bold text-[#111111] mb-2.5">
                 <CategoryIcon iconType={star.iconType} />
@@ -45,7 +45,7 @@ export function WeeklyStarsSection({ title, subtitle, stars }: { title: string; 
                     <Image src={star.clubLogo} alt="" fill sizes="24px" className="object-cover" />
                   </div>
                 ) : (
-                  <div className="w-6 h-6 rounded-md bg-[#111111] text-white flex items-center justify-center text-[9px] font-bold shrink-0">★</div>
+                  <div className="w-6 h-6 rounded-md bg-[#0B0C0F] text-[#F7DC8B] flex items-center justify-center text-[9px] font-bold shrink-0">★</div>
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-xs sm:text-sm font-bold text-[#111111] truncate leading-tight">{star.playerName}</div>

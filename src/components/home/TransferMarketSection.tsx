@@ -80,14 +80,13 @@ export function TransferMarketSection({
   stats: HomepageData["transferStats"];
 }) {
   return (
-    <section className="w-full py-6">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeader
           icon={ArrowRightLeft}
           title={content.title}
           subtitle={`${stats.available} players available${stats.freeAgents ? ` · ${stats.freeAgents} free agents` : ""}`}
           href="/transfer-market"
-          accent="bg-violet-600 text-white"
           badge={
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Open now

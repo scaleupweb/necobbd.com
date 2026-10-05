@@ -49,12 +49,12 @@ export function OngoingTournamentsAndActivity({
   const spotsPct = featured && featured.maxParticipants ? Math.min(100, Math.round((featured.participants / featured.maxParticipants) * 100)) : 0;
 
   return (
-    <section className="w-full py-6">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {showT && featured && (
             <div className={`${showA ? "lg:col-span-7" : "lg:col-span-12"} flex flex-col`}>
-              <SectionHeader icon={Trophy} title={tournamentsTitle} subtitle="Competitions running now" href="/tournaments" accent="bg-[#C79A3B] text-black" />
+              <SectionHeader icon={Trophy} title={tournamentsTitle} subtitle="Competitions running now" href="/tournaments" />
 
               <div className="flex-1 flex flex-col gap-3">
                 {/* Featured tournament */}
@@ -157,7 +157,7 @@ export function OngoingTournamentsAndActivity({
 
           {showA && (
             <div className={`${showT ? "lg:col-span-5" : "lg:col-span-12"} flex flex-col`}>
-              <SectionHeader icon={Activity} title={activityTitle} subtitle="Live from the community" href="/activity" accent="bg-sky-500 text-white" />
+              <SectionHeader icon={Activity} title={activityTitle} subtitle="Live from the community" href="/activity" />
               <div className="relative flex-1 flex flex-col rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-sky-50/70 to-transparent">
                   <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Latest updates</span>

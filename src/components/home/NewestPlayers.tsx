@@ -26,9 +26,9 @@ export function NewestPlayers({ players }: { players: HomepageData["newestPlayer
   const duration = Math.max(30, base.length * 4.5);
 
   return (
-    <section className="w-full py-6">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeader icon={UserPlus} title="New in the community" subtitle="Latest players to join · hover to pause" href="/players" accent="bg-emerald-500 text-white" />
+        <SectionHeader icon={UserPlus} title="New in the community" subtitle="Latest players to join · hover to pause" href="/players" />
       </div>
       <div
         className="marquee relative overflow-hidden py-3 [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)]"

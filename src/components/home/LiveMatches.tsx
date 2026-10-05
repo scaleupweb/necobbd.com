@@ -8,7 +8,7 @@ export function LiveMatches({ title, matches }: { title: string; matches: HomeMa
   const anyLive = matches.some((m) => m.isLive);
 
   return (
-    <section className="w-full py-4 sm:py-5">
+    <section className="w-full py-6 sm:py-8">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeader
           icon={Swords}
@@ -24,7 +24,7 @@ export function LiveMatches({ title, matches }: { title: string; matches: HomeMa
             <Link
               key={match.id}
               href={`/matches/${match.id}`}
-              className="w-[285px] sm:w-[320px] shrink-0 md:w-auto md:shrink snap-start bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#111111] rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all shadow-xs"
+              className="w-[285px] sm:w-[320px] shrink-0 md:w-auto md:shrink snap-start home-card p-4 sm:p-5 flex flex-col justify-between"
             >
               <div className="flex items-center justify-between pb-3">
                 <span
