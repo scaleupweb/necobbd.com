@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, XCircle, X, Loader2, ExternalLink } from "lucide-react";
-import { toast, confirmDialog } from "@/lib/feedback";
+import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
 import { CONTRACT_DAYS, FREEZE_DAYS } from "@/lib/squad";
 import { api, Badge, Button, Empty, Notice, PageHeader, inputCls, statusTone } from "@/components/admin/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -12,6 +12,15 @@ export default function AdminTransfersPage() {
   const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [buyer, setBuyer] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const load = useCallback(async () => {
     try {
@@ -40,6 +49,43 @@ export default function AdminTransfersPage() {
 
   const pending = data.requests.filter((r: any) => r.status === "PENDING" && r.type !== "SIGNING");
   const signings = data.requests.filter((r: any) => r.status === "PENDING" && r.type === "SIGNING");
+  const bulk = async (list: any[], status: "ACCEPTED" | "REJECTED") => {
+    const ids = list.filter((r) => selected.has(r.id)).map((r) => r.id);
+    if (!ids.length) return;
+    const yes = await confirmDialog({
+      title: `${status === "ACCEPTED" ? "Approve" : "Reject"} ${ids.length} request${ids.length === 1 ? "" : "s"}?`,
+      text:
+        status === "ACCEPTED"
+          ? `They are processed oldest first. Signed players get a ${CONTRACT_DAYS}-day contract and a ${FREEZE_DAYS}-day freeze. Any that can't go through (full squad, player already signed…) are skipped and listed.`
+          : "Each club will be notified.",
+      confirmText: status === "ACCEPTED" ? `Approve ${ids.length}` : `Reject ${ids.length}`,
+      danger: status === "REJECTED",
+    });
+    if (!yes) return;
+    setBulkBusy(true);
+    try {
+      const res: any = await api("/api/admin/transfers/requests/bulk", { method: "POST", json: { ids, status } });
+      const word = status === "ACCEPTED" ? "approved" : "rejected";
+      if (res.failed) {
+        const byId = new Map(list.map((r) => [r.id, r]));
+        const rows = res.results
+          .filter((x: any) => !x.ok)
+          .map((x: any) => {
+            const r: any = byId.get(x.id);
+            return `<li style="margin:4px 0"><b>${escapeHtml(r?.player?.fullName || "Request")}</b> → ${escapeHtml(r?.club?.name || "")}: ${escapeHtml(x.error)}</li>`;
+          })
+          .join("");
+        await infoDialog({ icon: "warning", title: `${res.done} ${word}, ${res.failed} skipped`, html: `<ul style="text-align:left;font-size:13px;padding-left:18px">${rows}</ul>` });
+      } else toast.success(`${res.done} request${res.done === 1 ? "" : "s"} ${word}`);
+      setSelected(new Set());
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const decide = async (r: any, status: "ACCEPTED" | "REJECTED") => {
     const yes = await confirmDialog({
       title: status === "ACCEPTED" ? `Approve ${r.player?.fullName} → ${r.club?.name}?` : `Reject this transfer request?`,
@@ -64,13 +110,15 @@ export default function AdminTransfersPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-black text-slate-950">Transfer Window requests ({signings.length})</h2>
+        {signings.length > 0 && <BulkBar list={signings} selected={selected} setSelected={setSelected} busy={bulkBusy} onAct={(st) => bulk(signings, st)} />}
         {signings.length === 0 ? (
           <Empty>No signing requests waiting.</Empty>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {signings.map((r: any) => (
-              <div key={r.id} className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3 text-xs">
+              <div key={r.id} className={`p-4 rounded-2xl bg-white border space-y-3 text-xs transition-colors ${selected.has(r.id) ? "border-emerald-400 ring-2 ring-emerald-100" : "border-slate-200"}`}>
                 <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.player?.fullName}`} className="w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer" />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={r.player?.avatar} alt="" className="w-12 h-12 rounded-full object-cover bg-slate-100" />
                   <div className="min-w-0 flex-1">
@@ -114,12 +162,15 @@ export default function AdminTransfersPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-black text-slate-950">Club offers awaiting approval ({pending.length})</h2>
+        {pending.length > 0 && <BulkBar list={pending} selected={selected} setSelected={setSelected} busy={bulkBusy} onAct={(st) => bulk(pending, st)} />}
         {pending.length === 0 ? (
           <Empty>No pending offers.</Empty>
         ) : (
           <div className="space-y-2">
             {pending.map((r: any) => (
-              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-white border border-slate-200 text-xs">
+              <div key={r.id} className={`flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-white border text-xs transition-colors ${selected.has(r.id) ? "border-emerald-400 ring-2 ring-emerald-100" : "border-slate-200"}`}>
+                <div className="flex items-start gap-3">
+                <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Select offer for ${r.player?.fullName}`} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer" />
                 <div>
                   <div className="font-bold text-slate-950">
                     {r.club?.name} → {r.player?.fullName}
@@ -129,6 +180,7 @@ export default function AdminTransfersPage() {
                     {r.proposedSalary ? ` · salary ${formatCurrency(r.proposedSalary)}` : ""} · {formatDate(r.createdAt)}
                   </div>
                   {r.message && <div className="text-slate-600 italic mt-1">“{r.message}”</div>}
+                </div>
                 </div>
                 <div className="flex gap-1.5">
                   <Button small variant="success" onClick={() => run(() => api(`/api/admin/transfers/requests/${r.id}`, { method: "PATCH", json: { status: "ACCEPTED" } }), "Transfer completed.")}>
@@ -238,6 +290,51 @@ export default function AdminTransfersPage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+const escapeHtml = (v: string) => String(v).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** Select-all checkbox plus "approve / reject selected" buttons for one list of requests. */
+function BulkBar({
+  list,
+  selected,
+  setSelected,
+  busy,
+  onAct,
+}: {
+  list: any[];
+  selected: Set<string>;
+  setSelected: (fn: (prev: Set<string>) => Set<string>) => void;
+  busy: boolean;
+  onAct: (status: "ACCEPTED" | "REJECTED") => void;
+}) {
+  const ids = list.map((r) => r.id);
+  const count = ids.filter((id) => selected.has(id)).length;
+  const all = count === ids.length && ids.length > 0;
+  const toggleAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (all) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  return (
+    <div className={`flex flex-wrap items-center gap-3 px-4 py-2.5 rounded-2xl border text-xs ${count ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}>
+      <label className="inline-flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+        <input type="checkbox" checked={all} onChange={toggleAll} className="w-4 h-4 accent-emerald-600" />
+        Select all ({ids.length})
+      </label>
+      <span className="text-slate-500">{count ? `${count} selected` : "Tick requests to act on several at once"}</span>
+      <div className="ml-auto flex gap-1.5">
+        <Button small variant="success" disabled={!count || busy} onClick={() => onAct("ACCEPTED")}>
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Approve selected{count ? ` (${count})` : ""}
+        </Button>
+        <Button small variant="secondary" disabled={!count || busy} onClick={() => onAct("REJECTED")}>
+          <XCircle className="w-3.5 h-3.5" /> Reject selected
+        </Button>
+      </div>
     </div>
   );
 }

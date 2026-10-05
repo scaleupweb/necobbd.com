@@ -1756,6 +1756,8 @@ export const db = {
     let seat = r.seat;
     if (!seat || seatLayout(squad)[seat - 1]) seat = seatLayout(squad).indexOf(null) + 1; // seat got taken: next free one
     const now = Date.now();
+    // "Free Agent" only if a previous club contract ran out; otherwise they simply had no club.
+    const cameFrom = player.contract?.endDate && new Date(player.contract.endDate).getTime() < now ? "Free Agent" : "No club";
     player.clubId = club._id;
     player.squad = r.squad || "main";
     player.seat = seat;
@@ -1769,7 +1771,7 @@ export const db = {
     const hist = await TransferHistory.create({
       playerId: player._id,
       playerName: player.fullName,
-      previousClubName: "Free Agent",
+      previousClubName: cameFrom,
       newClubName: club.name,
       newClubId: club._id,
       fee: 0,
