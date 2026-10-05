@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog, Download } from "lucide-react";
+import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog, Download, Phone, Smartphone, Facebook } from "lucide-react";
 import { DEVICE_MODELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
@@ -80,9 +80,29 @@ export function SquadRoster() {
             <img src={p.avatar} alt="" className="w-10 h-10 rounded-full object-cover bg-slate-100" />
             <div className="min-w-0 flex-1">
               <Link href={`/players/${p.username}`} className="text-sm font-bold text-slate-950 hover:underline truncate block">{p.fullName}</Link>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 min-w-0">
-                <span className="font-mono truncate">UID {p.konamiId || "—"}</span>
-                {p.konamiId && <CopyButton value={p.konamiId} label="UID copied" className="!w-5 !h-5 !border-0 !bg-transparent" />}
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 min-w-0">
+                <span className="inline-flex items-center gap-1 min-w-0">
+                  <span className="font-mono truncate">UID {p.konamiId || "—"}</span>
+                  {p.konamiId && <CopyButton value={p.konamiId} label="UID copied" className="!w-5 !h-5 !border-0 !bg-transparent" />}
+                </span>
+                {p.phone && (
+                  <span className="inline-flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-slate-400" />
+                    <a href={`tel:${p.phone}`} className="font-mono font-semibold text-slate-700 hover:underline">{p.phone}</a>
+                    <CopyButton value={p.phone} label="Phone copied" className="!w-5 !h-5 !border-0 !bg-transparent" />
+                  </span>
+                )}
+                {p.deviceModel && (
+                  <span className="inline-flex items-center gap-1 min-w-0">
+                    <Smartphone className="w-3 h-3 text-slate-400" />
+                    <span className="font-semibold text-slate-700 truncate">{p.deviceModel}</span>
+                  </span>
+                )}
+                {p.facebookProfile && (
+                  <a href={p.facebookProfile} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 font-bold text-blue-600 hover:underline">
+                    <Facebook className="w-3 h-3" /> Facebook
+                  </a>
+                )}
               </div>
             </div>
             <span className="hidden sm:inline px-2 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-black">{p.preferredPosition}</span>

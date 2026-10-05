@@ -25,7 +25,8 @@ export const GET = handle(async () => {
   return ok({
     ...club,
     staff: undefined,
-    squad: club.squad.map(({ phone, ...p }: any) => p),
+    // Phone numbers only for the main manager and full-control staff.
+    squad: club.squad.map(({ phone, ...p }: any) => (isManager ? { ...p, phone } : p)),
     access,
     permissions,
     siteName: settings.brand.siteName,
