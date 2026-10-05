@@ -18,13 +18,14 @@ export async function sendMail(to: string, subject: string, text: string, html?:
   const t = transport();
   if (!t) {
     // No SMTP configured: log so the admin can still complete the flow in development.
-    console.warn(`[mail] SMTP not configured. Email to ${to} — ${subject}\n${text}`);
+    console.error(`[mail] SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASSWORD). Email to ${to} — "${subject}" was NOT sent.`);
     return false;
   }
-  await t.sendMail({ from: process.env.EMAIL_FROM || process.env.SMTP_USER, to, subject, text, html });
+  await t.sendMail({ from: process.env.EMAIL_FROM || process.env.SMTP_USER, replyTo: process.env.SMTP_USER, to, subject, text, html });
   return true;
 }
 
 export function appUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  // Netlify sets URL to the site's main address; used when NEXT_PUBLIC_APP_URL is missing.
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.URL || "http://localhost:3000").replace(/\/$/, "");
 }

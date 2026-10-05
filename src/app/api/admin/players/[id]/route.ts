@@ -1,11 +1,21 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/auth";
+import { requireRole, ADMIN_ONLY } from "@/lib/auth";
 import { PlayerAdminUpdateSchema } from "@/lib/validation";
 import { onlySent } from "@/lib/admin-resources";
-import { ok, handle, audit } from "@/lib/api";
+import { ok, fail, handle, audit } from "@/lib/api";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+/** Full player record plus the login account (email, role, last login) for the admin details view. */
+export const GET = handle(async (_req: NextRequest, { params }: Ctx) => {
+  const { id } = await params;
+  await requireRole(ADMIN_ONLY);
+  const player = await db.getPlayerById(id);
+  if (!player) return fail("Player not found", 404, "NOT_FOUND");
+  const accounts = await db.getAccountsByIds([player.userId]);
+  return ok({ ...player, account: accounts.get(String(player.userId)) || null });
+});
 
 export const PATCH = handle(async (req: NextRequest, { params }: Ctx) => {
   const { id } = await params;

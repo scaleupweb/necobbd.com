@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, BadgeCheck, Pencil, Loader2, ExternalLink, Tag } from "lucide-react";
+import { Search, BadgeCheck, Pencil, Loader2, ExternalLink, Tag, Eye, Mail } from "lucide-react";
+import { PlayerDetailsModal } from "@/components/admin/PlayerDetailsModal";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle } from "@/components/admin/ui";
 import { toast, promptDialog } from "@/lib/feedback";
 import { ImageInput } from "@/components/ui/ImageInput";
@@ -19,14 +20,15 @@ export default function AdminPlayersPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [editing, setEditing] = useState<any>(null);
   const [me, setMe] = useState<any>(null);
+  const [viewing, setViewing] = useState<any>(null);
 
   const load = useCallback(async () => {
     try {
       const [p, c] = await Promise.all([
-        fetch(`/api/players?search=${encodeURIComponent(search)}&status=ALL`, { cache: "no-store" }).then((r) => r.json()),
+        api<any[]>(`/api/admin/players?search=${encodeURIComponent(search)}`),
         api<any[]>("/api/clubs"),
       ]);
-      setPlayers(p.data || []);
+      setPlayers(p || []);
       setClubs(c);
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
@@ -81,7 +83,7 @@ export default function AdminPlayersPage() {
 
       <div className="relative max-w-sm">
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input className={`${inputCls} pl-9`} placeholder="Search name, username, Konami ID…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className={`${inputCls} pl-9`} placeholder={isAdmin ? "Search name, username, email, phone, Konami ID…" : "Search name, username, Konami ID…"} value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {msg && <Notice kind={msg.ok ? "ok" : "err"}>{msg.text}</Notice>}
@@ -119,6 +121,11 @@ export default function AdminPlayersPage() {
                             {p.fullName} {p.isVerified && <BadgeCheck className="w-3.5 h-3.5 text-sky-600" />}
                           </div>
                           <div className="text-slate-500">@{p.username} · {p.preferredPosition} · UID {p.konamiId || "—"}</div>
+                          {p.account?.email && (
+                            <div className="text-slate-400 flex items-center gap-1">
+                              <Mail className="w-3 h-3" /> {p.account.email}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -165,6 +172,11 @@ export default function AdminPlayersPage() {
                             <Tag className="w-3.5 h-3.5" />
                           </Button>
                         )}
+                        {isAdmin && (
+                          <Button small variant="secondary" onClick={() => setViewing(p)} title="All details & password">
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <Button small variant="secondary" onClick={() => setEditing(p)} title="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
@@ -181,6 +193,7 @@ export default function AdminPlayersPage() {
         </div>
       )}
 
+      {viewing && <PlayerDetailsModal player={viewing} onClose={() => setViewing(null)} />}
       {editing && <EditPlayerModal player={editing} isAdmin={isAdmin} onClose={() => setEditing(null)} onSaved={load} />}
     </div>
   );

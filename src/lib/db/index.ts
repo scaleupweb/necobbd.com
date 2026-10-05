@@ -408,7 +408,7 @@ export const db = {
   },
 
   // ----- Players -----
-  async getPlayers(filter: { position?: string; clubId?: string; search?: string; status?: string; limit?: number } = {}) {
+  async getPlayers(filter: { position?: string; clubId?: string; search?: string; status?: string; limit?: number; searchEmail?: boolean } = {}) {
     await connectDB();
     await db.releaseExpiredContracts().catch(() => 0);
     const q: any = {};
@@ -418,10 +418,39 @@ export const db = {
     if (filter.search) {
       const r = new RegExp(escapeRegex(filter.search), "i");
       q.$or = [{ fullName: r }, { username: r }, { konamiId: r }];
+      // Admin-only: also match the account email / phone.
+      if (filter.searchEmail) {
+        const users = await User.find({ email: r }).select("_id").limit(200).lean();
+        if (users.length) q.$or.push({ userId: { $in: users.map((u: any) => u._id) } });
+        q.$or.push({ phone: r });
+      }
     }
     const list = await Player.find(q).sort({ rating: -1 }).limit(filter.limit || 1000).lean();
     const clubs = await clubMap(list.map((p: any) => p.clubId));
     return list.map((p: any) => shapePlayer(p, clubs));
+  },
+
+  /** Account info (email, role, status, last login) keyed by user id, for admin screens. */
+  async getAccountsByIds(ids: any[]) {
+    await connectDB();
+    const list = await User.find({ _id: { $in: ids.filter((i) => i && isId(String(i))) } })
+      .select("email username role status lastLoginAt createdAt lockUntil")
+      .lean();
+    return new Map(
+      list.map((u: any) => [
+        String(u._id),
+        {
+          id: String(u._id),
+          email: u.email,
+          username: u.username,
+          role: u.role,
+          status: u.status,
+          lastLoginAt: u.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : undefined,
+          createdAt: u.createdAt ? new Date(u.createdAt).toISOString() : undefined,
+          locked: !!(u.lockUntil && new Date(u.lockUntil) > new Date()),
+        },
+      ])
+    );
   },
 
   async getPlayerByUsername(username: string) {
