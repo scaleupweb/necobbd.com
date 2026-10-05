@@ -30,14 +30,15 @@ export default async function HomePage() {
     <div className="w-full bg-[#F6F7F9] min-h-screen text-[#111111]">
       <Hero hero={settings.hero} stats={data?.stats || []} />
 
-      {data && s.partners.show && data.partners.length > 0 && (
-        <PartnersSection title={s.partners.title} subtitle={s.partners.subtitle} partners={data.partners} />
-      )}
-
       {/* The banner disappears on its own once the deadline has passed. */}
       {settings.countdown.enabled && settings.countdown.targetDate && new Date(settings.countdown.targetDate).getTime() > Date.now() && (
         <CountdownBanner countdown={settings.countdown} tournament={data?.countdownTournament || null} />
       )}
+
+      {data && s.partners.show && data.partners.length > 0 && (
+        <PartnersSection title={s.partners.title} subtitle={s.partners.subtitle} partners={data.partners} />
+      )}
+
 
       {!data && (
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Play, Square, Save, Loader2, Timer } from "lucide-react";
 import { api, Button, Field, inputCls, Notice, PageHeader, toLocalInput, fromLocalInput, Badge } from "@/components/admin/ui";
-import { DeadlineCountdown } from "@/components/ui/DeadlineCountdown";
+import { CountdownBanner } from "@/components/home/CountdownBanner";
 import type { SiteSettings } from "@/lib/site-settings";
 
 export default function CountdownAdminPage() {
@@ -134,15 +134,22 @@ export default function CountdownAdminPage() {
 
         <div className="lg:col-span-5 space-y-3">
           <div className="text-xs font-bold text-slate-500 uppercase">Preview</div>
-          <div className="rounded-2xl bg-[#0F1012] text-white p-5 space-y-3">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#C79A3B]/15 border border-[#C79A3B]/40 text-[#FBBF24] text-[10px] font-bold uppercase">
-              <Timer className="w-3.5 h-3.5" /> {c.label}
-            </div>
-            <div className="text-lg font-black">{c.title}</div>
-            <div className="text-xs text-zinc-400">{c.description}</div>
-            {target ? <DeadlineCountdown target={target} className="text-white text-2xl" /> : <div className="text-xs text-zinc-500">Pick an end time</div>}
-            {c.ctaLabel && <div className="inline-block px-4 py-2 rounded-xl bg-white text-black text-xs font-bold">{c.ctaLabel}</div>}
-          </div>
+          {target ? (
+            <CountdownBanner
+              preview
+              countdown={{ ...c, targetDate: target }}
+              tournament={(() => {
+                const t: any = tournaments.find((x: any) => x.id === c.tournamentId);
+                if (!t) return null;
+                // Count entries the same way the homepage does (removed entries don't count).
+                const list = (t.participantType === "CLUB" ? t.clubParticipants : t.participants) || [];
+                const count = list.filter((x: any) => x.status !== "REMOVED").length;
+                return { slug: t.slug, name: t.name, currentParticipants: count, maxParticipants: t.maxParticipants || 0 };
+              })()}
+            />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">Pick an end time to see the preview</div>
+          )}
         </div>
       </div>
     </div>

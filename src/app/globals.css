@@ -250,3 +250,86 @@
   letter-spacing: 0.04em;
   text-shadow: 0 0 8px rgba(255, 214, 120, 0.55);
 }
+
+/* Countdown banner: rotating gold border, dropping digits, blinking colons, shiny CTA. */
+@property --cd-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.cd-border {
+  background: conic-gradient(from var(--cd-angle), rgba(199, 154, 59, 0.15), #f7dc8b, rgba(199, 154, 59, 0.15) 40%, rgba(199, 154, 59, 0.15) 60%, #c79a3b, rgba(199, 154, 59, 0.15));
+  animation: cd-spin 6s linear infinite;
+  box-shadow: 0 30px 60px -30px rgba(199, 154, 59, 0.45);
+}
+@keyframes cd-spin {
+  to {
+    --cd-angle: 360deg;
+  }
+}
+.cd-drop {
+  animation: cd-drop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes cd-drop {
+  from {
+    transform: translateY(-35%);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+.cd-colon {
+  animation: cd-blink 1s steps(2, start) infinite;
+}
+@keyframes cd-blink {
+  to {
+    opacity: 0.25;
+  }
+}
+.cd-cta {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fff3c4, #e8b95a 55%, #c79a3b);
+  box-shadow: 0 10px 30px -8px rgba(232, 185, 90, 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cd-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 36px -8px rgba(232, 185, 90, 0.8);
+}
+.cd-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.6) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: cd-shine 3.2s ease-in-out infinite;
+}
+@keyframes cd-shine {
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+.cd-bar {
+  background-size: 200% 100%;
+  animation: cd-bar 2.5s linear infinite;
+}
+@keyframes cd-bar {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cd-border,
+  .cd-drop,
+  .cd-colon,
+  .cd-cta::after,
+  .cd-bar {
+    animation: none;
+  }
+}
