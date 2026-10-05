@@ -11,7 +11,7 @@ import { LocationInput } from "@/components/ui/LocationInput";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useClubHub } from "./ClubHubContext";
 import { ClubToolsMenu } from "./ClubToolsMenu";
-import { renderPlayerCard, downloadCanvas } from "./canvas";
+import { renderPlayerCard, renderSquadSheet, downloadCanvas } from "./canvas";
 import { SquadSeats, SquadCapacity } from "@/components/club/SquadSeats";
 import { SQUAD_LIMIT, isFrozen, contractDaysLeft, ratingText } from "@/lib/squad";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
@@ -71,7 +71,10 @@ export function SquadRoster() {
     <div className="space-y-4">
     <SquadSeats squad={squad} openHref="/dashboard/my-club/transfer-window" />
     <Card className="!p-0 overflow-hidden">
-      <div className="px-4 sm:px-6 py-3 border-b border-slate-100 text-xs font-bold text-slate-500">{squad.length} players</div>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-slate-100">
+        <span className="text-xs font-bold text-slate-500">{squad.length} players</span>
+        <SquadSheetButton club={club} squad={squad} />
+      </div>
       <div className="divide-y divide-slate-100">
         {squad.map((p: any) => (
           <div key={p.id} className="flex items-center gap-3 px-4 sm:px-6 py-3">
@@ -115,6 +118,46 @@ export function SquadRoster() {
         ))}
       </div>
     </Card>
+    </div>
+  );
+}
+
+/** Builds one image with every squad player's details, to share in the club group. */
+function SquadSheetButton({ club, squad }: { club: any; squad: any[] }) {
+  const [busy, setBusy] = useState(false);
+  const [withPhone, setWithPhone] = useState(false);
+  const hasPhones = squad.some((p) => p.phone);
+  const make = async () => {
+    setBusy(true);
+    try {
+      const canvas = document.createElement("canvas");
+      await renderSquadSheet(canvas, club, squad, { includePhone: withPhone, site: window.location.host, limit: SQUAD_LIMIT });
+      const day = new Date().toISOString().slice(0, 10);
+      await downloadCanvas(canvas, `${String(club.shortName || club.name || "club").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-squad-${day}.png`);
+      toast.success("Squad sheet downloaded");
+    } catch (e: any) {
+      toast.error(e.message || "Could not create the image");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-3">
+      {hasPhones && (
+        <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer select-none" title="Phone numbers are private — only add them if the group is private">
+          <input type="checkbox" checked={withPhone} onChange={(e) => setWithPhone(e.target.checked)} className="w-3.5 h-3.5 accent-[#C79A3B]" />
+          Include phone numbers
+        </label>
+      )}
+      <button
+        type="button"
+        onClick={make}
+        disabled={busy}
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0B0C0F] hover:bg-black text-white text-xs font-black disabled:opacity-60"
+      >
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-[#F7DC8B]" />}
+        {busy ? "Creating…" : "Download squad sheet"}
+      </button>
     </div>
   );
 }
