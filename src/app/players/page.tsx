@@ -6,7 +6,8 @@ import { Search, Users, Shield, UserX, BadgeCheck, Sparkles, ArrowUpRight, Smart
 import { PLAYER_POSITIONS } from "@/lib/constants";
 import { getFormColor } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { isFreeAgent, noClubLabel, ratingText } from "@/lib/squad";
+import { isFreeAgent, isFrozen, noClubLabel, ratingText } from "@/lib/squad";
+import { FreezeChip } from "@/components/ui/FreezeCountdown";
 
 const PAGE = 48;
 
@@ -243,6 +244,11 @@ function PlayerCard({ p }: { p: any }) {
         <span className="truncate">{p.fullName}</span>
         {p.isVerified && <BadgeCheck className="w-4 h-4 text-sky-500 shrink-0" aria-label="Verified" />}
       </Link>
+      {isFrozen(p.frozenUntil) && (
+        <div className="mt-1.5">
+          <FreezeChip until={p.frozenUntil} />
+        </div>
+      )}
       <div className="mt-0.5 flex items-center justify-center gap-1 min-w-0">
         <span className="text-[11px] text-slate-500 font-mono truncate">@{p.username}</span>
         <CopyButton value={p.username} label="Username copied" className="!w-5 !h-5 !border-0 !bg-transparent shrink-0" />

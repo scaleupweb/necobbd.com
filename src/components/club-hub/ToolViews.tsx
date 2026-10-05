@@ -13,9 +13,10 @@ import { useClubHub } from "./ClubHubContext";
 import { ClubToolsMenu } from "./ClubToolsMenu";
 import { renderPlayerCard, downloadCanvas } from "./canvas";
 import { SquadSeats, SquadCapacity } from "@/components/club/SquadSeats";
-import { SQUAD_LIMIT, isFrozen, freezeLeft, contractDaysLeft, ratingText } from "@/lib/squad";
+import { SQUAD_LIMIT, isFrozen, contractDaysLeft, ratingText } from "@/lib/squad";
 import { GROUPS, TOOLS, type ClubTool } from "./tools";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { FreezeChip } from "@/components/ui/FreezeCountdown";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
 
@@ -85,11 +86,7 @@ export function SquadRoster() {
               </div>
             </div>
             <span className="hidden sm:inline px-2 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-black">{p.preferredPosition}</span>
-            {isFrozen(p.frozenUntil) && (
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 text-[10px] font-black" title="Recently joined — no activity yet">
-                ❄ {freezeLeft(p.frozenUntil)}
-              </span>
-            )}
+            {isFrozen(p.frozenUntil) && <FreezeChip until={p.frozenUntil} label={false} className="hidden sm:inline-flex" />}
             <span className="hidden md:inline text-[11px] font-semibold text-emerald-700 w-28 text-right">
               {p.contract?.endDate ? `${contractDaysLeft(p.contract.endDate)}d contract left` : "under contract"}
             </span>

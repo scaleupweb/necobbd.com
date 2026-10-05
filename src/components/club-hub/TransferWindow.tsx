@@ -6,9 +6,10 @@ import Link from "next/link";
 import { Search, Lock, Unlock, X, Loader2, CheckCircle2, Clock, XCircle, Snowflake, FileSignature, Image as ImageIcon, Download, Share2, ExternalLink, UserPlus, LayoutGrid, Table2 } from "lucide-react";
 import { toast } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
-import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout, contractDaysLeft, isFrozen, freezeLeft, isFreeAgent } from "@/lib/squad";
+import { SQUADS, CONTRACT_DAYS, FREEZE_DAYS, seatLayout, contractDaysLeft, isFrozen, isFreeAgent } from "@/lib/squad";
 import { useClubHub } from "./ClubHubContext";
 import { loadImage, fitFont, drawCover, roundRect } from "./canvas";
+import { FreezeChip } from "@/components/ui/FreezeCountdown";
 
 const input = "w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-black focus:bg-white text-sm";
 const PAGE = 40;
@@ -275,7 +276,7 @@ function SignPlayer() {
                   <div className="w-full text-[11px] text-slate-500 font-mono truncate">{p.konamiId || `@${p.username}`}</div>
                   <div className="mt-2 max-w-full"><StatusPill p={p} /></div>
                   <div className="mt-3 w-full"><ContractBar p={p} /></div>
-                  {isFrozen(p.frozenUntil) && <div className="mt-1 text-[10px] font-black text-sky-700">❄ Frozen · {freezeLeft(p.frozenUntil)}</div>}
+                  {isFrozen(p.frozenUntil) && <div className="mt-1.5"><FreezeChip until={p.frozenUntil} /></div>}
                   <div className="mt-auto pt-3 w-full">
                     <ActionButton p={p} requested={pendingIds.has(String(p.id))} onPick={() => setPicked(p)} full />
                   </div>
@@ -314,7 +315,7 @@ function SignPlayer() {
                     <td className="px-4 py-3 max-w-[220px]"><StatusPill p={p} /></td>
                     <td className="px-4 py-3">
                       <ContractBar p={p} compact />
-                      {isFrozen(p.frozenUntil) && <div className="mt-1 text-[10px] font-black text-sky-700">❄ {freezeLeft(p.frozenUntil)}</div>}
+                      {isFrozen(p.frozenUntil) && <div className="mt-1"><FreezeChip until={p.frozenUntil} /></div>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <ActionButton p={p} requested={pendingIds.has(String(p.id))} onPick={() => setPicked(p)} />

@@ -38,8 +38,9 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { toMatchLines, snapshot, monthlyLoad, seasons, humanGap, aboutText, MatchLine } from "@/lib/player-insights";
 import { LineChart, BarChart, Gauge, Donut } from "@/components/profile/Charts";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { CONTRACT_DAYS, isFrozen, freezeLeft, isFreeAgent, isRated, noClubLabel } from "@/lib/squad";
+import { CONTRACT_DAYS, isFrozen, isFreeAgent, isRated, noClubLabel } from "@/lib/squad";
 import { FitImage } from "@/components/ui/FitImage";
+import { FreezeChip, FreezeCountdownCard } from "@/components/ui/FreezeCountdown";
 
 export const dynamic = "force-dynamic";
 
@@ -148,11 +149,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
                 <span className="px-2.5 py-1 rounded-full bg-slate-900 text-white text-[10px] font-black tracking-widest uppercase">{player.preferredPosition}</span>
                 {player.shirtNo ? <span className="px-2.5 py-1 rounded-full bg-[#C79A3B] text-black text-[10px] font-black">#{player.shirtNo}</span> : null}
                 {player.status !== "ACTIVE" && <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-[10px] font-black">{player.status.replace(/_/g, " ")}</span>}
-                {isFrozen(player.frozenUntil) && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-[10px] font-black" title="Recently joined a club">
-                    ❄ Frozen · {freezeLeft(player.frozenUntil)}
-                  </span>
-                )}
+                {isFrozen(player.frozenUntil) && <FreezeChip until={player.frozenUntil} className="!text-[11px] !px-2.5 !py-1" />}
                 {player.club && (
                   <Link href={`/clubs/${player.club.slug}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900 hover:bg-amber-100">
                     <Shield className="w-3 h-3" /> {player.club.name}
@@ -240,6 +237,9 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
               <IdRow icon={Calendar} label="Joined" value={formatDate(player.createdAt)} />
             </div>
           </div>
+
+          {/* Freeze countdown (first days after joining a club) */}
+          {isFrozen(player.frozenUntil) && <FreezeCountdownCard until={player.frozenUntil} clubName={player.club?.name} />}
 
           {/* Club card */}
           {player.club ? (

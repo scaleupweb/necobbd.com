@@ -29,7 +29,8 @@ import { Donut, Gauge } from "@/components/profile/Charts";
 import { FitImage } from "@/components/ui/FitImage";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { SquadCapacity } from "@/components/club/SquadSeats";
-import { SQUAD_LIMIT, ratingText } from "@/lib/squad";
+import { SQUAD_LIMIT, isFrozen, ratingText } from "@/lib/squad";
+import { FreezeChip } from "@/components/ui/FreezeCountdown";
 
 export const dynamic = "force-dynamic";
 
@@ -397,6 +398,11 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
                         <span className="truncate">{p.fullName}</span>
                         {p.isVerified && <BadgeCheck className="w-4 h-4 text-sky-500 shrink-0" aria-label="Verified" />}
                       </Link>
+                      {isFrozen(p.frozenUntil) && (
+                        <div className="mt-1.5">
+                          <FreezeChip until={p.frozenUntil} />
+                        </div>
+                      )}
 
                       {/* Username + copy */}
                       <div className="mt-0.5 flex items-center justify-center gap-1.5 min-w-0">
