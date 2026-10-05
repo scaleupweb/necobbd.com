@@ -2,21 +2,32 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Save, Loader2, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { Save, Loader2, ExternalLink, Eye, EyeOff, Palette, Image as ImageIcon, LayoutGrid, Megaphone, Bell, PanelBottom, FileText, Undo2, MonitorPlay } from "lucide-react";
+import { SitePreview } from "@/components/admin/SitePreview";
 import { api, Button, Field, inputCls, Notice, PageHeader, Toggle } from "@/components/admin/ui";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { MailTestButton } from "@/components/admin/MailTestButton";
 import type { SiteSettings } from "@/lib/site-settings";
 
 const TABS = [
-  ["brand", "Brand"],
-  ["hero", "Hero banner"],
-  ["sections", "Homepage sections"],
-  ["cta", "Call-to-action"],
-  ["announcement", "Announcement bar"],
-  ["footer", "Footer & socials"],
-  ["pages", "About & Rules"],
+  ["brand", "Brand", Palette],
+  ["hero", "Hero banner", ImageIcon],
+  ["sections", "Homepage sections", LayoutGrid],
+  ["cta", "Call-to-action", Megaphone],
+  ["announcement", "Announcement bar", Bell],
+  ["footer", "Footer & socials", PanelBottom],
+  ["pages", "About & Rules", FileText],
 ] as const;
+
+const TAB_HELP: Record<string, string> = {
+  brand: "Site name, logo and the text shown in the header, footer and browser tab.",
+  hero: "The big banner at the top of the homepage.",
+  sections: "Turn homepage sections on or off and rename their headings.",
+  cta: "The dark banner near the bottom of the homepage.",
+  announcement: "A thin message bar shown above the header on every page.",
+  footer: "Footer text, contact details and social links.",
+  pages: "Text for the About and Rules pages.",
+};
 
 type TabKey = (typeof TABS)[number][0];
 
@@ -38,10 +49,19 @@ export default function SiteContentPage() {
   const [tab, setTab] = useState<TabKey>("brand");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [base, setBase] = useState<string>("");
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
-    api<SiteSettings>("/api/admin/settings").then(setS).catch((e) => setMsg({ ok: false, text: e.message }));
+    api<SiteSettings>("/api/admin/settings")
+      .then((v) => {
+        setS(v);
+        setBase(JSON.stringify(v));
+      })
+      .catch((e) => setMsg({ ok: false, text: e.message }));
   }, []);
+
+  const dirty = !!s && JSON.stringify(s) !== base;
 
   // Update a nested value by dotted path, e.g. "hero.headingLine1".
   const set = (path: string, value: any) =>
@@ -62,6 +82,7 @@ export default function SiteContentPage() {
     try {
       const saved = await api<SiteSettings>("/api/admin/settings", { method: "PUT", json: s });
       setS(saved);
+      setBase(JSON.stringify(saved));
       setMsg({ ok: true, text: "Saved! Changes are live on the website." });
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
@@ -85,39 +106,68 @@ export default function SiteContentPage() {
     );
   };
 
+  const saveButton = (
+    <Button onClick={save} disabled={saving || !dirty}>
+      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {dirty ? "Save changes" : "Saved"}
+    </Button>
+  );
+  const active = TABS.find(([k]) => k === tab)!;
+  const ActiveIcon = active[2];
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-20">
       <PageHeader
         title="Homepage & Site Content"
-        subtitle="Edit every piece of text and imagery on the public site. Changes go live as soon as you save."
+        subtitle="Edit the text and images on the public site. The preview updates as you type; changes go live when you save."
         actions={
           <>
             <Link href="/" target="_blank" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:border-black">
               <ExternalLink className="w-3.5 h-3.5" /> View site
             </Link>
             <MailTestButton />
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save changes
-            </Button>
+            {saveButton}
           </>
         }
       />
 
       {msg && <Notice kind={msg.ok ? "ok" : "err"}>{msg.text}</Notice>}
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {TABS.map(([k, label]) => (
+      {/* Tabs */}
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar p-1 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        {TABS.map(([k, label, Icon]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap ${tab === k ? "bg-black text-white" : "bg-white border border-slate-200 text-slate-700 hover:border-black"}`}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+              tab === k ? "bg-[#0B0C0F] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+            }`}
           >
+            <Icon className={`w-3.5 h-3.5 ${tab === k ? "text-[#F7DC8B]" : ""}`} />
             {label}
           </button>
         ))}
       </div>
 
-      <div className="rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-sm">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,560px)] gap-5 items-start">
+      <div className="space-y-4 min-w-0">
+      <div className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-start gap-3 px-5 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50/60 to-transparent">
+          <span className="w-9 h-9 rounded-xl bg-[#0B0C0F] text-[#F7DC8B] flex items-center justify-center shrink-0">
+            <ActiveIcon className="w-4 h-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-black text-slate-950">{active[1]}</div>
+            <div className="text-[11px] text-slate-500">{TAB_HELP[tab]}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPreview((v) => !v)}
+            className="xl:hidden ml-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-700 shrink-0"
+          >
+            <MonitorPlay className="w-3.5 h-3.5" /> {showPreview ? "Hide preview" : "Preview"}
+          </button>
+        </div>
+        <div className="p-5 sm:p-6">
         {tab === "brand" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {text("brand.siteName", "Site name", { hint: "Used in the browser tab title and SEO" })}
@@ -125,7 +175,7 @@ export default function SiteContentPage() {
             {text("brand.logoLine1", "Logo text (line 1)", { placeholder: "NEXA" })}
             {text("brand.logoLine2", "Logo text (line 2)", { placeholder: "FOOTBALL" })}
             <div className="sm:col-span-2">
-              <ImageInput label="Logo image (optional — replaces the letter badge)" value={s.brand.logoUrl} onChange={(v) => set("brand.logoUrl", v)} />
+              <ImageInput label="Logo image (optional — replaces the letter badge)" value={s.brand.logoUrl} onChange={(v) => set("brand.logoUrl", v)} hint="Square image, at least 256 × 256 px · PNG with a transparent background looks best" />
             </div>
             {text("brand.description", "SEO description", { area: true })}
           </div>
@@ -144,7 +194,7 @@ export default function SiteContentPage() {
             {text("hero.ctaSecondaryLabel", "Secondary button label")}
             {text("hero.ctaSecondaryHref", "Secondary button link", { placeholder: "/tournaments" })}
             <div className="sm:col-span-2">
-              <ImageInput label="Hero background image" value={s.hero.image} onChange={(v) => set("hero.image", v)} aspect="wide" />
+              <ImageInput label="Hero image" value={s.hero.image} onChange={(v) => set("hero.image", v)} aspect="wide" hint="Wide image, about 1600 × 700 px · up to 3 MB" />
             </div>
             <div className="sm:col-span-2 pt-2 border-t border-slate-100 space-y-3">
               <Toggle checked={s.hero.showStats} onChange={(v) => set("hero.showStats", v)} label="Show live stats row under the hero" />
@@ -207,7 +257,7 @@ export default function SiteContentPage() {
             {text("cta.secondaryLabel", "Secondary button label")}
             {text("cta.secondaryHref", "Secondary button link")}
             <div className="sm:col-span-2">
-              <ImageInput label="Background image" value={s.cta.image} onChange={(v) => set("cta.image", v)} aspect="wide" />
+              <ImageInput label="Background image" value={s.cta.image} onChange={(v) => set("cta.image", v)} aspect="wide" hint="Wide image, about 1600 × 600 px · up to 3 MB" />
             </div>
           </div>
         )}
@@ -252,13 +302,44 @@ export default function SiteContentPage() {
             })}
           </div>
         )}
+        </div>
+      </div>
+      {showPreview && (
+        <div className="xl:hidden">
+          <SitePreview s={s} tab={tab} />
+        </div>
+      )}
       </div>
 
-      <div className="flex justify-end">
-        <Button onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save changes
-        </Button>
+      <div className="hidden xl:block xl:sticky xl:top-6">
+        <SitePreview s={s} tab={tab} />
       </div>
+      </div>
+
+      {/* Unsaved changes bar */}
+      {dirty && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-xl">
+          <div className="flex items-center gap-3 rounded-2xl bg-[#0B0C0F] text-white px-4 py-3 shadow-2xl ring-1 ring-white/10">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span className="text-xs font-bold flex-1 min-w-0">You have unsaved changes</span>
+            <button
+              type="button"
+              onClick={() => base && setS(JSON.parse(base))}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white/70 hover:text-white hover:bg-white/10"
+            >
+              <Undo2 className="w-3.5 h-3.5" /> Discard
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#F7DC8B] to-[#C79A3B] text-[#0B0C0F] text-xs font-black disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

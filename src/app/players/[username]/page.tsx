@@ -7,7 +7,6 @@ import {
   Calendar,
   Smartphone,
   ArrowLeft,
-  BadgeCheck,
   Swords,
   Award,
   Activity as ActivityIcon,
@@ -41,6 +40,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { CONTRACT_DAYS, isFrozen, isFreeAgent, isRated, noClubLabel } from "@/lib/squad";
 import { FitImage } from "@/components/ui/FitImage";
 import { FreezeChip, FreezeCountdownCard } from "@/components/ui/FreezeCountdown";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +138,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
             <div className="mt-4 text-center space-y-2.5">
               <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-950 inline-flex items-center justify-center gap-2">
                 {player.fullName}
-                {player.isVerified && <BadgeCheck className="w-6 h-6 sm:w-7 sm:h-7 text-sky-500 shrink-0" aria-label="Verified" />}
+                {player.isVerified && <VerifiedBadge className="w-6 h-6 sm:w-7 sm:h-7" />}
               </h1>
               <div className="flex items-center justify-center gap-2">
                 <span className="font-mono text-sm text-slate-500">@{player.username}</span>

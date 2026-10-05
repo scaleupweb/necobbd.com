@@ -26,6 +26,7 @@ import {
 import { api, Badge, Empty, Notice, statusTone } from "@/components/admin/ui";
 import { formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 import { SQUAD_LIMIT, CONTRACT_DAYS, contractDaysLeft } from "@/lib/squad";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 const TYPE_LABEL: Record<string, string> = { free: "joined", signing: "signed for", transfer: "moved to", released: "left", expired: "contract ended at" };
 
@@ -138,7 +139,7 @@ export default function AdminOverviewPage() {
             <Legend color="bg-amber-400" label="Free Agents" value={p.freeAgents} />
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-            <span className="inline-flex items-center gap-1"><BadgeCheck className="w-3.5 h-3.5 text-sky-500" /> {p.verified} verified</span>
+            <span className="inline-flex items-center gap-1"><VerifiedBadge className="w-4 h-4" /> {p.verified} verified</span>
             <span className="inline-flex items-center gap-1"><Snowflake className="w-3.5 h-3.5 text-sky-500" /> {p.frozen} frozen now</span>
           </div>
         </Link>

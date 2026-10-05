@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { BadgeCheck, Facebook, FileSignature, Smartphone, ArrowUpRight } from "lucide-react";
+import { Facebook, FileSignature, Smartphone, ArrowUpRight } from "lucide-react";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { FreezeChip } from "@/components/ui/FreezeCountdown";
 import { CONTRACT_DAYS, isFrozen, ratingText } from "@/lib/squad";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 const DAY = 86400000;
 const short = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
@@ -71,7 +72,7 @@ export function SquadCard({ p, captain = false }: { p: any; captain?: boolean })
         {/* Name */}
         <Link href={`/players/${p.username}`} className="mt-3 flex items-center justify-center gap-1 text-sm sm:text-base font-black text-slate-950 hover:underline min-w-0">
           <span className="truncate">{p.fullName}</span>
-          {p.isVerified && <BadgeCheck className="w-4 h-4 text-sky-500 shrink-0" aria-label="Verified" />}
+          {p.isVerified && <VerifiedBadge className="w-[18px] h-[18px]" />}
         </Link>
         <div className="mt-0.5 flex items-center justify-center gap-1 min-w-0">
           <span className="text-[11px] text-slate-500 font-mono truncate">@{p.username}</span>

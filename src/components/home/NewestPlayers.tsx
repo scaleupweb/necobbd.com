@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { UserPlus, BadgeCheck, Sparkles, Shield } from "lucide-react";
+import { UserPlus, Sparkles, Shield } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { formatRelativeTime } from "@/lib/utils";
 import type { HomepageData } from "@/lib/homepage";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 type P = HomepageData["newestPlayers"][number];
 
@@ -73,7 +74,7 @@ function Card({ p, band, hidden }: { p: P; band: string; hidden: boolean }) {
 
         <div className="mt-2.5 flex items-center justify-center gap-1 min-w-0">
           <span className="text-sm font-black text-slate-950 truncate group-hover:underline">{p.name}</span>
-          {p.verified && <BadgeCheck className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+          {p.verified && <VerifiedBadge className="w-4 h-4" />}
         </div>
 
         <div className="mt-1.5 flex items-center justify-center gap-1.5 min-w-0">

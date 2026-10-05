@@ -9,6 +9,7 @@ import { toast, promptDialog } from "@/lib/feedback";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { formatCurrency } from "@/lib/utils";
 import { PLAYER_POSITIONS } from "@/lib/constants";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 const STATUSES = ["ACTIVE", "PENDING_VERIFICATION", "SUSPENDED", "BANNED", "INACTIVE"];
 
@@ -118,7 +119,7 @@ export default function AdminPlayersPage() {
                         <img src={p.avatar} alt="" className="w-9 h-9 rounded-lg object-cover" />
                         <div>
                           <div className="font-bold text-slate-950 flex items-center gap-1">
-                            {p.fullName} {p.isVerified && <BadgeCheck className="w-3.5 h-3.5 text-sky-600" />}
+                            {p.fullName} {p.isVerified && <VerifiedBadge className="w-4 h-4" />}
                           </div>
                           <div className="text-slate-500">@{p.username} · {p.preferredPosition} · UID {p.konamiId || "—"}</div>
                           {p.account?.email && (

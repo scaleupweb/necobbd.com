@@ -8,6 +8,7 @@ import { getFormColor } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { isFreeAgent, isFrozen, noClubLabel, ratingText } from "@/lib/squad";
 import { FreezeChip } from "@/components/ui/FreezeCountdown";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 
 const PAGE = 48;
 
@@ -242,7 +243,7 @@ function PlayerCard({ p }: { p: any }) {
       {/* Identity */}
       <Link href={`/players/${p.username}`} className="mt-4 flex items-center justify-center gap-1 min-w-0 text-sm sm:text-base font-black text-slate-950 hover:underline">
         <span className="truncate">{p.fullName}</span>
-        {p.isVerified && <BadgeCheck className="w-4 h-4 text-sky-500 shrink-0" aria-label="Verified" />}
+        {p.isVerified && <VerifiedBadge className="w-[18px] h-[18px]" />}
       </Link>
       {isFrozen(p.frozenUntil) && (
         <div className="mt-1.5">
