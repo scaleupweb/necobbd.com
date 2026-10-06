@@ -167,7 +167,7 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
       const res = await fetch(`/api/tournaments/${slug}/join`, { method: "POST" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message);
-      toast.success(`${managedClub?.name || "Your club"} is registered!`);
+      toast.success("Registration sent — waiting for admin approval");
       reload();
     } catch (e: any) {
       toast.error(e.message || "Could not register the club");

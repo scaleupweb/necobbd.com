@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Crown, Download, Swords, UserMinus, UserPlus, ExternalLink } from "lucide-react";
+import { Users, Crown, Download, Swords, UserMinus, UserPlus, ExternalLink, Check, X } from "lucide-react";
 import { ResourceManager, FieldDef } from "@/components/admin/ResourceManager";
 import { api, Badge, Button, Empty, Modal, Notice, statusTone } from "@/components/admin/ui";
 import { toast, confirmDialog } from "@/lib/feedback";
@@ -118,11 +118,12 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
   }, [tournament.id]);
 
   const isClub = tournament.participantType === "CLUB";
-  const act = async (id: string, action: "REMOVE" | "RESTORE") => {
+  const act = async (id: string, action: "REMOVE" | "RESTORE" | "APPROVE" | "REJECT") => {
     if (action === "REMOVE" && !(await confirmDialog({ title: `Remove this ${isClub ? "club" : "player"} from the tournament?`, text: "You can restore them later.", confirmText: "Remove", danger: true }))) return;
+    if (action === "REJECT" && !(await confirmDialog({ title: "Reject this club's registration?", text: "The club manager will be notified.", confirmText: "Reject", danger: true }))) return;
     try {
       setList(await api(`/api/admin/tournaments/${tournament.id}/participants`, { method: "PATCH", json: { ...(isClub ? { clubId: id } : { userId: id }), action } }));
-      toast.success(action === "REMOVE" ? "Removed from tournament" : "Restored");
+      toast.success({ REMOVE: "Removed from tournament", RESTORE: "Restored", APPROVE: "Registration approved", REJECT: "Registration rejected" }[action]);
       onChanged();
     } catch (e: any) {
       toast.error(e.message);
@@ -160,6 +161,7 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
   };
 
   const active = (list || []).filter((p) => p.status !== "REMOVED");
+  const pendingCount = active.filter((p) => p.status === "PENDING").length;
 
   return (
     <Modal open onClose={onClose} title={`${tournament.name} — participants`} wide>
@@ -168,6 +170,7 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
         <div className="flex items-center justify-between">
           <div className="text-xs text-slate-600">
             <strong>{active.length}</strong> / {tournament.maxParticipants} registered
+            {pendingCount > 0 && <span className="ml-2 font-bold text-amber-700">· {pendingCount} waiting for approval</span>}
           </div>
           <Button small variant="secondary" onClick={exportCsv} disabled={!list?.length}>
             <Download className="w-3.5 h-3.5" /> Export CSV
@@ -191,8 +194,17 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
                     {isClub ? `${p.username} · ${p.managerName || "no manager"} · ${p.email || "—"}` : `@${p.username} · ${p.email} · UID ${p.konamiId || "—"}`}
                   </div>
                 </div>
-                <Badge tone={statusTone(p.status === "REMOVED" ? "REVOKED" : "ACTIVE")}>{p.status}</Badge>
-                {p.status === "REMOVED" ? (
+                <Badge tone={statusTone(p.status === "REMOVED" ? "REVOKED" : p.status === "PENDING" ? "PENDING" : "ACTIVE")}>{p.status === "CONFIRMED" && isClub ? "APPROVED" : p.status}</Badge>
+                {p.status === "PENDING" ? (
+                  <>
+                    <Button small variant="success" onClick={() => act(p.clubId, "APPROVE")} title="Approve">
+                      <Check className="w-3.5 h-3.5" /> Approve
+                    </Button>
+                    <Button small variant="ghost" onClick={() => act(p.clubId, "REJECT")} title="Reject">
+                      <X className="w-3.5 h-3.5 text-rose-600" />
+                    </Button>
+                  </>
+                ) : p.status === "REMOVED" ? (
                   <Button small variant="secondary" onClick={() => act(isClub ? p.clubId : p.userId, "RESTORE")} title="Restore">
                     <UserPlus className="w-3.5 h-3.5" />
                   </Button>

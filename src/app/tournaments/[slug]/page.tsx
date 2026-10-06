@@ -114,6 +114,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
               endpoint={`/api/tournaments/${t.slug}/join`}
               memberIds={t.participantUserIds}
               memberClubIds={t.participantClubIds}
+              pendingClubIds={t.pendingClubIds}
               clubOnly
               isOpen={t.isRegistrationOpen}
               joinLabel="Register club"

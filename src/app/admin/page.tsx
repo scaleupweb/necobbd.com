@@ -22,11 +22,14 @@ import {
   Newspaper,
   Palette,
   Loader2,
+  Check,
+  X,
 } from "lucide-react";
 import { api, Badge, Empty, Notice, statusTone } from "@/components/admin/ui";
 import { formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 import { SQUAD_LIMIT, CONTRACT_DAYS, contractDaysLeft } from "@/lib/squad";
 import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
+import { toast, confirmDialog } from "@/lib/feedback";
 
 const TYPE_LABEL: Record<string, string> = { free: "joined", signing: "signed for", transfer: "moved to", released: "left", expired: "contract ended at" };
 
@@ -34,8 +37,9 @@ export default function AdminOverviewPage() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
 
+  const load = () => api("/api/admin/overview").then(setData).catch((e) => setError(e.message));
   useEffect(() => {
-    api("/api/admin/overview").then(setData).catch((e) => setError(e.message));
+    load();
   }, []);
 
   if (error) return <Notice kind="err">{error}</Notice>;
@@ -46,13 +50,14 @@ export default function AdminOverviewPage() {
       </div>
     );
 
-  const { insights: ins, stats, liveFixtures, pendingFixtures, pendingResults, countdown, auditLogs, recentUsers, isAdmin } = data;
+  const { insights: ins, stats, liveFixtures, pendingFixtures, pendingResults, pendingClubEntries = [], countdown, auditLogs, recentUsers, isAdmin } = data;
   const p = ins.players;
   const cdActive = countdown.enabled && countdown.targetDate && new Date(countdown.targetDate).getTime() > Date.now();
 
   const attention = [
     { label: "Transfer requests", value: ins.transfers.pendingSigning + ins.transfers.pendingOffers, hint: "Signings & offers waiting", href: "/admin/transfers", icon: ArrowRightLeft, tone: "amber" },
     { label: "Club approvals", value: ins.clubs.pending.length, hint: "New clubs to review", href: "/admin/clubs", icon: Shield, tone: "sky" },
+    { label: "Tournament entries", value: pendingClubEntries.length, hint: "Club registrations to approve", href: "/admin/tournaments", icon: Trophy, tone: "amber" },
     { label: "Match results", value: pendingResults.length, hint: "Reported scores to confirm", href: "/admin/fixtures", icon: ClipboardCheck, tone: "violet" },
     { label: "Contracts ending", value: ins.contractsEnding.length, hint: "End within 30 days", href: "/transfer-market", icon: Hourglass, tone: "rose" },
     { label: "Player verification", value: p.pendingVerification, hint: "Accounts waiting to be verified", href: "/admin/players", icon: BadgeCheck, tone: "emerald" },
@@ -97,7 +102,7 @@ export default function AdminOverviewPage() {
       {/* ================= Needs attention ================= */}
       <section>
         <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Needs attention</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
           {attention.map((a) => {
             const hot = a.value > 0;
             return (
@@ -233,6 +238,14 @@ export default function AdminOverviewPage() {
             ))
           ) : (
             <Empty>No clubs waiting for approval.</Empty>
+          )}
+        </Panel>
+
+        <Panel title="Tournament registrations waiting for approval" href="/admin/tournaments" link="Open tournaments">
+          {pendingClubEntries.length ? (
+            pendingClubEntries.map((e: any) => <PendingEntryRow key={`${e.tournamentId}-${e.clubId}`} entry={e} onDone={load} />)
+          ) : (
+            <Empty>No tournament registrations waiting.</Empty>
           )}
         </Panel>
 
@@ -446,6 +459,40 @@ function FixtureLine({ f }: { f: any }) {
       ) : (
         <Badge tone={statusTone(f.status)}>{f.status}</Badge>
       )}
+    </div>
+  );
+}
+
+function PendingEntryRow({ entry: e, onDone }: { entry: any; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const act = async (action: "APPROVE" | "REJECT") => {
+    if (action === "REJECT" && !(await confirmDialog({ title: `Reject ${e.club?.name || "this club"}?`, text: `Its registration for ${e.tournament} will be rejected and the manager notified.`, confirmText: "Reject", danger: true }))) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/tournaments/${e.tournamentId}/participants`, { method: "PATCH", json: { clubId: e.clubId, action } });
+      toast.success(action === "APPROVE" ? `${e.club?.name || "Club"} approved for ${e.tournament}` : "Registration rejected");
+      onDone();
+    } catch (err: any) {
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-3 py-2.5 text-xs">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={e.club?.logo} alt="" className="w-9 h-9 rounded-lg object-cover bg-slate-100" />
+      <div className="min-w-0 flex-1">
+        <div className="font-bold text-slate-950 truncate">{e.club?.name || "Unknown club"}</div>
+        <div className="text-slate-500 truncate">
+          <Link href={`/tournaments/${e.tournamentSlug}`} target="_blank" className="hover:underline">{e.tournament}</Link> · {formatRelativeTime(e.joinedAt)}
+        </div>
+      </div>
+      <button onClick={() => act("APPROVE")} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50">
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Approve
+      </button>
+      <button onClick={() => act("REJECT")} disabled={busy} title="Reject" className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }

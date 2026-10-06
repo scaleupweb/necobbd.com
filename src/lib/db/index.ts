@@ -282,6 +282,7 @@ function shapeTournament(t: any, prog?: { total: number; completed: number }) {
     currentParticipants: count,
     participantUserIds: participants.map((p: any) => String(p.userId)),
     participantClubIds: clubEntries.map((c: any) => String(c.clubId)),
+    pendingClubIds: clubEntries.filter((c: any) => c.status === "PENDING").map((c: any) => String(c.clubId)),
     completedMatches: completed,
     totalMatches: total,
     progressPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
@@ -1016,7 +1017,8 @@ export const db = {
         return pl ? { ...shapePlayer(pl, playerClubs), joinedAt: new Date(p.joinedAt).toISOString(), entryStatus: p.status } : null;
       })
       .filter(Boolean);
-    const clubEntries = (t.clubParticipants || []).filter((c: any) => c.status !== "REMOVED");
+    // The public club list shows approved entries only.
+    const clubEntries = (t.clubParticipants || []).filter((c: any) => c.status !== "REMOVED" && c.status !== "PENDING");
     let clubs: any[] = [];
     if (clubEntries.length) {
       const ids = clubEntries.map((c: any) => c.clubId);
@@ -1138,20 +1140,13 @@ export const db = {
     if (existing) throw new ServiceError("Your club is already registered", 409);
     const active = entries.filter((c) => c.status !== "REMOVED").length;
     if (active >= t.maxParticipants) throw new ServiceError("Tournament is full", 409);
+    // Entries wait for an admin: PENDING holds the spot, approval makes it CONFIRMED.
     const res = await Tournament.updateOne(
       { _id: t._id, "clubParticipants.clubId": { $ne: club._id } },
-      { $push: { clubParticipants: { clubId: club._id, registeredBy: userId, joinedAt: new Date(), status: "CONFIRMED", paymentType: "free" } } }
+      { $push: { clubParticipants: { clubId: club._id, registeredBy: userId, joinedAt: new Date(), status: "PENDING", paymentType: "free" } } }
     );
     if (!res.modifiedCount) throw new ServiceError("Could not register the club", 409);
-    await db.addActivityEvent({
-      type: "TOURNAMENT_JOIN",
-      category: "Tournaments",
-      title: `${club.name} entered ${t.name}`,
-      avatar: club.logo,
-      targetUrl: `/tournaments/${t.slug}`,
-      userId,
-    });
-    await db.notify(userId, "Club registered", `${club.name} is registered for ${t.name}.`, `/tournaments/${t.slug}`);
+    await db.notify(userId, "Registration submitted", `${club.name}'s registration for ${t.name} is waiting for admin approval.`, "/dashboard/my-club");
     return db.getTournamentBySlug(t.slug, { includeDrafts: true });
   },
 
@@ -1352,9 +1347,57 @@ export const db = {
   async setClubEntryStatus(tournamentId: string, clubId: string, status: "CONFIRMED" | "REMOVED") {
     if (!isId(tournamentId) || !isId(clubId)) throw new ServiceError("Invalid id", 400);
     await connectDB();
-    const r = await Tournament.updateOne({ _id: tournamentId, "clubParticipants.clubId": oid(clubId) }, { $set: { "clubParticipants.$.status": status } });
-    if (!r.matchedCount) throw new ServiceError("Club entry not found", 404);
+    // Returns the document as it was, so we know what the entry changed from.
+    const t = await Tournament.findOneAndUpdate(
+      { _id: tournamentId, "clubParticipants.clubId": oid(clubId) },
+      { $set: { "clubParticipants.$.status": status } },
+      { projection: { name: 1, slug: 1, clubParticipants: { $elemMatch: { clubId: oid(clubId) } } } }
+    ).lean<any>();
+    if (!t) throw new ServiceError("Club entry not found", 404);
+    const before = t.clubParticipants?.[0]?.status || "CONFIRMED";
+    if (before === status) return true;
+
+    const club = await Club.findById(clubId, { name: 1, logo: 1, managerId: 1 }).lean<any>();
+    if (!club) return true;
+    const notifyClub = (title: string, message: string) => (club.managerId ? db.notify(String(club.managerId), title, message, `/tournaments/${t.slug}`) : undefined);
+    if (status === "CONFIRMED") {
+      await db.addActivityEvent({
+        type: "TOURNAMENT_JOIN",
+        category: "Tournaments",
+        title: `${club.name} entered ${t.name}`,
+        avatar: club.logo,
+        targetUrl: `/tournaments/${t.slug}`,
+      });
+      await notifyClub("Tournament registration approved", `${club.name} is approved for ${t.name}.`);
+    } else if (before === "PENDING") {
+      await notifyClub("Tournament registration rejected", `${club.name}'s registration for ${t.name} was not approved. Contact an admin for details.`);
+    } else {
+      await notifyClub("Removed from tournament", `An admin removed ${club.name} from ${t.name}.`);
+    }
     return true;
+  },
+
+  /** Club tournament entries still waiting for an admin, oldest first. */
+  async getPendingClubEntries() {
+    await connectDB();
+    const list = await Tournament.find({ clubParticipants: { $elemMatch: { status: "PENDING" } } }, { name: 1, slug: 1, clubParticipants: 1 }).lean<any>();
+    const entries = list.flatMap((t: any) =>
+      (t.clubParticipants || []).filter((c: any) => c.status === "PENDING").map((c: any) => ({ t, c }))
+    );
+    const clubs = await clubMap(entries.map((e: any) => e.c.clubId));
+    return entries
+      .map(({ t, c }: any) => {
+        const club: any = clubs.get(String(c.clubId));
+        return {
+          tournamentId: String(t._id),
+          tournament: t.name,
+          tournamentSlug: t.slug,
+          clubId: String(c.clubId),
+          club: club ? clubMini(club) : null,
+          joinedAt: new Date(c.joinedAt).toISOString(),
+        };
+      })
+      .sort((a: any, b: any) => +new Date(a.joinedAt) - +new Date(b.joinedAt));
   },
 
   async removeTournamentParticipant(tournamentId: string, userId: string) {
@@ -1434,7 +1477,7 @@ export const db = {
     await connectDB();
     const player = await Player.findOne({ userId }, { clubId: 1 }).lean<any>();
     const or: any[] = [{ participants: { $elemMatch: { userId: oid(userId), status: { $ne: "REMOVED" } } } }];
-    if (player?.clubId) or.push({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: player.clubId, status: { $ne: "REMOVED" } } } });
+    if (player?.clubId) or.push({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: player.clubId, status: { $nin: ["REMOVED", "PENDING"] } } } });
     const list = await Tournament.find({ $or: or }).sort({ startDate: -1 }).lean();
     const prog = await tournamentProgress(list.map((t: any) => String(t._id)));
     return list.map((t: any) => {
@@ -1948,7 +1991,7 @@ export const db = {
       club.managerId ? User.findById(club.managerId, { fullName: 1, username: 1, avatar: 1 }).lean<any>() : null,
       Player.find({ userId: { $in: (club.staff || []).map((s: any) => s.userId) } }, { fullName: 1, username: 1, avatar: 1, userId: 1 }).lean(),
       TransferHistory.find({ $or: [{ newClubId: club._id }, { oldClubId: club._id }] }).sort({ transferDate: -1 }).limit(60).lean(),
-      Tournament.find({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: club._id, status: { $ne: "REMOVED" } } } }, { name: 1, slug: 1, logo: 1, status: 1, winnerClubId: 1, clubParticipants: 1 }).lean(),
+      Tournament.find({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: club._id, status: { $nin: ["REMOVED", "PENDING"] } } } }, { name: 1, slug: 1, logo: 1, status: 1, winnerClubId: 1, clubParticipants: 1 }).lean(),
       Club.countDocuments({ status: "ACTIVE", "stats.matches": { $gt: 0 }, points: { $gt: club.points || 0 } }),
       Club.countDocuments({ status: "ACTIVE", "stats.matches": { $gt: 0 } }),
     ]);

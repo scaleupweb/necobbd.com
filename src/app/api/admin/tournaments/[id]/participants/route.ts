@@ -13,14 +13,15 @@ export const GET = handle(async (_req: NextRequest, { params }: Ctx) => {
   return ok(await db.getTournamentParticipantsAdmin(id));
 });
 
-/** body: { userId, action: "REMOVE" | "RESTORE" } */
+/** body: { userId, action: "REMOVE" | "RESTORE" } or { clubId, action: "APPROVE" | "REJECT" | "REMOVE" | "RESTORE" } */
 export const PATCH = handle(async (req: NextRequest, { params }: Ctx) => {
   const { id } = await params;
   const session = await requireRole(TOURNAMENT_STAFF);
   const { userId, clubId, action } = await req.json();
   if (clubId) {
-    if (!isId(clubId) || (action !== "REMOVE" && action !== "RESTORE")) return fail("Invalid request");
-    await db.setClubEntryStatus(id, clubId, action === "REMOVE" ? "REMOVED" : "CONFIRMED");
+    // APPROVE/RESTORE confirm the entry; REJECT/REMOVE take it out.
+    if (!isId(clubId) || !["APPROVE", "REJECT", "REMOVE", "RESTORE"].includes(action)) return fail("Invalid request");
+    await db.setClubEntryStatus(id, clubId, action === "REMOVE" || action === "REJECT" ? "REMOVED" : "CONFIRMED");
     await audit(req, session, `CLUB_ENTRY_${action}`, `Tournament ${id}`, `club ${clubId}`);
     return ok(await db.getTournamentParticipantsAdmin(id));
   }

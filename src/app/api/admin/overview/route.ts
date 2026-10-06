@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const GET = handle(async () => {
   const session = await requireRole(STAFF_ROLES);
   const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
-  const [insights, stats, auditLogs, upcoming, liveFixtures, pendingResults, settings, recentUsers] = await Promise.all([
+  const [insights, stats, auditLogs, upcoming, liveFixtures, pendingResults, settings, recentUsers, pendingClubEntries] = await Promise.all([
     db.getAdminInsights(),
     db.getPlatformStats(),
     isAdmin ? db.getAuditLogs(8) : [],
@@ -16,6 +16,7 @@ export const GET = handle(async () => {
     db.getPendingResultClaims(),
     db.getSiteSettings(),
     isAdmin ? db.listUsers({}) : [],
+    db.getPendingClubEntries(),
   ]);
   return ok({
     insights,
@@ -25,6 +26,7 @@ export const GET = handle(async () => {
     pendingFixtures: upcoming.sort((a: any, b: any) => +new Date(a.scheduledDate) - +new Date(b.scheduledDate)).slice(0, 8),
     liveFixtures,
     pendingResults,
+    pendingClubEntries,
     countdown: settings.countdown,
     recentUsers: recentUsers.slice(0, 6),
   });

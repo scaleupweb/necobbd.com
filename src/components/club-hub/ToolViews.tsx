@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, CalendarDays, Crown, UserCog, Download, Phone, Smartphone, Facebook } from "lucide-react";
+import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, Clock, CalendarDays, Crown, UserCog, Download, Phone, Smartphone, Facebook } from "lucide-react";
 import { DEVICE_MODELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
@@ -923,7 +923,7 @@ export function TournamentRegistration() {
       const res = await fetch(`/api/tournaments/${t.slug}/join`, { method: entered ? "DELETE" : "POST" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message || "Request failed");
-      toast.success(entered ? "Registration withdrawn" : `${club.name} is registered!`);
+      toast.success(entered ? "Registration withdrawn" : `Registration sent — waiting for admin approval`);
       await load();
     } catch (e: any) {
       toast.error(e.message);
@@ -940,6 +940,7 @@ export function TournamentRegistration() {
       {!list.length && <Card className="text-center text-sm text-slate-500 py-12">No tournaments are open for registration right now.</Card>}
       {list.map((t) => {
         const entered = (t.participantClubIds || []).includes(club.id);
+        const pending = (t.pendingClubIds || []).includes(club.id);
         return (
           <div key={t.id} className="rounded-2xl bg-white border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -956,9 +957,15 @@ export function TournamentRegistration() {
             </div>
             {entered ? (
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Registered
-                </span>
+                {pending ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold" title="An admin will review your registration">
+                    <Clock className="w-3.5 h-3.5" /> Pending approval
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Approved
+                  </span>
+                )}
                 {isMain && t.status === "REGISTRATION_OPEN" && (
                   <button onClick={() => act(t, true)} disabled={busy === t.id} className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
                     Withdraw

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Loader2, CheckCircle2, ShieldAlert, Clock } from "lucide-react";
 import { toast, confirmDialog } from "@/lib/feedback";
 
 /**
@@ -15,6 +15,7 @@ export function JoinButton({
   endpoint,
   memberIds,
   memberClubIds = [],
+  pendingClubIds = [],
   clubOnly = false,
   isOpen,
   joinLabel = "Join Now",
@@ -27,6 +28,8 @@ export function JoinButton({
   memberIds: string[];
   /** For club tournaments: clubs already entered. */
   memberClubIds?: string[];
+  /** For club tournaments: entered clubs still waiting for admin approval. */
+  pendingClubIds?: string[];
   clubOnly?: boolean;
   isOpen: boolean;
   joinLabel?: string;
@@ -38,6 +41,7 @@ export function JoinButton({
   const router = useRouter();
   const [me, setMe] = useState<any>(undefined);
   const [joined, setJoined] = useState(false);
+  const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -50,11 +54,12 @@ export function JoinButton({
         if (clubOnly) {
           const clubId = u.managedClub?.id || u.clubId;
           setJoined(!!clubId && memberClubIds.includes(clubId));
+          setPending(!!clubId && pendingClubIds.includes(clubId));
         } else setJoined(memberIds.includes(u.id));
       })
       .catch(() => setMe(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberIds.join(","), memberClubIds.join(","), clubOnly]);
+  }, [memberIds.join(","), memberClubIds.join(","), pendingClubIds.join(","), clubOnly]);
 
   const isManager = !!me?.managedClub;
   const ownClubEntered = clubOnly && isManager && memberClubIds.includes(me.managedClub.id);
@@ -79,7 +84,8 @@ export function JoinButton({
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message || "Request failed");
       setJoined(method === "POST");
-      toast.success(method === "POST" ? (clubOnly ? `${me.managedClub?.name || "Your club"} is registered!` : "You're registered!") : "Registration withdrawn");
+      setPending(clubOnly && method === "POST");
+      toast.success(method === "POST" ? (clubOnly ? "Registration sent — waiting for admin approval" : "You're registered!") : "Registration withdrawn");
       router.refresh();
     } catch (e: any) {
       toast.error(e.message);
@@ -93,9 +99,15 @@ export function JoinButton({
   if (joined) {
     return (
       <div className="space-y-2">
-        <div className={`${base} bg-emerald-50 text-emerald-800 border border-emerald-200`}>
-          <CheckCircle2 className="w-4 h-4" /> {clubOnly ? "Your club is registered" : "You're registered"}
-        </div>
+        {pending ? (
+          <div className={`${base} bg-amber-50 text-amber-900 border border-amber-200`}>
+            <Clock className="w-4 h-4" /> Registration pending admin approval
+          </div>
+        ) : (
+          <div className={`${base} bg-emerald-50 text-emerald-800 border border-emerald-200`}>
+            <CheckCircle2 className="w-4 h-4" /> {clubOnly ? "Your club is approved" : "You're registered"}
+          </div>
+        )}
         {allowLeave && isOpen && (!clubOnly || ownClubEntered) && (
           <button onClick={() => act("DELETE")} disabled={busy} className="w-full text-xs font-semibold text-rose-600 hover:underline disabled:opacity-50">
             {busy ? "Working…" : leaveLabel}
