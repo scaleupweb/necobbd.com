@@ -459,6 +459,12 @@ const MediaSchema = new Schema<any>(
   opts
 );
 
+// One player per seat in a club: a second player can never be saved into an occupied seat.
+PlayerSchema.index(
+  { clubId: 1, seat: 1 },
+  { unique: true, name: "club_seat_unique", partialFilterExpression: { clubId: { $type: "objectId" }, seat: { $type: "number" } } }
+);
+
 export const User: Model<any> = model("User", UserSchema);
 export const Player: Model<any> = model("Player", PlayerSchema);
 export const Club: Model<any> = model("Club", ClubSchema);

@@ -130,6 +130,37 @@ async function assertSquadSpace(clubId: any, playerId?: any) {
   if (n >= SQUAD_LIMIT) throw new ServiceError(`Main Team Squad is full (${n}/${SQUAD_LIMIT}). Release a player first.`, 409);
 }
 
+/**
+ * Saves the seat every player in a club is shown in. Older players have no stored
+ * seat and were placed on the fly, so they shifted whenever someone left — after this
+ * a seat stays with its player until they leave the club.
+ */
+async function lockSeats(clubId: any) {
+  if (!clubId || !isId(String(clubId))) return;
+  const squad = await Player.find({ clubId }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+  const ops = seatLayout(squad)
+    .map((p: any, i) => (p && p.seat !== i + 1 ? { updateOne: { filter: { _id: p._id }, update: { $set: { seat: i + 1 } } } } : null))
+    .filter(Boolean) as any[];
+  if (ops.length) await Player.bulkWrite(ops);
+}
+
+/** Open seats in a club: not held by a player and not reserved by a pending signing request. */
+async function freeSeats(clubId: any, opts: { ignoreRequestId?: any } = {}) {
+  await lockSeats(clubId);
+  const [squad, pending] = await Promise.all([
+    Player.find({ clubId, seat: { $gte: 1 } }, { seat: 1 }).lean<any>(),
+    TransferRequest.find({ targetClubId: clubId, type: "SIGNING", status: "PENDING", ...(opts.ignoreRequestId ? { _id: { $ne: opts.ignoreRequestId } } : {}) }, { seat: 1 }).lean<any>(),
+  ]);
+  const taken = new Set<number>([...squad.map((p: any) => p.seat), ...pending.map((r: any) => r.seat).filter(Boolean)]);
+  return Array.from({ length: SQUAD_LIMIT }, (_, i) => i + 1).filter((n) => !taken.has(n));
+}
+
+async function nextFreeSeat(clubId: any, opts: { ignoreRequestId?: any } = {}) {
+  const open = await freeSeats(clubId, opts);
+  if (!open.length) throw new ServiceError(`Main Team Squad has no free seats left (${SQUAD_LIMIT}/${SQUAD_LIMIT}, including pending requests)`, 409);
+  return open[0];
+}
+
 /** Tools a custom staff member may use. Legacy "info_change" staff keep their club info/logo rights. */
 function staffPermissions(s: any): string[] {
   if (s.permissions?.length) return s.permissions;
@@ -515,6 +546,11 @@ export const db = {
     }
   },
 
+  /** Lowest open seat in a club's Main Team Squad (throws when the squad is full). */
+  nextFreeSeat(clubId: string) {
+    return nextFreeSeat(clubId);
+  },
+
   async createPlayer(data: any) {
     await connectDB();
     if (data.konamiId) {
@@ -694,7 +730,7 @@ export const db = {
   async deleteClub(id: string) {
     if (!isId(id)) throw new ServiceError("Invalid club id", 400);
     await connectDB();
-    await Player.updateMany({ clubId: id }, { $unset: { clubId: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    await Player.updateMany({ clubId: id }, { $unset: { clubId: 1, seat: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
     await User.updateMany({ clubId: id }, { $unset: { clubId: 1 } });
     await Club.deleteOne({ _id: id });
     return true;
@@ -1288,6 +1324,7 @@ export const db = {
     if (club && String(club.managerId || "") === userId) {
       throw new ServiceError("You are the club's main manager. Hand the club over to another player before leaving.", 409);
     }
+    await lockSeats(player.clubId); // keep everyone else in their seat
     await Player.updateOne({ _id: player._id }, { $unset: { clubId: 1, shirtNo: 1, seat: 1 }, $set: { "contract.status": "FREE_AGENT" } });
     await User.updateOne({ _id: userId }, { $unset: { clubId: 1 } });
     await TransferHistory.create({
@@ -1716,7 +1753,11 @@ export const db = {
     if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined a club recently and is frozen for ${FREEZE_DAYS} days`, 409);
     await assertSquadSpace(club._id, player._id);
     const oldClub = player.clubId ? await Club.findById(player.clubId, { name: 1, _id: 1 }).lean<any>() : null;
+    if (oldClub) await lockSeats(oldClub._id);
+    // A seat belongs to one club: the player gets a free seat in the new squad.
+    const newSeat = await nextFreeSeat(club._id);
     player.clubId = club._id;
+    player.seat = newSeat;
     player.contract = { status: "UNDER_CONTRACT", durationMonths: 12, endDate: new Date(Date.now() + 365 * 86400000) } as any;
     await player.save();
     await TransferListing.updateMany({ playerId, status: { $ne: "CLOSED" } }, { $set: { status: "CLOSED" } });
@@ -1764,7 +1805,8 @@ export const db = {
     const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
     if (squad.length >= squadDef.size) throw new ServiceError(`${squadDef.label} is full`, 409);
     if (!Number.isInteger(data.seat) || data.seat < 1 || data.seat > squadDef.size) throw new ServiceError("Choose a seat", 400);
-    if (seatLayout(squad, squadDef.size)[data.seat - 1]) throw new ServiceError(`Seat ${data.seat} is already taken`, 409);
+    await lockSeats(club._id);
+    if (await Player.exists({ clubId: club._id, seat: data.seat })) throw new ServiceError(`Seat ${data.seat} is already taken`, 409);
     const pending = await TransferRequest.find({ targetClubId: club._id, type: "SIGNING", status: "PENDING" }, { playerId: 1, seat: 1 }).lean<any>();
     if (pending.some((r: any) => String(r.playerId) === data.playerId)) throw new ServiceError("You already requested this player", 409);
     if (pending.some((r: any) => r.seat === data.seat)) throw new ServiceError(`Seat ${data.seat} is reserved by another pending request`, 409);
@@ -1791,6 +1833,7 @@ export const db = {
     if (String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
     if (player.userId && String(player.userId) === String(club.managerId || "")) throw new ServiceError("The main manager can't be unregistered. Hand the club over first.", 409);
     if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined recently and is frozen for ${FREEZE_DAYS} days`, 409);
+    await lockSeats(player.clubId);
     player.clubId = undefined;
     player.seat = undefined;
     player.shirtNo = undefined;
@@ -1827,6 +1870,7 @@ export const db = {
     if (oldClubId === (clubId || "")) return;
     const oldClub = oldClubId ? await Club.findById(oldClubId, { name: 1 }).lean<any>() : null;
 
+    if (oldClubId) await lockSeats(oldClubId);
     if (!clubId) {
       player.clubId = undefined;
       player.seat = undefined;
@@ -1847,7 +1891,7 @@ export const db = {
     const now = Date.now();
     player.clubId = club._id;
     player.squad = "main";
-    player.seat = seatLayout(squad).indexOf(null) + 1;
+    player.seat = await nextFreeSeat(club._id);
     if (player.shirtNo && squad.some((p: any) => p.shirtNo === player.shirtNo)) player.shirtNo = undefined; // number already worn there
     player.contract = { status: "UNDER_CONTRACT", durationMonths: 4, startDate: new Date(now), endDate: new Date(now + CONTRACT_DAYS * 86400000) } as any;
     await player.save();
@@ -1876,9 +1920,10 @@ export const db = {
     if (!player || !club) throw new ServiceError("Player or club not found", 404);
     if (player.clubId) throw new ServiceError(`${player.fullName} has joined another club in the meantime`, 409);
     await assertSquadSpace(club._id, player._id);
-    const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
-    let seat = r.seat;
-    if (!seat || seatLayout(squad)[seat - 1]) seat = seatLayout(squad).indexOf(null) + 1; // seat got taken: next free one
+    // The requested seat was reserved for this request; only fall back if it is somehow held.
+    const open = await freeSeats(club._id, { ignoreRequestId: r._id });
+    if (!open.length) throw new ServiceError("Main Team Squad has no free seats left", 409);
+    const seat = r.seat && open.includes(r.seat) ? r.seat : open[0];
     const now = Date.now();
     // "Free Agent" only if a previous club contract ran out; otherwise they simply had no club.
     const cameFrom = player.contract?.endDate && new Date(player.contract.endDate).getTime() < now ? "Free Agent" : "No club";
@@ -1948,6 +1993,7 @@ export const db = {
       }))
     );
     const ids = expired.map((p: any) => p._id);
+    for (const cid of new Set(expired.map((p: any) => String(p.clubId)))) await lockSeats(cid);
     await Player.updateMany({ _id: { $in: ids } }, { $unset: { clubId: 1, seat: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
     const userIds = expired.map((p: any) => p.userId).filter(Boolean);
     if (userIds.length) await User.updateMany({ _id: { $in: userIds } }, { $unset: { clubId: 1 } });

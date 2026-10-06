@@ -55,7 +55,7 @@ export const POST = handle(async (req: NextRequest) => {
     // A free agent who founds a club also plays for it.
     if (!session.clubId) {
       await User.updateOne({ _id: session.id }, { $set: { clubId: club.id } });
-      await Player.updateOne({ userId: session.id, clubId: { $exists: false } }, { $set: { clubId: club.id, "contract.status": "UNDER_CONTRACT" } });
+      await Player.updateOne({ userId: session.id, clubId: { $exists: false } }, { $set: { clubId: club.id, seat: 1, "contract.status": "UNDER_CONTRACT" } });
     }
     await db.notify(session.id, "Club registration received", `${data.clubName} is waiting for admin approval.`, "/dashboard/my-club");
     return ok({ clubId: club.id, slug: club.slug }, 201);

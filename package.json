@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "tsx scripts/seed.ts",
-    "db:import-legacy": "tsx scripts/import-legacy.ts"
+    "db:import-legacy": "tsx scripts/import-legacy.ts",
+    "db:lock-seats": "tsx scripts/lock-seats.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

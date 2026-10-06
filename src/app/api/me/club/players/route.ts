@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, hashPassword } from "@/lib/auth";
 import { ClubRegisterPlayerSchema } from "@/lib/validation";
 import { ok, fail, handle, parseBody, audit, limit } from "@/lib/api";
-import { SQUAD_LIMIT, CONTRACT_DAYS, openSeats } from "@/lib/squad";
+import { SQUAD_LIMIT, CONTRACT_DAYS } from "@/lib/squad";
 
 const RESERVED = new Set(["admin", "administrator", "root", "support", "system", "moderator", "api", "login", "register", "dashboard"]);
 
@@ -41,6 +41,8 @@ export const POST = handle(async (req: NextRequest) => {
   const worn = club.squad.find((p: any) => p.shirtNo === data.shirtNo);
   if (worn) return fail(`#${data.shirtNo} is already worn by ${worn.fullName}`, 409, "CONFLICT");
 
+  // Picked before the account is created so a full squad never leaves a half-made account.
+  const seat = await db.nextFreeSeat(String(clubId));
   const username = await freeUsername(data.fullName);
   // Check the Konami UID first so a refused UID never leaves a half-created account.
   await db.assertKonamiIdUsable(data.konamiId);
@@ -65,7 +67,7 @@ export const POST = handle(async (req: NextRequest) => {
   const now = Date.now();
   await db.updatePlayer(player.id, {
     shirtNo: data.shirtNo,
-    seat: openSeats(club.squad)[0],
+    seat,
     squad: "main",
     "contract.status": "UNDER_CONTRACT",
     "contract.startDate": new Date(now),
