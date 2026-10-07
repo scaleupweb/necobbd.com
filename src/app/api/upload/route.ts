@@ -32,7 +32,13 @@ export const POST = handle(async (req: NextRequest) => {
   // Images go to Cloudflare R2 when it is configured; MongoDB is only the fallback.
   if (r2Enabled()) {
     const key = mediaKey(new Types.ObjectId().toHexString());
-    await r2Put(key, new Uint8Array(buf), type);
+    try {
+      await r2Put(key, new Uint8Array(buf), type);
+    } catch (e: any) {
+      // Show the storage error instead of a generic 500 so a bad R2 setting is easy to spot.
+      console.error("R2 upload failed:", e);
+      return fail(`Image storage error: ${String(e?.message || e).slice(0, 160)}`, 502, "STORAGE_ERROR");
+    }
     return ok({ url: r2PublicUrl(key) }, 201);
   }
   const id = await db.saveMedia(buf, type, (file.name || "image").slice(0, 120), session.id);

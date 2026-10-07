@@ -5,12 +5,15 @@ import { AwsClient } from "aws4fetch";
  * `media/<id>` and are served from the bucket's public URL, so they take no
  * space in MongoDB. Enabled when all R2_* variables are set.
  */
+// Values pasted into a hosting dashboard often pick up spaces, quotes or a trailing newline.
+const clean = (v?: string) => (v || "").trim().replace(/^["']|["']$/g, "").trim();
+
 const env = () => ({
-  accountId: process.env.R2_ACCOUNT_ID || "",
-  accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
-  bucket: process.env.R2_BUCKET || "",
-  publicUrl: (process.env.R2_PUBLIC_URL || "").replace(/\/+$/, ""),
+  accountId: clean(process.env.R2_ACCOUNT_ID),
+  accessKeyId: clean(process.env.R2_ACCESS_KEY_ID),
+  secretAccessKey: clean(process.env.R2_SECRET_ACCESS_KEY),
+  bucket: clean(process.env.R2_BUCKET),
+  publicUrl: clean(process.env.R2_PUBLIC_URL).replace(/\/+$/, ""),
 });
 
 export function r2Enabled() {
