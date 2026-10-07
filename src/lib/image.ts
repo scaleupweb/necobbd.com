@@ -40,6 +40,40 @@ const loadImage = (src: string) =>
   });
 
 /**
+ * Makes a phone photo safe to show in the crop window. 50–200 MP camera photos are
+ * far larger than a phone's GPU can draw in a zoomable/transformed element, so the
+ * browser silently shows nothing. Shrinks the longest side to `max` px first.
+ * Resolves an object URL (the caller revokes it).
+ */
+export async function prepareForCrop(file: File, max = 2048): Promise<string> {
+  const original = URL.createObjectURL(file);
+  let img: HTMLImageElement;
+  try {
+    img = await loadImage(original);
+  } catch {
+    URL.revokeObjectURL(original);
+    throw new Error("This photo can't be opened here. Try a JPG or PNG (on Samsung/iPhone, choose a regular photo or a screenshot).");
+  }
+  if (Math.max(img.naturalWidth, img.naturalHeight) <= max) return original;
+  const scale = max / Math.max(img.naturalWidth, img.naturalHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext("2d")!;
+  const png = file.type === "image/png";
+  if (!png) {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(original);
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, png ? "image/png" : "image/jpeg", 0.92));
+  if (!blob) throw new Error("Could not process the image");
+  return URL.createObjectURL(blob);
+}
+
+/**
  * Cuts out the chosen area (pixels from react-easy-crop, measured on the rotated
  * image) and scales it so the longest side is at most `maxSize`.
  */

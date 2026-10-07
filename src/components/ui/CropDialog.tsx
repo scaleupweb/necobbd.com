@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Cropper, { Area } from "react-easy-crop";
 import { Loader2, Minus, Plus, RotateCw, X } from "lucide-react";
-import { cropImage } from "@/lib/image";
+import { cropImage, prepareForCrop } from "@/lib/image";
 
 /**
  * Lets the user choose which part of a photo to keep before it is uploaded:
@@ -38,13 +38,26 @@ export function CropDialog({
 
   useEffect(() => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setSrc(url);
+    let url = "";
+    let cancelled = false;
+    setSrc("");
+    setArea(null);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setRotation(0);
     setError("");
-    return () => URL.revokeObjectURL(url);
+    // Big camera photos are shrunk first — phones can't draw them inside the cropper.
+    prepareForCrop(file)
+      .then((u) => {
+        if (cancelled) return URL.revokeObjectURL(u);
+        url = u;
+        setSrc(u);
+      })
+      .catch((e) => !cancelled && setError(e.message));
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
   }, [file]);
 
   useEffect(() => {
@@ -54,10 +67,10 @@ export function CropDialog({
     return () => window.removeEventListener("keydown", h);
   }, [file, busy, onCancel]);
 
-  if (!file || !src || typeof document === "undefined") return null;
+  if (!file || typeof document === "undefined") return null;
 
   const save = async () => {
-    if (!area) return;
+    if (!area || !src) return;
     setBusy(true);
     setError("");
     try {
@@ -85,23 +98,29 @@ export function CropDialog({
         </div>
 
         <div className="relative w-full h-[50dvh] max-h-[420px] min-h-[240px] shrink bg-slate-900">
-          <Cropper
-            image={src}
-            crop={crop}
-            zoom={zoom}
-            rotation={rotation}
-            aspect={aspect}
-            cropShape={round ? "round" : "rect"}
-            showGrid={!round}
-            minZoom={1}
-            maxZoom={4}
-            zoomSpeed={0.15}
-            objectFit="contain"
-            onCropChange={setCrop}
-            onZoomChange={setZoom}
-            onRotationChange={setRotation}
-            onCropComplete={(_, px) => setArea(px)}
-          />
+          {src ? (
+            <Cropper
+              image={src}
+              crop={crop}
+              zoom={zoom}
+              rotation={rotation}
+              aspect={aspect}
+              cropShape={round ? "round" : "rect"}
+              showGrid={!round}
+              minZoom={1}
+              maxZoom={4}
+              zoomSpeed={0.15}
+              objectFit="contain"
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onRotationChange={setRotation}
+              onCropComplete={(_, px) => setArea(px)}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
+              {error ? <p className="text-xs font-bold text-rose-300">{error}</p> : <Loader2 className="w-7 h-7 animate-spin text-white/70" />}
+            </div>
+          )}
         </div>
 
         <div className="px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3 shrink-0">
@@ -127,12 +146,12 @@ export function CropDialog({
               <RotateCw className="w-4 h-4" />
             </button>
           </div>
-          {error && <p className="text-[11px] font-bold text-rose-600 text-center">{error}</p>}
+          {error && src && <p className="text-[11px] font-bold text-rose-600 text-center">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={onCancel} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 disabled:opacity-50">
               Cancel
             </button>
-            <button type="button" onClick={save} disabled={busy || !area} className="flex-1 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-xs font-bold text-white inline-flex items-center justify-center gap-1.5 disabled:opacity-50">
+            <button type="button" onClick={save} disabled={busy || !area || !src} className="flex-1 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-xs font-bold text-white inline-flex items-center justify-center gap-1.5 disabled:opacity-50">
               {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save
             </button>
           </div>
