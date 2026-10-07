@@ -147,7 +147,7 @@ export function ResourceManager({
         }
       />
 
-      <div className="relative max-w-sm">
+      <div className="relative w-full sm:max-w-sm">
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className={`${inputCls} pl-9`} />
       </div>
@@ -161,7 +161,38 @@ export function ResourceManager({
       ) : filtered.length === 0 ? (
         <Empty>{rows.length ? "No matches for your search." : `No ${title.toLowerCase()} yet. Click "Add ${singular}" to create one.`}</Empty>
       ) : (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <>
+        {/* Phones: one card per row — first column as the heading, the rest as label/value pairs. */}
+        <div className="md:hidden space-y-2.5">
+          {filtered.map((row) => {
+            const [head, ...rest] = columns;
+            return (
+              <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm text-xs space-y-3">
+                <div className="min-w-0 [&_.truncate]:whitespace-normal [&_*]:min-w-0">{head.render(row)}</div>
+                {rest.length > 0 && (
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    {rest.map((c) => (
+                      <div key={c.label} className="min-w-0">
+                        <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{c.label}</dt>
+                        <dd className="mt-0.5 text-slate-800 break-words [&_.truncate]:whitespace-normal">{c.render(row)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                <div className="flex flex-wrap items-center justify-end gap-1.5 pt-2.5 border-t border-slate-100">
+                  {rowActions?.(row, load)}
+                  <Button small variant="secondary" onClick={() => openForm(row)} title="Edit">
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </Button>
+                  <Button small variant="ghost" onClick={() => remove(row)} title="Delete">
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden md:block rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
@@ -199,6 +230,7 @@ export function ResourceManager({
             </table>
           </div>
         </div>
+        </>
       )}
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? `Edit ${singular}` : `New ${singular}`} wide>

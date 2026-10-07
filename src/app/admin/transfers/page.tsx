@@ -117,27 +117,30 @@ export default function AdminTransfersPage() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {signings.map((r: any) => (
               <div key={r.id} className={`p-4 rounded-2xl bg-white border space-y-3 text-xs transition-colors ${selected.has(r.id) ? "border-emerald-400 ring-2 ring-emerald-100" : "border-slate-200"}`}>
-                <div className="flex items-center gap-3">
-                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.player?.fullName}`} className="w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer" />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={r.player?.avatar} alt="" className="w-12 h-12 rounded-full object-cover bg-slate-100" />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-black text-slate-950 text-sm truncate">{r.player?.fullName}</div>
-                    <div className="text-slate-500 font-mono truncate">{r.player?.konamiId || `@${r.player?.username}`}</div>
-                    {r.player?.clubId && <div className="text-rose-600 font-bold">Already in a club now</div>}
-                  </div>
-                  <span className="text-slate-400 font-black">→</span>
-                  <div className="flex items-center gap-2 min-w-0">
+                {/* Phones: player on one line, club under it. Wider screens: player → club side by side. */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <div className="flex items-center gap-3 min-w-0 sm:flex-1">
+                    <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.player?.fullName}`} className="w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer" />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={r.club?.logo} alt="" className="w-10 h-10 rounded-xl object-cover bg-slate-100" />
+                    <img src={r.player?.avatar} alt="" className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover bg-slate-100 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-black text-slate-950 text-sm break-words leading-snug">{r.player?.fullName}</div>
+                      <div className="text-slate-500 font-mono break-all">{r.player?.konamiId || `@${r.player?.username}`}</div>
+                      {r.player?.clubId && <div className="text-rose-600 font-bold">Already in a club now</div>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 min-w-0 pl-7 sm:pl-0 sm:max-w-[50%]">
+                    <span className="text-slate-400 font-black shrink-0">→</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={r.club?.logo} alt="" className="w-10 h-10 rounded-xl object-cover bg-slate-100 shrink-0" />
                     <div className="min-w-0">
-                      <div className="font-bold text-slate-950 truncate">{r.club?.name}</div>
+                      <div className="font-bold text-slate-950 break-words leading-snug">{r.club?.name}</div>
                       <div className="text-slate-500">Main Team Squad · Seat {r.seat}</div>
                     </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className="text-slate-500">{formatDate(r.createdAt)}</span>
                     {r.postLink && (
                       <a href={r.postLink} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100">
@@ -145,7 +148,7 @@ export default function AdminTransfersPage() {
                       </a>
                     )}
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 w-full sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
                     <Button small variant="success" onClick={() => decide(r, "ACCEPTED")}>
                       <CheckCircle2 className="w-3.5 h-3.5" /> Approve
                     </Button>
@@ -169,10 +172,10 @@ export default function AdminTransfersPage() {
           <div className="space-y-2">
             {pending.map((r: any) => (
               <div key={r.id} className={`flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-white border text-xs transition-colors ${selected.has(r.id) ? "border-emerald-400 ring-2 ring-emerald-100" : "border-slate-200"}`}>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1 basis-60">
                 <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Select offer for ${r.player?.fullName}`} className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0 cursor-pointer" />
-                <div>
-                  <div className="font-bold text-slate-950">
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-950 break-words">
                     {r.club?.name} → {r.player?.fullName}
                   </div>
                   <div className="text-slate-500">
@@ -182,7 +185,7 @@ export default function AdminTransfersPage() {
                   {r.message && <div className="text-slate-600 italic mt-1">“{r.message}”</div>}
                 </div>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 w-full sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
                   <Button small variant="success" onClick={() => run(() => api(`/api/admin/transfers/requests/${r.id}`, { method: "PATCH", json: { status: "ACCEPTED" } }), "Transfer completed.")}>
                     <CheckCircle2 className="w-3.5 h-3.5" /> Accept & transfer
                   </Button>
@@ -208,14 +211,14 @@ export default function AdminTransfersPage() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.player.avatar} alt="" className="w-10 h-10 rounded-lg object-cover" />
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-slate-950">{l.player.fullName}</div>
+                    <div className="font-bold text-slate-950 break-words">{l.player.fullName}</div>
                     <div className="text-slate-500">{l.player.club?.name || noClubLabel(l.player)} · asking {formatCurrency(l.askingPrice)}</div>
                   </div>
                   <Button small variant="ghost" onClick={() => run(() => api("/api/admin/transfers", { method: "POST", json: { action: "CLOSE", listingId: l.id } }), "Listing removed.")} title="Remove listing">
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <select className={inputCls} value={buyer[l.id] || ""} onChange={(e) => setBuyer({ ...buyer, [l.id]: e.target.value })}>
                     <option value="">Buying club…</option>
                     {data.clubs
@@ -246,7 +249,25 @@ export default function AdminTransfersPage() {
         {data.history.length === 0 ? (
           <Empty>No transfers yet.</Empty>
         ) : (
-          <div className="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
+          <>
+          <div className="sm:hidden rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
+            {data.history.map((h: any) => (
+              <div key={h.id} className="p-3 text-xs space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-slate-950 break-words">{h.playerName}</span>
+                  <span className="font-mono text-slate-600 shrink-0">{formatCurrency(h.fee || 0)}</span>
+                </div>
+                <div className="text-slate-600 break-words">
+                  {h.previousClubName} → <strong className="text-slate-900">{h.newClubName}</strong>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {formatDate(h.transferDate)}
+                  {h.approvedBy ? ` · ${h.approvedBy}` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block rounded-2xl border border-slate-200 bg-white overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] border-b border-slate-200">
                 <tr>
@@ -272,6 +293,7 @@ export default function AdminTransfersPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 
@@ -327,7 +349,7 @@ function BulkBar({
         Select all ({ids.length})
       </label>
       <span className="text-slate-500">{count ? `${count} selected` : "Tick requests to act on several at once"}</span>
-      <div className="ml-auto flex gap-1.5">
+      <div className="w-full sm:w-auto sm:ml-auto flex gap-1.5 [&>*]:flex-1 sm:[&>*]:flex-none">
         <Button small variant="success" disabled={!count || busy} onClick={() => onAct("ACCEPTED")}>
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Approve selected{count ? ` (${count})` : ""}
         </Button>
