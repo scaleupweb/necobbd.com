@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Mail, Lock, Smartphone, Shield, ArrowRight, CheckCircle2 } from "lucide-react";
+import { User, Mail, Lock, Smartphone, Shield, ArrowRight, CheckCircle2, Camera, Trash2, Loader2 } from "lucide-react";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ClubRegisterForm } from "./ClubRegisterForm";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { compressImage, uploadImage } from "@/lib/image";
 
 export default function RegisterPage() {
   const [type, setType] = useState<"player" | "club">("player");
@@ -85,6 +86,43 @@ function PlayerRegisterForm() {
   ];
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Profile photo: shrunk in the browser now, uploaded once the account exists.
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
+
+  const pickPhoto = async (file?: File) => {
+    if (photoRef.current) photoRef.current.value = "";
+    if (!file) return;
+    setPhotoError("");
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
+      setPhotoError("Use a PNG, JPG or WEBP image");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setPhotoError("Image is too large (max 15 MB)");
+      return;
+    }
+    setPhotoBusy(true);
+    try {
+      const blob = await compressImage(file);
+      setPhoto(blob);
+      setPhotoUrl(URL.createObjectURL(blob));
+    } catch (e: any) {
+      setPhotoError(e.message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const clearPhoto = () => {
+    setPhoto(null);
+    setPhotoUrl("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +146,16 @@ function PlayerRegisterForm() {
 
       const json = await res.json();
       if (json.success) {
+        // The account is signed in now, so the photo can be uploaded. A failure here
+        // isn't fatal: the player can add a photo later from their profile.
+        if (photo) {
+          try {
+            const avatar = await uploadImage(photo, "avatar.jpg");
+            await fetch("/api/me/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ avatar }) });
+          } catch {
+            /* keep going */
+          }
+        }
         window.location.href = "/dashboard";
       } else {
         setError(json.error?.message || "Registration failed.");
@@ -138,6 +186,43 @@ function PlayerRegisterForm() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => photoRef.current?.click()}
+                className="relative w-20 h-20 shrink-0 rounded-full overflow-hidden border-2 border-dashed border-slate-300 bg-slate-50 hover:border-slate-400 flex items-center justify-center"
+                aria-label="Choose profile photo"
+              >
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <Camera className="w-6 h-6 text-slate-400" />
+                )}
+                {photoBusy && (
+                  <span className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-slate-700" />
+                  </span>
+                )}
+              </button>
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 font-bold">Profile Photo</label>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => photoRef.current?.click()} disabled={photoBusy} className="px-3 py-1.5 rounded-lg bg-black text-white font-bold disabled:opacity-60">
+                    {photoUrl ? "Change photo" : "Upload photo"}
+                  </button>
+                  {photoUrl && (
+                    <button type="button" onClick={clearPhoto} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 font-bold">
+                      <Trash2 className="w-3.5 h-3.5" /> Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">Optional · a clear photo of your face · JPG, PNG or WEBP</p>
+                {photoError && <p className="text-[11px] font-bold text-rose-600">{photoError}</p>}
+              </div>
+              <input ref={photoRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Full Legal Name *</label>
