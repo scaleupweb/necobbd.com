@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Cropper, { Area } from "react-easy-crop";
 import { Loader2, Minus, Plus, RotateCw, X } from "lucide-react";
 import { cropImage } from "@/lib/image";
@@ -53,7 +54,7 @@ export function CropDialog({
     return () => window.removeEventListener("keydown", h);
   }, [file, busy, onCancel]);
 
-  if (!file || !src) return null;
+  if (!file || !src || typeof document === "undefined") return null;
 
   const save = async () => {
     if (!area) return;
@@ -72,9 +73,10 @@ export function CropDialog({
 
   const step = (d: number) => setZoom((z) => Math.min(4, Math.max(1, +(z + d).toFixed(2))));
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-6" role="dialog" aria-modal="true">
-      <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
+  // Rendered into <body> so no parent (cards, forms, the mobile bottom nav) can sit on top of it.
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-6" role="dialog" aria-modal="true">
+      <div className="w-full sm:max-w-lg max-h-[100dvh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
           <h3 className="text-sm font-black text-slate-950">{title}</h3>
           <button type="button" onClick={onCancel} disabled={busy} className="text-slate-400 hover:text-slate-800" aria-label="Close">
@@ -82,7 +84,7 @@ export function CropDialog({
           </button>
         </div>
 
-        <div className="relative w-full h-[55vh] max-h-[420px] min-h-[260px] bg-slate-900">
+        <div className="relative w-full h-[50dvh] max-h-[420px] min-h-[240px] shrink bg-slate-900">
           <Cropper
             image={src}
             crop={crop}
@@ -102,7 +104,7 @@ export function CropDialog({
           />
         </div>
 
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3 shrink-0">
           <p className="text-[11px] text-slate-500 text-center">Drag to move · pinch, scroll or use the slider to zoom</p>
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => step(-0.2)} className="w-8 h-8 shrink-0 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center" aria-label="Zoom out">
@@ -136,6 +138,7 @@ export function CropDialog({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
