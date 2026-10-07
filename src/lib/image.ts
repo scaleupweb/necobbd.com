@@ -31,6 +31,56 @@ export async function compressImage(file: File, max = 512, quality = 0.82): Prom
   }
 }
 
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error("This file is not an image we can read"));
+    i.src = src;
+  });
+
+/**
+ * Cuts out the chosen area (pixels from react-easy-crop, measured on the rotated
+ * image) and scales it so the longest side is at most `maxSize`.
+ */
+export async function cropImage(
+  src: string,
+  area: { x: number; y: number; width: number; height: number },
+  opts: { maxSize?: number; rotation?: number; type?: "image/jpeg" | "image/png"; quality?: number } = {}
+): Promise<Blob> {
+  const { maxSize = 800, rotation = 0, type = "image/jpeg", quality = 0.85 } = opts;
+  const img = await loadImage(src);
+  const rad = (rotation * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(rad));
+  const cos = Math.abs(Math.cos(rad));
+  // Bounding box of the rotated image — the coordinate space `area` is in.
+  const bw = Math.round(img.naturalWidth * cos + img.naturalHeight * sin);
+  const bh = Math.round(img.naturalWidth * sin + img.naturalHeight * cos);
+
+  const rotated = document.createElement("canvas");
+  rotated.width = bw;
+  rotated.height = bh;
+  const rctx = rotated.getContext("2d")!;
+  rctx.translate(bw / 2, bh / 2);
+  rctx.rotate(rad);
+  rctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+
+  const scale = Math.min(1, maxSize / Math.max(area.width, area.height));
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(area.width * scale));
+  out.height = Math.max(1, Math.round(area.height * scale));
+  const ctx = out.getContext("2d")!;
+  if (type === "image/jpeg") {
+    ctx.fillStyle = "#fff"; // JPEG has no transparency
+    ctx.fillRect(0, 0, out.width, out.height);
+  }
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(rotated, area.x, area.y, area.width, area.height, 0, 0, out.width, out.height);
+  const blob = await new Promise<Blob | null>((res) => out.toBlob(res, type, quality));
+  if (!blob) throw new Error("Could not process the image");
+  return blob;
+}
+
 /** Uploads an image (signed-in users only) and returns its /api/media URL. */
 export async function uploadImage(blob: Blob, name = "photo.jpg"): Promise<string> {
   const fd = new FormData();

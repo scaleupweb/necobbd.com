@@ -2,9 +2,9 @@
 
 import { useRef, useState } from "react";
 import { Upload, Loader2, Trash2, ImagePlus, Link2, RefreshCw } from "lucide-react";
-import { compressImage } from "@/lib/image";
+import { CropDialog } from "./CropDialog";
 
-/** Image field: drag & drop or pick a file (stored in MongoDB), or paste an https URL. */
+/** Image field: drag & drop or pick a file (cropped, then uploaded), or paste an https URL. */
 export function ImageInput({
   value,
   onChange,
@@ -23,29 +23,16 @@ export function ImageInput({
   const [error, setError] = useState("");
   const [drag, setDrag] = useState(false);
   const [showUrl, setShowUrl] = useState(false);
+  // Picked photo waiting in the crop window.
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const wide = aspect === "wide";
 
-  const upload = async (file: File) => {
-    setError("");
-    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
-      setError("Use a PNG, JPG, WEBP or GIF image");
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      setError("Max 15 MB");
-      return;
-    }
+  const send = async (body: Blob, name: string) => {
     setBusy(true);
     try {
-      // Shrink big photos first (GIFs and PNG logos stay as they are, to keep animation/transparency).
-      let body: Blob = file;
-      if (file.type === "image/jpeg" || file.type === "image/webp" || (file.type === "image/png" && file.size > 1024 * 1024)) {
-        const small = await compressImage(file, wide ? 1600 : 800, 0.85);
-        if (small.size < file.size) body = small;
-      }
-      if (body.size > 3 * 1024 * 1024) throw new Error("Image is still over 3 MB — try a smaller one");
+      if (body.size > 3 * 1024 * 1024) throw new Error("Image is over 3 MB — try a smaller one");
       const fd = new FormData();
-      fd.append("file", body, body === file ? file.name : "image.jpg");
+      fd.append("file", body, name);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message || "Upload failed");
@@ -54,8 +41,23 @@ export function ImageInput({
       setError(e.message);
     } finally {
       setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
+  };
+
+  const upload = async (file: File) => {
+    setError("");
+    if (fileRef.current) fileRef.current.value = "";
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
+      setError("Use a PNG, JPG, WEBP or GIF image");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Max 15 MB");
+      return;
+    }
+    // GIFs go up as they are (cropping would drop the animation); everything else is cropped first.
+    if (file.type === "image/gif") return send(file, file.name);
+    setCropFile(file);
   };
 
   const pick = () => fileRef.current?.click();
@@ -139,7 +141,7 @@ export function ImageInput({
           className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-black focus:bg-white"
         />
       )}
-      <p className="text-[11px] text-slate-400">{hint || "PNG, JPG, WEBP or GIF · large photos are resized automatically · drag & drop works too"}</p>
+      <p className="text-[11px] text-slate-400">{hint || "PNG, JPG, WEBP or GIF · crop & zoom after choosing · drag & drop works too"}</p>
       {error && <p className="text-[11px] font-bold text-rose-600">{error}</p>}
     </div>
   );
@@ -158,6 +160,18 @@ export function ImageInput({
           <div className="flex-1 min-w-0 pt-1">{actions}</div>
         </div>
       )}
+      <CropDialog
+        file={cropFile}
+        aspect={wide ? 16 / 7 : 1}
+        maxSize={wide ? 1600 : 800}
+        title={wide ? "Adjust the banner" : "Adjust the image"}
+        onCancel={() => setCropFile(null)}
+        onDone={async (blob) => {
+          const name = blob.type === "image/png" ? "image.png" : "image.jpg";
+          setCropFile(null);
+          await send(blob, name);
+        }}
+      />
       <input
         ref={fileRef}
         type="file"

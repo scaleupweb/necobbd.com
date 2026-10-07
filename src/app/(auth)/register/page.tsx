@@ -7,7 +7,8 @@ import { User, Mail, Lock, Smartphone, Shield, ArrowRight, CheckCircle2, Camera,
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ClubRegisterForm } from "./ClubRegisterForm";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { compressImage, uploadImage } from "@/lib/image";
+import { uploadImage } from "@/lib/image";
+import { CropDialog } from "@/components/ui/CropDialog";
 
 export default function RegisterPage() {
   const [type, setType] = useState<"player" | "club">("player");
@@ -86,8 +87,9 @@ function PlayerRegisterForm() {
   ];
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // Profile photo: shrunk in the browser now, uploaded once the account exists.
+  // Profile photo: cropped in the browser now, uploaded once the account exists.
   const [photo, setPhoto] = useState<Blob | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
@@ -99,7 +101,7 @@ function PlayerRegisterForm() {
     if (photoRef.current) photoRef.current.value = "";
     if (!file) return;
     setPhotoError("");
-    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
       setPhotoError("Use a PNG, JPG or WEBP image");
       return;
     }
@@ -107,16 +109,13 @@ function PlayerRegisterForm() {
       setPhotoError("Image is too large (max 15 MB)");
       return;
     }
-    setPhotoBusy(true);
-    try {
-      const blob = await compressImage(file);
-      setPhoto(blob);
-      setPhotoUrl(URL.createObjectURL(blob));
-    } catch (e: any) {
-      setPhotoError(e.message);
-    } finally {
-      setPhotoBusy(false);
-    }
+    setCropFile(file);
+  };
+
+  const takeCropped = (blob: Blob) => {
+    setCropFile(null);
+    setPhoto(blob);
+    setPhotoUrl(URL.createObjectURL(blob));
   };
 
   const clearPhoto = () => {
@@ -220,7 +219,8 @@ function PlayerRegisterForm() {
                 <p className="text-[11px] text-slate-400">Optional · a clear photo of your face · JPG, PNG or WEBP</p>
                 {photoError && <p className="text-[11px] font-bold text-rose-600">{photoError}</p>}
               </div>
-              <input ref={photoRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
+              <input ref={photoRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
+              <CropDialog file={cropFile} aspect={1} round maxSize={512} title="Adjust your profile photo" onCancel={() => setCropFile(null)} onDone={takeCropped} />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
