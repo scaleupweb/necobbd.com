@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, UserPlus, KeyRound, Trash2, Loader2, ExternalLink } from "lucide-react";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle } from "@/components/admin/ui";
-import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
+import { toast, confirmDialog, infoDialog, DELETE_CONFIRM_WORD } from "@/lib/feedback";
 import { formatDate } from "@/lib/utils";
 
 const ROLES = ["PLAYER", "CLUB_MANAGER", "REFEREE", "SENIOR_REFEREE", "TOURNAMENT_OFFICIAL", "MODERATOR", "ADMIN", "SUPER_ADMIN"];
@@ -78,6 +78,7 @@ export default function AdminUsersPage() {
       text: `@${u.username} and their player profile will be permanently deleted. This cannot be undone.`,
       confirmText: "Delete permanently",
       danger: true,
+      typeToConfirm: DELETE_CONFIRM_WORD,
     });
     if (!ok) return;
     try {

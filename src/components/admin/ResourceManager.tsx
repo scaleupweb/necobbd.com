@@ -4,7 +4,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Loader2 } from "lucide-react";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { api, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, Toggle, toLocalInput, fromLocalInput } from "./ui";
-import { toast, confirmDialog } from "@/lib/feedback";
+import { toast, confirmDialog, DELETE_CONFIRM_WORD } from "@/lib/feedback";
 
 export type FieldDef = {
   name: string;
@@ -114,7 +114,7 @@ export function ResourceManager({
 
   const remove = async (row: any) => {
     const name = row.name || row.title || singular;
-    const ok = await confirmDialog({ title: `Delete "${name}"?`, text: "This cannot be undone.", confirmText: "Delete", danger: true });
+    const ok = await confirmDialog({ title: `Delete "${name}"?`, text: "This cannot be undone.", confirmText: "Delete", danger: true, typeToConfirm: DELETE_CONFIRM_WORD });
     if (!ok) return;
     try {
       await api(`/api/admin/resources/${resource}/${row.id}`, { method: "DELETE" });

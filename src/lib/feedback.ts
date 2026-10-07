@@ -23,14 +23,44 @@ const base = {
   },
 };
 
-/** Ask the user to confirm an action. Resolves true when confirmed. */
-export async function confirmDialog(opts: { title: string; text?: string; confirmText?: string; cancelText?: string; danger?: boolean }) {
+/** The word admins type before a permanent delete. */
+export const DELETE_CONFIRM_WORD = "NECOBBD";
+
+/**
+ * Ask the user to confirm an action. Resolves true when confirmed.
+ * With `typeToConfirm`, the confirm button stays disabled until that word is typed —
+ * used for permanent deletes so a stray click can't remove anything.
+ */
+export async function confirmDialog(opts: { title: string; text?: string; confirmText?: string; cancelText?: string; danger?: boolean; typeToConfirm?: string }) {
+  const word = opts.typeToConfirm;
+  const matches = (v: unknown) => !!word && String(v ?? "").trim().toUpperCase() === word.toUpperCase();
   const res = await Swal.fire({
     ...base,
     icon: opts.danger ? "warning" : "question",
     iconColor: opts.danger ? "#E11D48" : "#111111",
     title: opts.title,
     text: opts.text,
+    ...(word
+      ? {
+          input: "text" as const,
+          inputLabel: `Type ${word} to confirm`,
+          inputPlaceholder: word,
+          inputAttributes: { autocomplete: "off", autocapitalize: "characters", spellcheck: "false" },
+          inputValidator: (v: string) => (matches(v) ? undefined : `Type ${word} exactly to delete`),
+          focusCancel: false,
+          didOpen: () => {
+            const btn = Swal.getConfirmButton();
+            const input = Swal.getInput();
+            if (!btn || !input) return;
+            const sync = () => {
+              btn.disabled = !matches(input.value);
+              btn.style.opacity = btn.disabled ? "0.4" : "1";
+            };
+            sync();
+            input.addEventListener("input", sync);
+          },
+        }
+      : {}),
     showCancelButton: true,
     confirmButtonText: opts.confirmText || "Confirm",
     cancelButtonText: opts.cancelText || "Cancel",

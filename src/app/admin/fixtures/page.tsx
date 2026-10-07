@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Play, Pause, Ban, CheckCircle2, Trash2, XCircle, Pencil, Loader2, ExternalLink, RotateCcw } from "lucide-react";
 import { api, Badge, Button, Empty, Field, inputCls, Modal, Notice, PageHeader, statusTone, Toggle, toLocalInput, fromLocalInput } from "@/components/admin/ui";
-import { toast, confirmDialog } from "@/lib/feedback";
+import { toast, confirmDialog, DELETE_CONFIRM_WORD } from "@/lib/feedback";
 import { ResultModal } from "@/components/admin/ResultModal";
 import { formatDate, formatTime } from "@/lib/utils";
 
@@ -75,7 +75,7 @@ export default function AdminFixturesPage() {
   };
 
   const remove = async (f: any) => {
-    if (!(await confirmDialog({ title: "Delete this fixture?", text: "This cannot be undone.", confirmText: "Delete", danger: true }))) return;
+    if (!(await confirmDialog({ title: "Delete this fixture?", text: "This cannot be undone.", confirmText: "Delete", danger: true, typeToConfirm: DELETE_CONFIRM_WORD }))) return;
     try {
       await api(`/api/admin/fixtures/${f.id}`, { method: "DELETE" });
       toast.success("Fixture deleted");
