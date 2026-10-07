@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Upload, Loader2, Trash2, ImagePlus, Link2, RefreshCw } from "lucide-react";
+import { compressImage } from "@/lib/image";
 
 /** Image field: drag & drop or pick a file (stored in MongoDB), or paste an https URL. */
 export function ImageInput({
@@ -30,14 +31,21 @@ export function ImageInput({
       setError("Use a PNG, JPG, WEBP or GIF image");
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
-      setError("Max 3 MB");
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Max 15 MB");
       return;
     }
     setBusy(true);
     try {
+      // Shrink big photos first (GIFs and PNG logos stay as they are, to keep animation/transparency).
+      let body: Blob = file;
+      if (file.type === "image/jpeg" || file.type === "image/webp" || (file.type === "image/png" && file.size > 1024 * 1024)) {
+        const small = await compressImage(file, wide ? 1600 : 800, 0.85);
+        if (small.size < file.size) body = small;
+      }
+      if (body.size > 3 * 1024 * 1024) throw new Error("Image is still over 3 MB — try a smaller one");
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", body, body === file ? file.name : "image.jpg");
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message || "Upload failed");
@@ -131,7 +139,7 @@ export function ImageInput({
           className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-black focus:bg-white"
         />
       )}
-      <p className="text-[11px] text-slate-400">{hint || "PNG, JPG, WEBP or GIF · up to 3 MB · drag & drop works too"}</p>
+      <p className="text-[11px] text-slate-400">{hint || "PNG, JPG, WEBP or GIF · large photos are resized automatically · drag & drop works too"}</p>
       {error && <p className="text-[11px] font-bold text-rose-600">{error}</p>}
     </div>
   );

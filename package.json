@@ -9,10 +9,12 @@
     "lint": "next lint",
     "db:seed": "tsx scripts/seed.ts",
     "db:import-legacy": "tsx scripts/import-legacy.ts",
-    "db:lock-seats": "tsx scripts/lock-seats.ts"
+    "db:lock-seats": "tsx scripts/lock-seats.ts",
+    "media:to-r2": "tsx scripts/media-to-r2.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "aws4fetch": "^1.0.20",
     "bcryptjs": "^2.4.3",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",

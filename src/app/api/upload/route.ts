@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { ok, fail, handle, limit } from "@/lib/api";
+import { Types } from "mongoose";
+import { r2Enabled, r2Put, r2PublicUrl, mediaKey } from "@/lib/r2";
 
 const MAX_BYTES = 3 * 1024 * 1024;
 
@@ -27,6 +29,12 @@ export const POST = handle(async (req: NextRequest) => {
   const type = sniff(buf);
   if (!type) return fail("Only PNG, JPEG, WEBP or GIF images are allowed", 415);
 
+  // Images go to Cloudflare R2 when it is configured; MongoDB is only the fallback.
+  if (r2Enabled()) {
+    const key = mediaKey(new Types.ObjectId().toHexString());
+    await r2Put(key, new Uint8Array(buf), type);
+    return ok({ url: r2PublicUrl(key) }, 201);
+  }
   const id = await db.saveMedia(buf, type, (file.name || "image").slice(0, 120), session.id);
   return ok({ url: `/api/media/${id}` }, 201);
 });
