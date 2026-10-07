@@ -2,6 +2,22 @@ import { z } from "zod";
 
 // ---------- Shared field types ----------
 
+const FB_HOSTS = /(^|\.)(facebook\.com|fb\.com|fb\.watch|fb\.me)$/i;
+
+/** A Facebook post link (facebook.com, fb.com, fb.watch, fb.me). */
+export const facebookPostLink = z
+  .string({ required_error: "Paste the Facebook post link (facebook.com/…)" })
+  .trim()
+  .max(500)
+  .refine((v) => {
+    try {
+      const u = new URL(v);
+      return /^https?:$/.test(u.protocol) && FB_HOSTS.test(u.hostname);
+    } catch {
+      return false;
+    }
+  }, "Paste the Facebook post link (facebook.com/…)");
+
 const trimmed = (max: number) => z.string().trim().max(max);
 
 /** Image: empty, site-relative path (e.g. uploaded /api/media/..), or http(s) URL. */

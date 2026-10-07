@@ -19,7 +19,7 @@ import {
 import { formatCurrency, getFormColor, formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
 import { PLAYER_POSITIONS, PLAY_STYLES, DEVICE_MODELS } from "@/lib/constants";
 import { ImageInput } from "@/components/ui/ImageInput";
-import { toast, confirmDialog } from "@/lib/feedback";
+import { toast, confirmDialog, postLinkDialog } from "@/lib/feedback";
 import { LocationInput } from "@/components/ui/LocationInput";
 import { noClubLabel, ratingText } from "@/lib/squad";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -162,9 +162,11 @@ function Overview({ data, reload }: { data: any; reload: () => void }) {
 
   // Only a club's main manager can register the club for a tournament.
   const join = async (slug: string) => {
+    const postLink = await postLinkDialog({ title: `Register ${managedClub?.name || "your club"}`, text: "Post your registration on Facebook, then paste the post link here. An admin checks it before approving." });
+    if (!postLink) return;
     setJoining(slug);
     try {
-      const res = await fetch(`/api/tournaments/${slug}/join`, { method: "POST" });
+      const res = await fetch(`/api/tournaments/${slug}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postLink }) });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message);
       toast.success("Registration sent — waiting for admin approval");

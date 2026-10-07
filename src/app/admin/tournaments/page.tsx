@@ -194,6 +194,11 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
                     {isClub ? `${p.username} · ${p.managerName || "no manager"} · ${p.email || "—"}` : `@${p.username} · ${p.email} · UID ${p.konamiId || "—"}`}
                   </div>
                 </div>
+{p.fbPostLink && (
+                  <a href={p.fbPostLink} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 shrink-0">
+                    <ExternalLink className="w-3.5 h-3.5" /> Facebook post
+                  </a>
+                )}
                 <Badge tone={statusTone(p.status === "REMOVED" ? "REVOKED" : p.status === "PENDING" ? "PENDING" : "ACTIVE")}>{p.status === "CONFIRMED" && isClub ? "APPROVED" : p.status}</Badge>
                 {p.status === "PENDING" ? (
                   <>

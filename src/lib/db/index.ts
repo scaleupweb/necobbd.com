@@ -1156,15 +1156,15 @@ export const db = {
     return true;
   },
 
-  async joinTournament(slugOrId: string, userId: string) {
+  async joinTournament(slugOrId: string, userId: string, postLink: string) {
     await connectDB();
     const t = await Tournament.findOne(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId });
     if (!t || t.status === "DRAFT") throw new ServiceError("Tournament not found", 404);
     // Tournaments are club competitions: only a club's main manager can register the club.
-    return db._joinTournamentAsClub(t, userId);
+    return db._joinTournamentAsClub(t, userId, postLink);
   },
 
-  async _joinTournamentAsClub(t: any, userId: string) {
+  async _joinTournamentAsClub(t: any, userId: string, postLink: string) {
     const club = await db.getMainManagedClub(userId);
     if (!club) throw new ServiceError("Only a club's main manager can register the club for a tournament.", 403);
     if (club.status !== "ACTIVE") throw new ServiceError("Your club is not active yet", 403);
@@ -1179,7 +1179,7 @@ export const db = {
     // Entries wait for an admin: PENDING holds the spot, approval makes it CONFIRMED.
     const res = await Tournament.updateOne(
       { _id: t._id, "clubParticipants.clubId": { $ne: club._id } },
-      { $push: { clubParticipants: { clubId: club._id, registeredBy: userId, joinedAt: new Date(), status: "PENDING", paymentType: "free" } } }
+      { $push: { clubParticipants: { clubId: club._id, registeredBy: userId, joinedAt: new Date(), status: "PENDING", paymentType: "free", fbPostLink: postLink } } }
     );
     if (!res.modifiedCount) throw new ServiceError("Could not register the club", 409);
     await db.notify(userId, "Registration submitted", `${club.name}'s registration for ${t.name} is waiting for admin approval.`, "/dashboard/my-club");
@@ -1430,6 +1430,7 @@ export const db = {
           tournament: t.name,
           tournamentSlug: t.slug,
           clubId: String(c.clubId),
+          fbPostLink: c.fbPostLink || "",
           club: club ? clubMini(club) : null,
           joinedAt: new Date(c.joinedAt).toISOString(),
         };

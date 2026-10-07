@@ -24,6 +24,7 @@ import {
   Loader2,
   Check,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { api, Badge, Empty, Notice, statusTone } from "@/components/admin/ui";
 import { formatDate, formatTime, formatRelativeTime } from "@/lib/utils";
@@ -487,6 +488,13 @@ function PendingEntryRow({ entry: e, onDone }: { entry: any; onDone: () => void 
           <Link href={`/tournaments/${e.tournamentSlug}`} target="_blank" className="hover:underline">{e.tournament}</Link> · {formatRelativeTime(e.joinedAt)}
         </div>
       </div>
+      {e.fbPostLink ? (
+        <a href={e.fbPostLink} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100">
+          <ExternalLink className="w-3.5 h-3.5" /> Post
+        </a>
+      ) : (
+        <span className="text-[10px] text-rose-600 font-bold">No post link</span>
+      )}
       <button onClick={() => act("APPROVE")} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50">
         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Approve
       </button>

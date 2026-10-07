@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, Hourglass, Trophy, CheckCircle2, Clock, CalendarDays, Crown, UserCog, Download, Phone, Smartphone, Facebook } from "lucide-react";
 import { DEVICE_MODELS } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { toast, confirmDialog, infoDialog } from "@/lib/feedback";
+import { toast, confirmDialog, infoDialog, postLinkDialog } from "@/lib/feedback";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { LocationInput } from "@/components/ui/LocationInput";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -911,16 +911,17 @@ export function TournamentRegistration() {
   }, [club.id]);
 
   const act = async (t: any, entered: boolean) => {
-    const yes = await confirmDialog({
-      title: entered ? `Withdraw ${club.name} from ${t.name}?` : `Register ${club.name} for ${t.name}?`,
-      text: entered ? "You can register again while registration is open." : undefined,
-      confirmText: entered ? "Withdraw" : "Register club",
-      danger: entered,
-    });
-    if (!yes) return;
+    let postLink: string | null = null;
+    if (entered) {
+      const yes = await confirmDialog({ title: `Withdraw ${club.name} from ${t.name}?`, text: "You can register again while registration is open.", confirmText: "Withdraw", danger: true });
+      if (!yes) return;
+    } else {
+      postLink = await postLinkDialog({ title: `Register ${club.name} for ${t.name}`, text: "Post your registration on Facebook, then paste the post link here. An admin checks it before approving." });
+      if (!postLink) return;
+    }
     setBusy(t.id);
     try {
-      const res = await fetch(`/api/tournaments/${t.slug}/join`, { method: entered ? "DELETE" : "POST" });
+      const res = await fetch(`/api/tournaments/${t.slug}/join`, entered ? { method: "DELETE" } : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postLink }) });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message || "Request failed");
       toast.success(entered ? "Registration withdrawn" : `Registration sent — waiting for admin approval`);

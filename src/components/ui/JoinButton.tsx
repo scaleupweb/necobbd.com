@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, CheckCircle2, ShieldAlert, Clock } from "lucide-react";
-import { toast, confirmDialog } from "@/lib/feedback";
+import { toast, confirmDialog, postLinkDialog } from "@/lib/feedback";
 
 /**
  * Join/leave button for tournaments and events. `endpoint` is the
@@ -78,9 +78,15 @@ export function JoinButton({
       });
       if (!ok) return;
     }
+    let body: string | undefined;
+    if (method === "POST" && clubOnly) {
+      const postLink = await postLinkDialog({ title: `Register ${me.managedClub?.name || "your club"}`, text: "Post your registration on Facebook, then paste the post link here. An admin checks it before approving." });
+      if (!postLink) return;
+      body = JSON.stringify({ postLink });
+    }
     setBusy(true);
     try {
-      const res = await fetch(endpoint, { method });
+      const res = await fetch(endpoint, { method, ...(body ? { headers: { "Content-Type": "application/json" }, body } : {}) });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message || "Request failed");
       setJoined(method === "POST");

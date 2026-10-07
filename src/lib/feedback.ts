@@ -60,6 +60,23 @@ export async function promptDialog(opts: { title: string; text?: string; value?:
   return res.isConfirmed ? String(res.value) : null;
 }
 
+const FB_LINK = /^https?:\/\/([a-z0-9-]+\.)*(facebook\.com|fb\.com|fb\.watch|fb\.me)\//i;
+
+/** Ask a club for its Facebook registration post before applying. Resolves the link, or null when cancelled. */
+export async function postLinkDialog(opts: { title: string; text?: string; confirmText?: string }) {
+  const res = await Swal.fire({
+    ...base,
+    title: opts.title,
+    text: opts.text,
+    input: "url",
+    inputPlaceholder: "https://facebook.com/…",
+    showCancelButton: true,
+    confirmButtonText: opts.confirmText || "Submit registration",
+    inputValidator: (v: string) => (FB_LINK.test(String(v).trim()) ? undefined : "Paste the Facebook post link (facebook.com/…)"),
+  });
+  return res.isConfirmed ? String(res.value).trim() : null;
+}
+
 /** Show a message that needs acknowledging (e.g. a one-time password). */
 export async function infoDialog(opts: { title: string; text?: string; html?: string; icon?: "success" | "info" | "warning" | "error" }) {
   await Swal.fire({ ...base, icon: opts.icon || "info", iconColor: opts.icon === "success" ? "#10B981" : undefined, title: opts.title, text: opts.text, html: opts.html, confirmButtonText: "OK" });

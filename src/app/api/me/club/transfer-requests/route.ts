@@ -3,25 +3,13 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { ok, fail, handle, parseBody, audit, limit } from "@/lib/api";
-
-const FB_HOSTS = /(^|\.)(facebook\.com|fb\.com|fb\.watch|fb\.me)$/i;
+import { facebookPostLink } from "@/lib/validation";
 
 const Schema = z.object({
   playerId: z.string().regex(/^[a-f0-9]{24}$/i, "Pick a player"),
   squad: z.string().min(1).max(20),
   seat: z.coerce.number().int(),
-  postLink: z
-    .string()
-    .trim()
-    .max(500)
-    .refine((v) => {
-      try {
-        const u = new URL(v);
-        return /^https?:$/.test(u.protocol) && FB_HOSTS.test(u.hostname);
-      } catch {
-        return false;
-      }
-    }, "Paste the Facebook post link (facebook.com/…)"),
+  postLink: facebookPostLink,
 });
 
 async function clubFor(userId: string) {
