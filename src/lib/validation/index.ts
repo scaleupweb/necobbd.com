@@ -25,7 +25,9 @@ export const imageUrl = z
   .string()
   .trim()
   .max(2000)
-  .refine((v) => v === "" || (v.startsWith("/") && !v.startsWith("//")) || /^https?:\/\//i.test(v), "Must be an uploaded image or an http(s) URL");
+  .refine((v) => v === "" || (v.startsWith("/") && !v.startsWith("//")) || /^https?:\/\//i.test(v), "Must be an uploaded image or an http(s) URL")
+  // Google Drive "view" links open a web page, not the image itself, so they show as broken.
+  .refine((v) => !/^https?:\/\/(drive|docs)\.google\.com\//i.test(v), "Google Drive links don't work as images — download the image and upload it instead");
 
 /** Link target: empty, relative path, anchor, http(s) or mailto. Blocks javascript: etc. */
 export const safeLink = z

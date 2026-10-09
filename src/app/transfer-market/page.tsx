@@ -304,14 +304,14 @@ function Moves({ feed }: { feed: any[] }) {
                     <ClubMark c={m.from} dim />
                     <div className="min-w-0">
                       <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">From</div>
-                      <div className="text-xs font-bold text-slate-600 truncate">{clubName(m.from)}</div>
+                      <div className="text-xs font-bold text-slate-600 line-clamp-2 break-words leading-tight">{clubName(m.from)}</div>
                     </div>
                   </div>
                   <ArrowRight className={`w-4 h-4 shrink-0 ${out ? "text-rose-400" : "text-[#C79A3B]"}`} />
                   <div className="flex items-center gap-2 min-w-0 flex-1 justify-end text-right">
                     <div className="min-w-0">
                       <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">To</div>
-                      <div className="text-xs font-black text-slate-950 truncate">{clubName(m.to)}</div>
+                      <div className="text-xs font-black text-slate-950 line-clamp-2 break-words leading-tight">{clubName(m.to)}</div>
                     </div>
                     <ClubMark c={m.to} />
                   </div>

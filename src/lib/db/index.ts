@@ -466,7 +466,8 @@ export const db = {
         q.$or.push({ phone: r });
       }
     }
-    const list = await Player.find(q).sort({ rating: -1 }).limit(filter.limit || 1000).lean();
+    // High enough that new players are never silently cut from lists; pagination can come later.
+    const list = await Player.find(q).sort({ rating: -1 }).limit(filter.limit || 10000).lean();
     const clubs = await clubMap(list.map((p: any) => p.clubId));
     return list.map((p: any) => shapePlayer(p, clubs));
   },
