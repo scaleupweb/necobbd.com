@@ -78,6 +78,8 @@ export interface SiteSettings {
     aboutTitle: string;
     aboutIntro: string;
     rulesContent: string;
+    /** Rulebook written in the admin rich-text editor (sanitised HTML). Wins over rulesContent. */
+    rulesHtml: string;
   };
 }
 
@@ -167,6 +169,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     aboutIntro:
       "We organise competitive eFootball in Bangladesh — tournaments, club leagues, rankings, and a fair-play framework run by certified match officials.",
     rulesContent: "",
+    rulesHtml: "",
   },
 };
 

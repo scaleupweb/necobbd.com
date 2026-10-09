@@ -5,11 +5,15 @@ import { requireRole, ADMIN_ONLY, TOURNAMENT_STAFF } from "@/lib/auth";
 import { DEFAULT_SITE_SETTINGS, mergeSettings, SiteSettings } from "@/lib/site-settings";
 import { imageUrl, safeLink } from "@/lib/validation";
 import { ok, fail, handle, audit } from "@/lib/api";
+import { sanitizeRichText, isRichTextEmpty } from "@/lib/rich-text";
 
 export const dynamic = "force-dynamic";
 
 const IMAGE_KEYS = new Set(["image", "logoUrl", "promoImage"]);
 const LINK_KEYS = /(Href|^facebook$|^x$|^youtube$|^instagram$|^discord$)$/;
+
+/** Rich-text (HTML) fields: longer limit, sanitised before saving. */
+const RICH_KEYS = new Set(["rulesHtml"]);
 
 /** Validates every string: max length, and image/link fields must be safe URLs. */
 function validate(obj: any, path: string[] = []): string | null {
@@ -19,7 +23,7 @@ function validate(obj: any, path: string[] = []): string | null {
       const e = validate(v, p);
       if (e) return e;
     } else if (typeof v === "string") {
-      if (v.length > 10000) return `${p.join(".")} is too long`;
+      if (v.length > (RICH_KEYS.has(k) ? 300000 : 10000)) return `${p.join(".")} is too long`;
       if (IMAGE_KEYS.has(k) && !imageUrl.safeParse(v).success) return `${p.join(".")} must be an uploaded image or http(s) URL`;
       if (LINK_KEYS.test(k) && !safeLink.safeParse(v).success) return `${p.join(".")} is not a valid link`;
     }
@@ -45,6 +49,8 @@ export const PUT = handle(async (req: NextRequest) => {
   const incoming: SiteSettings = isAdmin
     ? mergeSettings(DEFAULT_SITE_SETTINGS, body)
     : { ...current, countdown: mergeSettings(DEFAULT_SITE_SETTINGS.countdown, body?.countdown) };
+
+  if (incoming.pages) incoming.pages.rulesHtml = isRichTextEmpty(incoming.pages.rulesHtml) ? "" : sanitizeRichText(incoming.pages.rulesHtml);
 
   const err = validate(incoming);
   if (err) return fail(err, 400, "VALIDATION_ERROR");

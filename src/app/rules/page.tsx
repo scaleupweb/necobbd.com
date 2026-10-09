@@ -3,12 +3,15 @@ import { Scale, ShieldCheck, Swords, AlertTriangle } from "lucide-react";
 import { getSiteSettings } from "@/lib/settings";
 import { RANKING_FORMULA_CONFIG } from "@/lib/constants";
 import { SQUAD_LIMIT, CONTRACT_DAYS, FREEZE_DAYS } from "@/lib/squad";
+import { sanitizeRichText, isRichTextEmpty } from "@/lib/rich-text";
 
 export const dynamic = "force-dynamic";
 
 export default async function RulesPage() {
   const { pages, brand } = await getSiteSettings();
-  const custom = pages.rulesContent.trim();
+  // Rulebook from the admin rich-text editor; older plain-text rules are the fallback.
+  const html = isRichTextEmpty(pages.rulesHtml || "") ? "" : sanitizeRichText(pages.rulesHtml);
+  const custom = html ? "" : pages.rulesContent.trim();
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
@@ -27,6 +30,12 @@ export default async function RulesPage() {
         </p>
       </div>
 
+      {html && (
+        <div className="p-5 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-sm">
+          <div className="rich-content text-sm sm:text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+      )}
+
       {custom && (
         <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-sm text-slate-700 text-sm leading-relaxed space-y-4">
           {custom.split(/\n{2,}/).map((para, i) => (
@@ -36,7 +45,7 @@ export default async function RulesPage() {
       )}
 
       {/* Rules Sections (default rulebook, shown until the admin writes their own) */}
-      {!custom && (
+      {!custom && !html && (
       <div className="space-y-6 text-slate-700 text-xs sm:text-sm leading-relaxed">
         
         {/* Section 1 */}

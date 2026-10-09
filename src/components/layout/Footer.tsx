@@ -30,7 +30,6 @@ export function Footer({ brand, footer }: FooterProps) {
   const companyLinks = [
     { label: "About Us", href: "/about" },
     { label: "News", href: "/news" },
-    { label: "Events", href: "/events" },
     { label: "Partners", href: "/partners" },
     { label: "Rules", href: "/rules" },
     { label: "Contact", href: "/about" },
@@ -40,7 +39,6 @@ export function Footer({ brand, footer }: FooterProps) {
     { label: "Privacy Policy", href: "/rules" },
     { label: "Terms of Service", href: "/rules" },
     { label: "Competition Rules", href: "/rules" },
-    { label: "Disciplinary Rules", href: "/disciplinary" },
     { label: "Cookie Policy", href: "/rules" },
   ];
 

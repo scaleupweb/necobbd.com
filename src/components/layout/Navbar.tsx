@@ -18,7 +18,6 @@ import {
   Flame,
   Scale,
   Newspaper,
-  Calendar,
   LogOut,
   LayoutDashboard,
   ShieldAlert,
@@ -57,6 +56,7 @@ export function Navbar({
     { label: "Rankings", href: "/rankings" },
     { label: "Transfer Market", href: "/transfer-market" },
     { label: "News", href: "/news" },
+    { label: "Rules", href: "/rules" },
   ];
 
   const drawerAllLinks = [
@@ -68,20 +68,17 @@ export function Navbar({
     { label: "Rankings", href: "/rankings", icon: Flame },
     { label: "Transfer Market", href: "/transfer-market", icon: Sparkles },
     { label: "News", href: "/news", icon: Newspaper },
-    { label: "Events", href: "/events", icon: Calendar },
-    { label: "Referees", href: "/referees", icon: Scale },
+    { label: "Rules", href: "/rules", icon: Scale },
     { label: "Partners", href: "/partners", icon: Handshake },
     { label: "About", href: "/about", icon: InfoIcon },
   ];
 
+  // Events, match officials and the disciplinary tribunal are hidden while they have no
+  // content; their pages still exist and can be linked again once they are used.
   const moreLinks = [
-    { label: "LAN & Online Events", href: "/events" },
-    { label: "Match Officials", href: "/referees" },
-    { label: "Disciplinary Tribunal", href: "/disciplinary" },
-    { label: "Official Rulebook", href: "/rules" },
     { label: "Activity Feed", href: "/activity" },
     { label: "Partners & Sponsors", href: "/partners" },
-    { label: "About NEXA / eFCOB", href: "/about" },
+    { label: "About Us", href: "/about" },
   ];
 
   useEffect(() => {

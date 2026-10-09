@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Save, Loader2, ExternalLink, Eye, EyeOff, Palette, Image as ImageIcon, LayoutGrid, Megaphone, Bell, PanelBottom, FileText, Undo2, MonitorPlay } from "lucide-react";
 import { SitePreview } from "@/components/admin/SitePreview";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { api, Button, Field, inputCls, Notice, PageHeader, Toggle } from "@/components/admin/ui";
 import { ImageInput } from "@/components/ui/ImageInput";
 import { MailTestButton } from "@/components/admin/MailTestButton";
@@ -295,11 +296,16 @@ export default function SiteContentPage() {
             {text("pages.aboutTitle", "About page title")}
             <div />
             {text("pages.aboutIntro", "About page introduction", { area: true })}
-            {text("pages.rulesContent", "Rulebook content", {
-              area: true,
-              full: true,
-              hint: "Leave empty to show the built-in rulebook. Separate paragraphs with a blank line.",
-            })}
+            <div className="sm:col-span-2 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="block text-slate-700 font-bold text-xs">Rulebook</span>
+                <a href="/rules" target="_blank" rel="noreferrer" className="text-[11px] font-bold text-slate-500 hover:text-black underline">View rules page</a>
+              </div>
+              <RichTextEditor value={s.pages.rulesHtml || ""} onChange={(html) => set("pages.rulesHtml", html)} placeholder="Write the official rules… use headings, colours, lists and images." />
+              <span className="block text-[10px] text-slate-400">
+                Shown on the public Rules page. Leave it empty to show the built-in rulebook{s.pages.rulesContent?.trim() ? " (or the older plain-text rules)" : ""}. Click Save changes when done.
+              </span>
+            </div>
           </div>
         )}
         </div>
