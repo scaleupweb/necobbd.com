@@ -24,6 +24,7 @@ import {
   Timer,
   Newspaper,
   Handshake,
+  Mail,
 } from "lucide-react";
 
 type Item = { label: string; href: string; icon: any; roles?: string[] };
@@ -62,6 +63,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { label: "Users & Roles", href: "/admin/users", icon: UserCog, roles: ADMIN },
       { label: "Players", href: "/admin/players", icon: Users, roles: ["SUPER_ADMIN", "ADMIN", "MODERATOR"] },
       { label: "Clubs", href: "/admin/clubs", icon: Shield, roles: ADMIN },
+      { label: "Email Clubs", href: "/admin/club-mail", icon: Mail, roles: ADMIN },
       { label: "Match Officials", href: "/admin/referees", icon: Scale, roles: ADMIN },
     ],
   },

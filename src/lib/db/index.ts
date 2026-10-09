@@ -2327,6 +2327,24 @@ export const db = {
     return n ? { ...plain<any>(n), featuredImage: n.featuredImage || PLACEHOLDER.news, publishedDate: new Date(n.publishedDate).toISOString() } : null;
   },
 
+  /** Every club with the addresses an admin message can go to: the club's own email and its main manager's account email. */
+  async getClubMailingList() {
+    await connectDB();
+    const clubs = await Club.find({}, { name: 1, shortName: 1, slug: 1, logo: 1, status: 1, email: 1, managerId: 1 }).sort({ name: 1 }).lean<any[]>();
+    const managers = await User.find({ _id: { $in: clubs.map((c) => c.managerId).filter(Boolean) } }, { email: 1, fullName: 1 }).lean<any[]>();
+    const mm = new Map(managers.map((m) => [String(m._id), m]));
+    return clubs.map((c) => {
+      const m: any = c.managerId ? mm.get(String(c.managerId)) : null;
+      return {
+        ...clubMini(c)!,
+        status: c.status,
+        clubEmail: (c.email || "").trim().toLowerCase(),
+        managerEmail: (m?.email || "").trim().toLowerCase(),
+        managerName: m?.fullName || "",
+      };
+    });
+  },
+
   async getLeadership() {
     await connectDB();
     const list = await Leader.find({}).sort({ order: 1, createdAt: 1 }).lean();
