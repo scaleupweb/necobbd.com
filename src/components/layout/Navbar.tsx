@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { NotificationBell } from "./NotificationBell";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -25,7 +26,6 @@ import {
   Sparkles,
   Info as InfoIcon,
   Handshake,
-  Bell,
 } from "lucide-react";
 import { CommandSearch } from "./CommandSearch";
 import { SocialIcons, Socials } from "./SocialIcons";
@@ -228,21 +228,7 @@ export function Navbar({
               <Search className="w-4 h-4" />
             </button>
 
-            {user && (
-              <Link
-                href="/notifications"
-                className="relative hidden sm:flex items-center justify-center w-9 h-9 rounded-lg text-[#5F6368] hover:text-[#111111] hover:bg-[#F7F8FA] transition-colors"
-                title="Notifications"
-                aria-label="Notifications"
-              >
-                <Bell className="w-4 h-4" />
-                {user.unreadNotifications > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center">
-                    {user.unreadNotifications > 9 ? "9+" : user.unreadNotifications}
-                  </span>
-                )}
-              </Link>
-            )}
+            {user && <NotificationBell unread={user.unreadNotifications || 0} onRead={() => setUser((u: any) => (u ? { ...u, unreadNotifications: 0 } : u))} />}
 
             {/* Desktop Auth or Profile Dropdown */}
             {user ? (
