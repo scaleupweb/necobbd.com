@@ -35,10 +35,21 @@ export const r2PublicUrl = (key: string) => `${env().publicUrl}/${key}`;
 
 export async function r2Put(key: string, body: Uint8Array, contentType: string) {
   const { client, url } = r2();
-  const res = await client.fetch(url(key), {
+  // Sign first, then send ourselves with an explicit Content-Length: inside Next.js
+  // route handlers the request body can otherwise go out chunked, which R2 rejects
+  // with 411 MissingContentLength.
+  const signed = await client.sign(url(key), {
     method: "PUT",
     body: body as unknown as BodyInit,
     headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" },
+  });
+  const headers = new Headers(signed.headers);
+  headers.set("Content-Length", String(body.byteLength));
+  const res = await fetch(signed.url, {
+    method: "PUT",
+    headers,
+    body: Buffer.from(body.buffer, body.byteOffset, body.byteLength) as unknown as BodyInit,
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`R2 upload failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
 }
