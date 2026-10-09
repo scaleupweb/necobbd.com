@@ -293,9 +293,25 @@ export default function SiteContentPage() {
 
         {tab === "pages" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {text("pages.aboutTitle", "About page title")}
+            <div className="sm:col-span-2 text-xs font-black text-slate-950 uppercase tracking-wider">About Us page</div>
+            {text("pages.aboutTitle", "Page title")}
             <div />
-            {text("pages.aboutIntro", "About page introduction", { area: true })}
+            {text("pages.aboutIntro", "Short introduction (under the title)", { area: true })}
+            <div className="sm:col-span-2 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="block text-slate-700 font-bold text-xs">About content</span>
+                <a href="/about" target="_blank" rel="noreferrer" className="text-[11px] font-bold text-slate-500 hover:text-black underline">View About page</a>
+              </div>
+              <RichTextEditor value={s.pages.aboutHtml || ""} onChange={(html) => set("pages.aboutHtml", html)} placeholder="Tell visitors about NECOB — your story, mission, history… use headings, colours and images." />
+              <span className="block text-[10px] text-slate-400">Shown on the About page under the introduction. Leave empty to hide this section.</span>
+            </div>
+            {text("pages.teamTitle", "Management team heading")}
+            {text("pages.teamSubtitle", "Management team sub-heading")}
+            <div className="sm:col-span-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+              Add or edit team members (photo, name, role, group) in{" "}
+              <a href="/admin/partners?tab=leaders" className="font-bold underline">Partners &amp; Team → Management team</a>. Members with the same Group are shown together; lower Sort order comes first.
+            </div>
+            <div className="sm:col-span-2 pt-3 border-t border-slate-100 text-xs font-black text-slate-950 uppercase tracking-wider">Rules page</div>
             <div className="sm:col-span-2 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="block text-slate-700 font-bold text-xs">Rulebook</span>

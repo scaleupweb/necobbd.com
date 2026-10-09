@@ -77,6 +77,11 @@ export interface SiteSettings {
   pages: {
     aboutTitle: string;
     aboutIntro: string;
+    /** Main About page text from the admin rich-text editor (sanitised HTML). */
+    aboutHtml: string;
+    /** Heading and line above the management team on the About page. */
+    teamTitle: string;
+    teamSubtitle: string;
     rulesContent: string;
     /** Rulebook written in the admin rich-text editor (sanitised HTML). Wins over rulesContent. */
     rulesHtml: string;
@@ -168,6 +173,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     aboutTitle: "About Us",
     aboutIntro:
       "We organise competitive eFootball in Bangladesh — tournaments, club leagues, rankings, and a fair-play framework run by certified match officials.",
+    aboutHtml: "",
+    teamTitle: "Our Management Team",
+    teamSubtitle: "The people who run NECOB and keep every match fair.",
     rulesContent: "",
     rulesHtml: "",
   },

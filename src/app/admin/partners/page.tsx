@@ -76,7 +76,7 @@ function HomeSwitch({ resource, row, reload }: { resource: "partners" | "sponsor
 const TABS = [
   ["partners", "Partners"],
   ["sponsors", "Sponsors"],
-  ["leaders", "Leadership team"],
+  ["leaders", "Management team"],
 ] as const;
 
 const Logo = ({ src }: { src?: string }) => (
@@ -86,10 +86,15 @@ const Logo = ({ src }: { src?: string }) => (
 
 export default function AdminPartnersPage() {
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("partners");
+  // Links like /admin/partners?tab=leaders open a specific tab.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && TABS.some(([k]) => k === t)) setTab(t as (typeof TABS)[number][0]);
+  }, []);
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {TABS.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-3.5 py-2 rounded-xl text-xs font-bold ${tab === k ? "bg-black text-white" : "bg-white border border-slate-200"}`}>
             {l}
@@ -154,22 +159,24 @@ export default function AdminPartnersPage() {
         <ResourceManager
           key="leaders"
           resource="leaders"
-          title="Leadership team"
+          title="Management team"
           singular="member"
-          subtitle="Shown on the About page."
+          subtitle="Everyone who runs the platform, shown on the About page with their photo and role."
+          searchKeys={["name", "role", "category"]}
           fields={[
             { name: "name", label: "Name", type: "text", required: true },
-            { name: "role", label: "Role / title", type: "text" },
-            { name: "category", label: "Group", type: "text", default: "Core Team" },
+            { name: "role", label: "Role / title", type: "text", placeholder: "e.g. Founder & President", hint: "Shown under the name" },
+            { name: "category", label: "Group", type: "text", default: "Core Team", hint: "Members with the same group appear together, e.g. Founders, Core Team, Moderators" },
             { name: "period", label: "Period", type: "text", placeholder: "2024 – Present" },
-            { name: "facebook", label: "Facebook URL", type: "text" },
-            { name: "order", label: "Sort order", type: "number", default: 0 },
+            { name: "facebook", label: "Facebook URL", type: "text", placeholder: "https://facebook.com/…" },
+            { name: "order", label: "Sort order", type: "number", default: 0, hint: "Lower numbers come first" },
             { name: "photo", label: "Photo", type: "image" },
-            { name: "bio", label: "Short bio", type: "textarea" },
+            { name: "bio", label: "Short bio", type: "textarea", placeholder: "One or two lines about this person" },
           ]}
           columns={[
             { label: "Member", render: (r) => <div className="flex items-center gap-2"><Logo src={r.photo} /><span className="font-bold">{r.name}</span></div> },
-            { label: "Role", render: (r) => r.role },
+            { label: "Role", render: (r) => r.role || "—" },
+            { label: "Group", render: (r) => r.category || "—" },
             { label: "Order", render: (r) => r.order },
           ]}
         />

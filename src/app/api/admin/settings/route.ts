@@ -13,7 +13,7 @@ const IMAGE_KEYS = new Set(["image", "logoUrl", "promoImage"]);
 const LINK_KEYS = /(Href|^facebook$|^x$|^youtube$|^instagram$|^discord$)$/;
 
 /** Rich-text (HTML) fields: longer limit, sanitised before saving. */
-const RICH_KEYS = new Set(["rulesHtml"]);
+const RICH_KEYS = new Set(["rulesHtml", "aboutHtml"]);
 
 /** Validates every string: max length, and image/link fields must be safe URLs. */
 function validate(obj: any, path: string[] = []): string | null {
@@ -50,7 +50,12 @@ export const PUT = handle(async (req: NextRequest) => {
     ? mergeSettings(DEFAULT_SITE_SETTINGS, body)
     : { ...current, countdown: mergeSettings(DEFAULT_SITE_SETTINGS.countdown, body?.countdown) };
 
-  if (incoming.pages) incoming.pages.rulesHtml = isRichTextEmpty(incoming.pages.rulesHtml) ? "" : sanitizeRichText(incoming.pages.rulesHtml);
+  if (incoming.pages) {
+    for (const k of RICH_KEYS) {
+      const v = (incoming.pages as any)[k] || "";
+      (incoming.pages as any)[k] = isRichTextEmpty(v) ? "" : sanitizeRichText(v);
+    }
+  }
 
   const err = validate(incoming);
   if (err) return fail(err, 400, "VALIDATION_ERROR");
