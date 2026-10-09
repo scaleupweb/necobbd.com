@@ -370,7 +370,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
             <Title icon={Users} title="Main Team Squad" subtitle={`${squad.length} of ${SQUAD_LIMIT} seats filled`} />
             <SquadCapacity count={squad.length} className="mb-4 rounded-2xl bg-white border border-slate-200 p-4" />
             {squad.length ? (
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {squad.map((p: any) => (
                   <SquadCard key={p.id} p={p} captain={extras?.captain?.username === p.username} />
                 ))}
