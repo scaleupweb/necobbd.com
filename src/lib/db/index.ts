@@ -1,0 +1,2642 @@
+import "server-only";
+import { Types } from "mongoose";
+import { connectDB } from "./mongo";
+import {
+  User,
+  Player,
+  Club,
+  Tournament,
+  Fixture,
+  Referee,
+  TransferListing,
+  TransferRequest,
+  TransferHistory,
+  Disciplinary,
+  Activity,
+  AuditLog,
+  Notification,
+  News,
+  Event,
+  Partner,
+  Sponsor,
+  Leader,
+  Setting,
+  Media,
+} from "./models";
+import { plain, isId, slugify, escapeRegex, PLACEHOLDER } from "./serialize";
+import { calculateNewRating, updateFormHistory } from "../ranking/engine";
+import { calculatePlayerMarketValue } from "../valuation/engine";
+import { DEFAULT_SITE_SETTINGS, mergeSettings, SiteSettings } from "../site-settings";
+import { clubLogo } from "../crest";
+import { SQUAD_LIMIT, CONTRACT_DAYS, FREEZE_DAYS, SQUADS, seatLayout, isFrozen } from "../squad";
+
+export { isId, slugify };
+
+export class ServiceError extends Error {
+  status: number;
+  code: string;
+  constructor(message: string, status = 400, code = "BAD_REQUEST") {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+const oid = (id: string) => new Types.ObjectId(id);
+
+async function uniqueSlug(model: any, base: string, excludeId?: string): Promise<string> {
+  const root = slugify(base);
+  let slug = root;
+  let n = 1;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const q: any = { slug };
+    if (excludeId) q._id = { $ne: excludeId };
+    const exists = await model.exists(q);
+    if (!exists) return slug;
+    n += 1;
+    slug = `${root}-${n}`;
+  }
+}
+
+function formArray(s?: string): string[] {
+  return s ? s.split(",").filter(Boolean) : [];
+}
+
+function winRate(wins: number, played: number) {
+  return played > 0 ? Math.round((wins / played) * 1000) / 10 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Shapers
+// ---------------------------------------------------------------------------
+
+type ClubMini = { id: string; name: string; shortName: string; slug: string; logo: string };
+
+function clubMini(c: any): ClubMini | undefined {
+  if (!c) return undefined;
+  return { id: String(c._id), name: c.name, shortName: c.shortName, slug: c.slug, logo: clubLogo(c) };
+}
+
+async function clubMap(ids?: any[]): Promise<Map<string, any>> {
+  const q = ids ? { _id: { $in: ids.filter(Boolean) } } : {};
+  const clubs = await Club.find(q).lean();
+  return new Map(clubs.map((c: any) => [String(c._id), c]));
+}
+
+function shapePlayer(p: any, clubs: Map<string, any>) {
+  const s = p.stats || {};
+  const club = p.clubId ? clubs.get(String(p.clubId)) : undefined;
+  const endDate = p.contract?.endDate ? new Date(p.contract.endDate) : undefined;
+  const out = plain<any>(p);
+  return {
+    ...out,
+    avatar: p.avatar || PLACEHOLDER.avatar,
+    clubId: p.clubId ? String(p.clubId) : undefined,
+    form: formArray(p.formHistory),
+    club: clubMini(club),
+    stats: {
+      matchesPlayed: s.matchesPlayed || 0,
+      wins: s.wins || 0,
+      draws: s.draws || 0,
+      losses: s.losses || 0,
+      winRate: winRate(s.wins || 0, s.matchesPlayed || 0),
+      goalsScored: s.goalsScored || 0,
+      goalsConceded: s.goalsConceded || 0,
+      assists: s.assists || 0,
+      cleanSheets: s.cleanSheets || 0,
+      points: s.points || 0,
+    },
+    contract: {
+      status: p.contract?.status || "FREE_AGENT",
+      durationMonths: p.contract?.durationMonths || 0,
+      startDate: p.contract?.startDate ? new Date(p.contract.startDate).toISOString() : undefined,
+      endDate: endDate?.toISOString(),
+      daysRemaining: endDate ? Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / 86400000)) : 0,
+    },
+  };
+}
+
+export const MAX_CLUB_STAFF = 10;
+
+let lastContractSweep = 0;
+
+/** Throws when the club's Main Team Squad already has SQUAD_LIMIT players (ignoring `playerId`). */
+async function assertSquadSpace(clubId: any, playerId?: any) {
+  if (!clubId || !isId(String(clubId))) return;
+  const q: any = { clubId };
+  if (playerId) q._id = { $ne: playerId };
+  const n = await Player.countDocuments(q);
+  if (n >= SQUAD_LIMIT) throw new ServiceError(`Main Team Squad is full (${n}/${SQUAD_LIMIT}). Release a player first.`, 409);
+}
+
+/**
+ * Saves the seat every player in a club is shown in. Older players have no stored
+ * seat and were placed on the fly, so they shifted whenever someone left — after this
+ * a seat stays with its player until they leave the club.
+ */
+async function lockSeats(clubId: any) {
+  if (!clubId || !isId(String(clubId))) return;
+  const squad = await Player.find({ clubId }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+  const ops = seatLayout(squad)
+    .map((p: any, i) => (p && p.seat !== i + 1 ? { updateOne: { filter: { _id: p._id }, update: { $set: { seat: i + 1 } } } } : null))
+    .filter(Boolean) as any[];
+  if (ops.length) await Player.bulkWrite(ops);
+}
+
+/** Open seats in a club: not held by a player and not reserved by a pending signing request. */
+async function freeSeats(clubId: any, opts: { ignoreRequestId?: any } = {}) {
+  await lockSeats(clubId);
+  const [squad, pending] = await Promise.all([
+    Player.find({ clubId, seat: { $gte: 1 } }, { seat: 1 }).lean<any>(),
+    TransferRequest.find({ targetClubId: clubId, type: "SIGNING", status: "PENDING", ...(opts.ignoreRequestId ? { _id: { $ne: opts.ignoreRequestId } } : {}) }, { seat: 1 }).lean<any>(),
+  ]);
+  const taken = new Set<number>([...squad.map((p: any) => p.seat), ...pending.map((r: any) => r.seat).filter(Boolean)]);
+  return Array.from({ length: SQUAD_LIMIT }, (_, i) => i + 1).filter((n) => !taken.has(n));
+}
+
+async function nextFreeSeat(clubId: any, opts: { ignoreRequestId?: any } = {}) {
+  const open = await freeSeats(clubId, opts);
+  if (!open.length) throw new ServiceError(`Main Team Squad has no free seats left (${SQUAD_LIMIT}/${SQUAD_LIMIT}, including pending requests)`, 409);
+  return open[0];
+}
+
+/** Tools a custom staff member may use. Legacy "info_change" staff keep their club info/logo rights. */
+function staffPermissions(s: any): string[] {
+  if (s.permissions?.length) return s.permissions;
+  return s.access === "info_change" ? ["change-info", "change-logo"] : [];
+}
+
+function shapeClub(c: any,extra: { squadCount?: number; managerName?: string; squadValue?: number } = {}) {
+  const s = c.stats || {};
+  const out = plain<any>(c);
+  return {
+    ...out,
+    logo: clubLogo(c),
+    banner: c.banner || PLACEHOLDER.banner,
+    managerId: c.managerId ? String(c.managerId) : undefined,
+    managerName: extra.managerName || "",
+    form: formArray(c.formHistory),
+    squadCount: extra.squadCount ?? 0,
+    marketValue: Math.round(((extra.squadValue ?? 0) + (c.marketValue || 0)) * 10) / 10,
+    stats: {
+      matches: s.matches || 0,
+      wins: s.wins || 0,
+      draws: s.draws || 0,
+      losses: s.losses || 0,
+      winRate: winRate(s.wins || 0, s.matches || 0),
+      goalsScored: s.goalsScored || 0,
+      goalsConceded: s.goalsConceded || 0,
+    },
+  };
+}
+
+function liveMinute(f: any): string {
+  if (f.status === "FINISHED") return "FT";
+  if (f.status !== "LIVE" || !f.startedAt) return "";
+  const mins = Math.floor((Date.now() - new Date(f.startedAt).getTime()) / 60000);
+  return `${Math.min(Math.max(mins, 1), 120)}'`;
+}
+
+async function shapeFixtures(list: any[]) {
+  if (!list.length) return [];
+  const playerIds = new Set<string>();
+  const clubIds = new Set<string>();
+  const refIds = new Set<string>();
+  const tournIds = new Set<string>();
+  for (const f of list) {
+    if (f.homePlayerId) playerIds.add(String(f.homePlayerId));
+    if (f.awayPlayerId) playerIds.add(String(f.awayPlayerId));
+    if (f.result?.motmPlayerId) playerIds.add(String(f.result.motmPlayerId));
+    if (f.homeClubId) clubIds.add(String(f.homeClubId));
+    if (f.awayClubId) clubIds.add(String(f.awayClubId));
+    if (f.refereeId) refIds.add(String(f.refereeId));
+    if (f.tournamentId) tournIds.add(String(f.tournamentId));
+  }
+  const [players, clubs, refs, tourns] = await Promise.all([
+    Player.find({ _id: { $in: [...playerIds] } }).lean(),
+    Club.find({ _id: { $in: [...clubIds] } }).lean(),
+    Referee.find({ _id: { $in: [...refIds] } }).lean(),
+    Tournament.find({ _id: { $in: [...tournIds] } }, { name: 1, slug: 1 }).lean(),
+  ]);
+  const pm = new Map(players.map((p: any) => [String(p._id), p]));
+  const cm = new Map(clubs.map((c: any) => [String(c._id), c]));
+  const rm = new Map(refs.map((r: any) => [String(r._id), r]));
+  const tm = new Map(tourns.map((t: any) => [String(t._id), t]));
+
+  const pMini = (id: any) => {
+    const p = id ? pm.get(String(id)) : undefined;
+    return p
+      ? { id: String(p._id), username: p.username, fullName: p.fullName, avatar: p.avatar || PLACEHOLDER.avatar, rating: p.rating }
+      : undefined;
+  };
+  const cMini = (id: any) => {
+    const c = id ? cm.get(String(id)) : undefined;
+    return c ? { id: String(c._id), name: c.name, shortName: c.shortName, slug: c.slug, logo: clubLogo(c) } : undefined;
+  };
+
+  return list.map((f: any) => {
+    const t = f.tournamentId ? tm.get(String(f.tournamentId)) : undefined;
+    const ref = f.refereeId ? rm.get(String(f.refereeId)) : undefined;
+    const motm = f.result?.motmPlayerId ? pm.get(String(f.result.motmPlayerId)) : undefined;
+    return {
+      id: String(f._id),
+      tournamentId: f.tournamentId ? String(f.tournamentId) : undefined,
+      tournamentName: t?.name,
+      tournamentSlug: t?.slug,
+      round: f.round,
+      scheduledDate: new Date(f.scheduledDate).toISOString(),
+      venue: f.venue,
+      status: f.status,
+      startedAt: f.startedAt ? new Date(f.startedAt).toISOString() : undefined,
+      minute: liveMinute(f),
+      isOnStream: !!f.isOnStream,
+      streamUrl: f.streamUrl || "",
+      streamPlatform: f.streamPlatform || "",
+      homeClub: cMini(f.homeClubId),
+      awayClub: cMini(f.awayClubId),
+      homePlayer: pMini(f.homePlayerId),
+      awayPlayer: pMini(f.awayPlayerId),
+      liveScore: { home: f.liveScore?.home || 0, away: f.liveScore?.away || 0 },
+      result:
+        f.result && f.result.status
+          ? {
+              homeScore: f.result.homeScore ?? 0,
+              awayScore: f.result.awayScore ?? 0,
+              homePenalties: f.result.homePenalties,
+              awayPenalties: f.result.awayPenalties,
+              motmPlayerId: f.result.motmPlayerId ? String(f.result.motmPlayerId) : undefined,
+              motmPlayerName: motm?.fullName,
+              motmPlayerAvatar: motm?.avatar,
+              motmReason: f.result.motmReason,
+              status: f.result.status,
+              notes: f.result.notes,
+              proofScreenshot: f.result.proofScreenshot,
+            }
+          : undefined,
+      referee: ref ? { id: String(ref._id), name: ref.name, tier: ref.tier, rating: ref.rating } : undefined,
+    };
+  });
+}
+
+async function tournamentProgress(ids: string[]) {
+  const agg = await Fixture.aggregate([
+    { $match: { tournamentId: { $in: ids.map(oid) } } },
+    {
+      $group: {
+        _id: "$tournamentId",
+        total: { $sum: 1 },
+        completed: { $sum: { $cond: [{ $eq: ["$status", "FINISHED"] }, 1, 0] } },
+      },
+    },
+  ]);
+  return new Map(agg.map((a: any) => [String(a._id), a]));
+}
+
+function shapeTournament(t: any, prog?: { total: number; completed: number }) {
+  const isClub = t.participantType === "CLUB";
+  const participants = (t.participants || []).filter((p: any) => p.status !== "REMOVED");
+  const clubEntries = (t.clubParticipants || []).filter((c: any) => c.status !== "REMOVED");
+  const count = isClub ? clubEntries.length : participants.length;
+  const total = prog?.total || Math.max((t.maxParticipants || 2) - 1, 0);
+  const completed = prog?.completed || 0;
+  const deadline = t.registrationDeadline ? new Date(t.registrationDeadline) : undefined;
+  const out = plain<any>({ ...t, participants: undefined, clubParticipants: undefined });
+  return {
+    ...out,
+    participantType: isClub ? "CLUB" : "PLAYER",
+    banner: t.banner || PLACEHOLDER.banner,
+    logo: t.logo || PLACEHOLDER.logo,
+    startDate: t.startDate ? new Date(t.startDate).toISOString() : "",
+    endDate: t.endDate ? new Date(t.endDate).toISOString() : "",
+    registrationDeadline: deadline ? deadline.toISOString() : "",
+    currentParticipants: count,
+    participantUserIds: participants.map((p: any) => String(p.userId)),
+    participantClubIds: clubEntries.map((c: any) => String(c.clubId)),
+    pendingClubIds: clubEntries.filter((c: any) => c.status === "PENDING").map((c: any) => String(c.clubId)),
+    completedMatches: completed,
+    totalMatches: total,
+    progressPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
+    isRegistrationOpen:
+      t.status === "REGISTRATION_OPEN" && (!deadline || deadline.getTime() > Date.now()) && count < (t.maxParticipants || 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+/** Konami UID compared without dashes/spaces/case: "asev 130-051751" == "ASEV-130-051-751". */
+const konamiKey = (v: unknown) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const KONAMI_RE = /^[A-Z]{4}\d{9}$/;
+/** Store UIDs in eFootball's own format: ASEV-130-051-751. */
+const formatKonamiId = (v: unknown) => {
+  const k = konamiKey(v);
+  return KONAMI_RE.test(k) ? `${k.slice(0, 4)}-${k.slice(4, 7)}-${k.slice(7, 10)}-${k.slice(10)}` : String(v ?? "").trim();
+};
+
+export const db = {
+  // ----- Users -----
+  async getUserByEmailOrUsername(emailOrUsername: string, withSecrets = false) {
+    await connectDB();
+    const v = emailOrUsername.toLowerCase().trim();
+    const q = User.findOne({ $or: [{ email: v }, { username: v }] });
+    if (withSecrets) q.select("+passwordHash");
+    return q.lean<any>();
+  },
+
+  async getUserById(id: string) {
+    if (!isId(id)) return null;
+    await connectDB();
+    return User.findById(id).lean<any>();
+  },
+
+  async createUser(data: { email: string; username: string; fullName: string; passwordHash: string; role?: string }) {
+    await connectDB();
+    const user = await User.create({ ...data, role: data.role || "PLAYER", status: "ACTIVE" });
+    return user.toObject();
+  },
+
+  async recordLoginFailure(userId: any) {
+    const u = await User.findById(userId);
+    if (!u) return;
+    u.failedLoginAttempts = (u.failedLoginAttempts || 0) + 1;
+    if (u.failedLoginAttempts >= 5) {
+      u.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      u.failedLoginAttempts = 0;
+    }
+    await u.save();
+  },
+
+  async recordLoginSuccess(userId: any) {
+    await User.updateOne({ _id: userId }, { $set: { failedLoginAttempts: 0, lastLoginAt: new Date() }, $unset: { lockUntil: 1 } });
+  },
+
+  async setPassword(userId: string, passwordHash: string) {
+    await connectDB();
+    await User.updateOne(
+      { _id: userId },
+      { $set: { passwordHash, failedLoginAttempts: 0 }, $inc: { tokenVersion: 1 }, $unset: { lockUntil: 1, passwordResetTokenHash: 1, passwordResetExpires: 1 } }
+    );
+  },
+
+  async setPasswordResetToken(userId: any, tokenHash: string, expires: Date) {
+    await User.updateOne({ _id: userId }, { $set: { passwordResetTokenHash: tokenHash, passwordResetExpires: expires } });
+  },
+
+  async getUserByResetToken(tokenHash: string) {
+    await connectDB();
+    return User.findOne({ passwordResetTokenHash: tokenHash, passwordResetExpires: { $gt: new Date() } }).lean<any>();
+  },
+
+  async listUsers(filter: { search?: string; role?: string; status?: string } = {}) {
+    await connectDB();
+    const q: any = {};
+    if (filter.role && filter.role !== "ALL") q.role = filter.role;
+    if (filter.status && filter.status !== "ALL") q.status = filter.status;
+    if (filter.search) {
+      const r = new RegExp(escapeRegex(filter.search), "i");
+      q.$or = [{ email: r }, { username: r }, { fullName: r }];
+    }
+    const users = await User.find(q).sort({ createdAt: -1 }).limit(5000).lean();
+    const clubs = await clubMap(users.map((u: any) => u.clubId));
+    return users.map((u: any) => ({ ...plain<any>(u), club: clubMini(clubs.get(String(u.clubId))) }));
+  },
+
+  async updateUser(id: string, updates: Record<string, any>) {
+    if (!isId(id)) throw new ServiceError("Invalid user id", 400);
+    await connectDB();
+    const set: any = { ...updates };
+    const inc: any = {};
+    // Any change to role/status forces the user to sign in again.
+    if ("role" in updates || "status" in updates) inc.tokenVersion = 1;
+    if (updates.clubId === "" || updates.clubId === null) {
+      delete set.clubId;
+      await User.updateOne({ _id: id }, { $unset: { clubId: 1 } });
+    }
+    const user = await User.findByIdAndUpdate(id, { $set: set, ...(Object.keys(inc).length ? { $inc: inc } : {}) }, { new: true }).lean();
+    if (!user) throw new ServiceError("User not found", 404);
+    if (updates.fullName || updates.avatar) {
+      const pset: any = {};
+      if (updates.fullName) pset.fullName = updates.fullName;
+      if (updates.avatar) pset.avatar = updates.avatar;
+      await Player.updateOne({ userId: id }, { $set: pset });
+    }
+    if ("status" in updates) {
+      const map: Record<string, string> = { ACTIVE: "ACTIVE", SUSPENDED: "SUSPENDED", BANNED: "BANNED", INACTIVE: "INACTIVE", PENDING: "PENDING_VERIFICATION" };
+      await Player.updateOne({ userId: id }, { $set: { status: map[updates.status] || "ACTIVE" } });
+    }
+    return plain(user);
+  },
+
+  async deleteUser(id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid user id", 400);
+    await connectDB();
+    const player = await Player.findOne({ userId: id }).lean<any>();
+    if (player) {
+      await Promise.all([
+        Tournament.updateMany({}, { $pull: { participants: { userId: oid(id) } } }),
+        Event.updateMany({}, { $pull: { registrations: { userId: oid(id) } } }),
+        TransferListing.deleteMany({ playerId: player._id }),
+        TransferRequest.deleteMany({ playerId: player._id }),
+        Player.deleteOne({ _id: player._id }),
+      ]);
+    }
+    await Club.updateMany({ managerId: id }, { $unset: { managerId: 1 } });
+    await Notification.deleteMany({ userId: id });
+    await User.deleteOne({ _id: id });
+    return true;
+  },
+
+  // ----- Players -----
+  async getPlayers(filter: { position?: string; clubId?: string; search?: string; status?: string; limit?: number; searchEmail?: boolean } = {}) {
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const q: any = {};
+    if (filter.position && filter.position !== "ALL") q.preferredPosition = filter.position;
+    if (filter.clubId && filter.clubId !== "ALL" && isId(filter.clubId)) q.clubId = filter.clubId;
+    if (filter.status && filter.status !== "ALL") q.status = filter.status;
+    if (filter.search) {
+      const r = new RegExp(escapeRegex(filter.search), "i");
+      q.$or = [{ fullName: r }, { username: r }, { konamiId: r }];
+      // Admin-only: also match the account email / phone.
+      if (filter.searchEmail) {
+        const users = await User.find({ email: r }).select("_id").limit(200).lean();
+        if (users.length) q.$or.push({ userId: { $in: users.map((u: any) => u._id) } });
+        q.$or.push({ phone: r });
+      }
+    }
+    // High enough that new players are never silently cut from lists; pagination can come later.
+    const list = await Player.find(q).sort({ rating: -1 }).limit(filter.limit || 10000).lean();
+    const clubs = await clubMap(list.map((p: any) => p.clubId));
+    return list.map((p: any) => shapePlayer(p, clubs));
+  },
+
+  /** Account info (email, role, status, last login) keyed by user id, for admin screens. */
+  async getAccountsByIds(ids: any[]) {
+    await connectDB();
+    const list = await User.find({ _id: { $in: ids.filter((i) => i && isId(String(i))) } })
+      .select("email username role status lastLoginAt createdAt lockUntil")
+      .lean();
+    return new Map(
+      list.map((u: any) => [
+        String(u._id),
+        {
+          id: String(u._id),
+          email: u.email,
+          username: u.username,
+          role: u.role,
+          status: u.status,
+          lastLoginAt: u.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : undefined,
+          createdAt: u.createdAt ? new Date(u.createdAt).toISOString() : undefined,
+          locked: !!(u.lockUntil && new Date(u.lockUntil) > new Date()),
+        },
+      ])
+    );
+  },
+
+  async getPlayerByUsername(username: string) {
+    await connectDB();
+    const p = await Player.findOne({ username: username.toLowerCase() }).lean<any>();
+    if (!p) return null;
+    return shapePlayer(p, await clubMap([p.clubId]));
+  },
+
+  async getPlayerById(id: string) {
+    if (!isId(id)) return null;
+    await connectDB();
+    const p = await Player.findById(id).lean<any>();
+    if (!p) return null;
+    return shapePlayer(p, await clubMap([p.clubId]));
+  },
+
+  async getPlayerByUserId(userId: string) {
+    if (!isId(userId)) return null;
+    await connectDB();
+    const p = await Player.findOne({ userId }).lean<any>();
+    if (!p) return null;
+    return shapePlayer(p, await clubMap([p.clubId]));
+  },
+
+  /**
+   * A Konami UID must look like one and belong to only one player.
+   * Throws a clear message when it's malformed or already registered to someone else.
+   */
+  async assertKonamiIdUsable(uid: unknown, exceptPlayerId?: string) {
+    const k = konamiKey(uid);
+    if (!k) return;
+    if (!KONAMI_RE.test(k)) {
+      throw new ServiceError(
+        `"${String(uid).trim()}" doesn't look like a Konami UID. Copy it from eFootball (it looks like ASEV-130-051-751: 4 letters and 9 numbers).`,
+        400,
+        "INVALID_KONAMI_ID"
+      );
+    }
+    await connectDB();
+    // Match however it was typed (with or without dashes/spaces, any case).
+    const pattern = new RegExp(`^[^A-Za-z0-9]*${k.split("").join("[^A-Za-z0-9]*")}[^A-Za-z0-9]*$`, "i");
+    const q: any = { konamiId: pattern };
+    if (exceptPlayerId && isId(exceptPlayerId)) q._id = { $ne: exceptPlayerId };
+    const other = await Player.findOne(q, { username: 1 }).lean<any>();
+    if (other) {
+      throw new ServiceError(
+        `This Konami UID (${formatKonamiId(k)}) is already registered to another player (@${other.username}). Every player needs their own UID — please check yours in eFootball and enter it again.`,
+        409,
+        "KONAMI_ID_TAKEN"
+      );
+    }
+  },
+
+  /** Lowest open seat in a club's Main Team Squad (throws when the squad is full). */
+  nextFreeSeat(clubId: string) {
+    return nextFreeSeat(clubId);
+  },
+
+  async createPlayer(data: any) {
+    await connectDB();
+    if (data.konamiId) {
+      await db.assertKonamiIdUsable(data.konamiId);
+      data = { ...data, konamiId: formatKonamiId(data.konamiId) };
+    }
+    if (data.clubId && isId(String(data.clubId))) await assertSquadSpace(data.clubId);
+    const player = await Player.create({
+      userId: data.userId,
+      username: data.username,
+      fullName: data.fullName,
+      avatar: data.avatar || undefined,
+      konamiId: data.konamiId || "",
+      deviceModel: data.deviceModel || "",
+      dob: data.dob ? new Date(`${data.dob}T00:00:00Z`) : undefined,
+      facebookProfile: data.facebookProfile || "",
+      preferredPosition: data.preferredPosition || "CF",
+      playStyle: data.playStyle || "Possession Game",
+      bio: data.bio || "",
+      phone: data.phone || "",
+      location: data.location || "",
+      clubId: data.clubId && isId(data.clubId) ? data.clubId : undefined,
+      rating: 750,
+      marketValue: calculatePlayerMarketValue({ rating: 750, matchesPlayed: 0, winRate: 0, goalsScored: 0, motmCount: 0, cleanSheets: 0, recentForm: "" }),
+    });
+    await db.addActivityEvent({
+      type: "PLAYER_REGISTER",
+      category: "Players",
+      title: `${player.fullName} joined the community`,
+      description: `@${player.username} registered as a player.`,
+      avatar: player.avatar,
+      targetUrl: `/players/${player.username}`,
+      userId: data.userId ? String(data.userId) : undefined,
+      playerId: String(player._id),
+    });
+    return shapePlayer(player.toObject(), await clubMap([player.clubId]));
+  },
+
+  async updatePlayer(id: string, updates: Record<string, any>) {
+    if (!isId(id)) throw new ServiceError("Invalid player id", 400);
+    await connectDB();
+    const set: any = {};
+    const unset: any = {};
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === undefined) continue;
+      if (k === "clubId" && (v === "" || v === null)) unset.clubId = 1;
+      else set[k] = v;
+    }
+    if (set.clubId) {
+      const cur = await Player.findById(id, { clubId: 1 }).lean<any>();
+      if (String(cur?.clubId || "") !== String(set.clubId)) await assertSquadSpace(set.clubId, id);
+    }
+    // Only a new or changed UID is checked, so old records can still save their other details.
+    if (typeof set.konamiId === "string" && set.konamiId.trim()) {
+      const cur = await Player.findById(id, { konamiId: 1 }).lean<any>();
+      if (konamiKey(cur?.konamiId) !== konamiKey(set.konamiId)) {
+        await db.assertKonamiIdUsable(set.konamiId, id);
+        set.konamiId = formatKonamiId(set.konamiId);
+      } else {
+        set.konamiId = cur?.konamiId ?? set.konamiId;
+      }
+    }
+    const p = await Player.findByIdAndUpdate(id, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true }).lean<any>();
+    if (!p) throw new ServiceError("Player not found", 404);
+    if (set.fullName || set.avatar) {
+      const uset: any = {};
+      if (set.fullName) uset.fullName = set.fullName;
+      if (set.avatar) uset.avatar = set.avatar;
+      await User.updateOne({ _id: p.userId }, { $set: uset });
+    }
+    return shapePlayer(p, await clubMap([p.clubId]));
+  },
+
+  // ----- Clubs -----
+  async getClubs(filter: { status?: string; search?: string } = {}) {
+    await connectDB();
+    const q: any = {};
+    if (filter.status && filter.status !== "ALL") q.status = filter.status;
+    if (filter.search) q.name = new RegExp(escapeRegex(filter.search), "i");
+    const clubs = await Club.find(q).sort({ points: -1, name: 1 }).lean();
+    const squad = await Player.aggregate([
+      { $match: { clubId: { $ne: null } } },
+      { $group: { _id: "$clubId", count: { $sum: 1 }, value: { $sum: "$marketValue" } } },
+    ]);
+    const sm = new Map(squad.map((s: any) => [String(s._id), s]));
+    const managers = await User.find({ _id: { $in: clubs.map((c: any) => c.managerId).filter(Boolean) } }, { fullName: 1 }).lean();
+    const mm = new Map(managers.map((m: any) => [String(m._id), m.fullName]));
+    return clubs.map((c: any) =>
+      shapeClub(c, {
+        squadCount: sm.get(String(c._id))?.count || 0,
+        squadValue: sm.get(String(c._id))?.value || 0,
+        managerName: c.managerId ? mm.get(String(c.managerId)) : "",
+      })
+    );
+  },
+
+  async getClubBySlug(slug: string) {
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const c = await Club.findOne({ slug }).lean<any>();
+    return c ? db._clubDetail(c) : null;
+  },
+
+  async getClubById(id: string) {
+    if (!isId(id)) return null;
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const c = await Club.findById(id).lean<any>();
+    return c ? db._clubDetail(c) : null;
+  },
+
+  async _clubDetail(c: any) {
+    const players = await Player.find({ clubId: c._id }).sort({ rating: -1 }).lean();
+    const clubs = new Map([[String(c._id), c]]);
+    const squad = players.map((p: any) => shapePlayer(p, clubs));
+    const manager = c.managerId ? await User.findById(c.managerId, { fullName: 1, username: 1 }).lean<any>() : null;
+    return {
+      ...shapeClub(c, {
+        squadCount: squad.length,
+        squadValue: squad.reduce((a: number, p: any) => a + (p.marketValue || 0), 0),
+        managerName: manager?.fullName,
+      }),
+      squad,
+    };
+  },
+
+  async createClub(data: any) {
+    await connectDB();
+    const slug = await uniqueSlug(Club, data.name);
+    const doc = { ...data, slug };
+    if (!doc.managerId) delete doc.managerId;
+    const club = await Club.create(doc);
+    if (data.managerId && isId(String(data.managerId))) {
+      await User.updateOne({ _id: data.managerId }, { $set: { clubId: club._id } });
+    }
+    if (club.status === "ACTIVE") await db._announceClub(club);
+    return shapeClub(club.toObject());
+  },
+
+  async _announceClub(club: any) {
+    await db.addActivityEvent({
+      type: "CLUB_CREATED",
+      category: "Clubs",
+      title: `New club registered: ${club.name}`,
+      description: club.location || "",
+      avatar: club.logo,
+      targetUrl: `/clubs/${club.slug}`,
+    });
+  },
+
+  async updateClub(id: string, updates: any) {
+    if (!isId(id)) throw new ServiceError("Invalid club id", 400);
+    await connectDB();
+    const set = { ...updates };
+    if (updates.name) {
+      const existing = await Club.findById(id).lean<any>();
+      if (existing && existing.name !== updates.name) set.slug = await uniqueSlug(Club, updates.name, id);
+    }
+    const unset: any = {};
+    if (set.managerId === "" || set.managerId === null) {
+      delete set.managerId;
+      unset.managerId = 1;
+    }
+    const before = await Club.findById(id, { status: 1 }).lean<any>();
+    const c = await Club.findByIdAndUpdate(id, { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true }).lean<any>();
+    if (!c) throw new ServiceError("Club not found", 404);
+    if (set.managerId && isId(String(set.managerId))) {
+      await User.updateOne({ _id: set.managerId }, { $set: { clubId: c._id } });
+    }
+    if (before?.status === "PENDING" && c.status === "ACTIVE") {
+      await db._announceClub(c);
+      if (c.managerId) await db.notify(String(c.managerId), "Club approved", `${c.name} is now active. You can enter tournaments and sign players.`, "/dashboard/my-club");
+    }
+    return shapeClub(c);
+  },
+
+  async deleteClub(id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid club id", 400);
+    await connectDB();
+    await Player.updateMany({ clubId: id }, { $unset: { clubId: 1, seat: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    await User.updateMany({ clubId: id }, { $unset: { clubId: 1 } });
+    await Club.deleteOne({ _id: id });
+    return true;
+  },
+
+  // ----- Fixtures -----
+  async getFixtures(filter: { status?: string; tournamentId?: string; clubId?: string; playerId?: string; onStream?: boolean; limit?: number } = {}) {
+    await connectDB();
+    const q: any = {};
+    if (filter.status && filter.status !== "ALL") q.status = filter.status;
+    if (filter.tournamentId && isId(filter.tournamentId)) q.tournamentId = filter.tournamentId;
+    if (filter.clubId && isId(filter.clubId)) q.$or = [{ homeClubId: filter.clubId }, { awayClubId: filter.clubId }];
+    if (filter.playerId && isId(filter.playerId)) q.$or = [{ homePlayerId: filter.playerId }, { awayPlayerId: filter.playerId }];
+    if (filter.onStream) q.isOnStream = true;
+    const list = await Fixture.find(q).sort({ scheduledDate: -1 }).limit(filter.limit || 500).lean();
+    return shapeFixtures(list);
+  },
+
+  async getFixtureById(id: string) {
+    if (!isId(id)) return null;
+    await connectDB();
+    const f = await Fixture.findById(id).lean();
+    if (!f) return null;
+    const [shaped] = await shapeFixtures([f]);
+    return shaped;
+  },
+
+  async createFixture(data: any) {
+    await connectDB();
+    const clean: any = { ...data };
+    for (const k of ["tournamentId", "homeClubId", "awayClubId", "homePlayerId", "awayPlayerId", "refereeId"]) {
+      if (!clean[k] || !isId(clean[k])) delete clean[k];
+    }
+    if (!clean.homePlayerId && !clean.homeClubId) throw new ServiceError("Select a home player or club");
+    if (!clean.awayPlayerId && !clean.awayClubId) throw new ServiceError("Select an away player or club");
+    if (clean.homePlayerId && clean.homePlayerId === clean.awayPlayerId) throw new ServiceError("A player cannot play against themselves");
+    if (clean.homeClubId && clean.homeClubId === clean.awayClubId) throw new ServiceError("A club cannot play against itself");
+    const f = await Fixture.create(clean);
+    const [shaped] = await shapeFixtures([f.toObject()]);
+    return shaped;
+  },
+
+  async updateFixture(id: string, data: any) {
+    if (!isId(id)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const set: any = {};
+    const unset: any = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (v === undefined) continue;
+      if (["tournamentId", "homeClubId", "awayClubId", "homePlayerId", "awayPlayerId", "refereeId"].includes(k) && (!v || !isId(String(v)))) unset[k] = 1;
+      else set[k] = v;
+    }
+    const f = await Fixture.findByIdAndUpdate(id, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true }).lean();
+    if (!f) throw new ServiceError("Fixture not found", 404);
+    const [shaped] = await shapeFixtures([f]);
+    return shaped;
+  },
+
+  async deleteFixture(id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findById(id).lean<any>();
+    if (!f) throw new ServiceError("Fixture not found", 404);
+    if (f.status === "FINISHED" && f.result?.status === "APPROVED") {
+      throw new ServiceError("Finished matches with approved results cannot be deleted (stats are already applied).", 409);
+    }
+    await Fixture.deleteOne({ _id: id });
+    return true;
+  },
+
+  async setFixtureStatus(id: string, status: "SCHEDULED" | "LIVE" | "POSTPONED" | "CANCELLED") {
+    if (!isId(id)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findById(id);
+    if (!f) throw new ServiceError("Fixture not found", 404);
+    if (f.status === "FINISHED") throw new ServiceError("Match already finished", 409);
+    f.status = status;
+    if (status === "LIVE" && !f.startedAt) {
+      f.startedAt = new Date();
+      f.liveScore = { home: 0, away: 0 } as any;
+    }
+    if (status !== "LIVE") f.startedAt = undefined;
+    await f.save();
+    const [shaped] = await shapeFixtures([f.toObject()]);
+    if (status === "LIVE") {
+      const home = shaped.homePlayer?.fullName || shaped.homeClub?.name;
+      const away = shaped.awayPlayer?.fullName || shaped.awayClub?.name;
+      await db.addActivityEvent({
+        type: "MATCH_LIVE",
+        category: "Matches",
+        title: `LIVE: ${home} vs ${away}`,
+        description: shaped.tournamentName || shaped.round,
+        targetUrl: `/matches/${shaped.id}`,
+      });
+    }
+    return shaped;
+  },
+
+  async updateLiveScore(id: string, home: number, away: number) {
+    if (!isId(id)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findOneAndUpdate({ _id: id, status: "LIVE" }, { $set: { "liveScore.home": home, "liveScore.away": away } }, { new: true }).lean();
+    if (!f) throw new ServiceError("Match is not live", 409);
+    const [shaped] = await shapeFixtures([f]);
+    return shaped;
+  },
+
+  /** A participant reports a score; it waits for an official to approve it. */
+  async submitResultClaim(id: string, data: any, userId: string) {
+    await connectDB();
+    const f = await Fixture.findById(id);
+    if (!f) throw new ServiceError("Fixture not found", 404);
+    if (f.result?.status === "APPROVED") throw new ServiceError("Result already approved", 409);
+    f.result = {
+      homeScore: data.homeScore,
+      awayScore: data.awayScore,
+      homePenalties: data.homePenalties,
+      awayPenalties: data.awayPenalties,
+      motmPlayerId: data.motmPlayerId && isId(data.motmPlayerId) ? data.motmPlayerId : undefined,
+      motmReason: data.motmReason,
+      proofScreenshot: data.proofScreenshot,
+      notes: data.notes,
+      status: "PENDING",
+      submittedBy: userId,
+    } as any;
+    await f.save();
+    const [shaped] = await shapeFixtures([f.toObject()]);
+    return shaped;
+  },
+
+  async clearResultClaim(id: string) {
+    await connectDB();
+    await Fixture.updateOne({ _id: id, "result.status": "PENDING" }, { $unset: { result: 1 } });
+    return db.getFixtureById(id);
+  },
+
+  async getPendingResultClaims() {
+    await connectDB();
+    return shapeFixtures(await Fixture.find({ "result.status": "PENDING" }).sort({ scheduledDate: -1 }).lean());
+  },
+
+  /** Official approval: finalises the match and applies ratings, stats and form. */
+  async approveMatchResult(id: string, data: any, approverId: string) {
+    if (!isId(id)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findById(id);
+    if (!f) throw new ServiceError("Fixture not found", 404);
+    if (f.status === "FINISHED" && f.result?.status === "APPROVED") throw new ServiceError("Result already approved for this match", 409);
+
+    const hs = Number(data.homeScore) || 0;
+    const as = Number(data.awayScore) || 0;
+    const motmId = data.motmPlayerId && isId(data.motmPlayerId) ? String(data.motmPlayerId) : undefined;
+
+    f.result = {
+      homeScore: hs,
+      awayScore: as,
+      homePenalties: data.homePenalties,
+      awayPenalties: data.awayPenalties,
+      motmPlayerId: motmId,
+      motmReason: data.motmReason || "",
+      proofScreenshot: data.proofScreenshot || f.result?.proofScreenshot,
+      notes: data.notes || f.result?.notes,
+      status: "APPROVED",
+      submittedBy: f.result?.submittedBy || approverId,
+      approvedBy: approverId,
+    } as any;
+    f.status = "FINISHED";
+    f.liveScore = { home: hs, away: as } as any;
+    await f.save();
+
+    // Decide winner; penalties break a draw.
+    let homeWon = hs > as;
+    let awayWon = as > hs;
+    if (hs === as && data.homePenalties != null && data.awayPenalties != null && data.homePenalties !== data.awayPenalties) {
+      homeWon = data.homePenalties > data.awayPenalties;
+      awayWon = !homeWon;
+    }
+    const isDraw = !homeWon && !awayWon;
+
+    if (f.homePlayerId && f.awayPlayerId) {
+      const [homeP, awayP] = await Promise.all([Player.findById(f.homePlayerId), Player.findById(f.awayPlayerId)]);
+      if (homeP && awayP) {
+        const hr = homeP.rating;
+        const ar = awayP.rating;
+        homeP.rating = calculateNewRating(hr, ar, { isWin: homeWon, isDraw, goalsScored: hs, goalsConceded: as, isMotm: motmId === String(homeP._id) });
+        awayP.rating = calculateNewRating(ar, hr, { isWin: awayWon, isDraw, goalsScored: as, goalsConceded: hs, isMotm: motmId === String(awayP._id) });
+        for (const [p, won, gf, ga] of [
+          [homeP, homeWon, hs, as],
+          [awayP, awayWon, as, hs],
+        ] as const) {
+          p.formHistory = updateFormHistory(p.formHistory || "", won ? "W" : isDraw ? "D" : "L");
+          const s: any = p.stats;
+          s.matchesPlayed += 1;
+          s.goalsScored += gf;
+          s.goalsConceded = (s.goalsConceded || 0) + ga;
+          if (won) {
+            s.wins += 1;
+            s.points += 3;
+          } else if (isDraw) {
+            s.draws += 1;
+            s.points += 1;
+          } else s.losses += 1;
+          if (ga === 0) s.cleanSheets += 1;
+          if (motmId === String(p._id)) p.motmCount += 1;
+          p.marketValue = calculatePlayerMarketValue({
+            rating: p.rating,
+            matchesPlayed: s.matchesPlayed,
+            winRate: s.matchesPlayed ? (s.wins / s.matchesPlayed) * 100 : 0,
+            goalsScored: s.goalsScored,
+            motmCount: p.motmCount,
+            cleanSheets: s.cleanSheets,
+            recentForm: p.formHistory,
+          });
+        }
+        await Promise.all([homeP.save(), awayP.save()]);
+      }
+    }
+
+    if (f.homeClubId && f.awayClubId) {
+      const [hc, ac] = await Promise.all([Club.findById(f.homeClubId), Club.findById(f.awayClubId)]);
+      for (const [c, won, gf, ga] of [
+        [hc, homeWon, hs, as],
+        [ac, awayWon, as, hs],
+      ] as const) {
+        if (!c) continue;
+        const s: any = c.stats;
+        s.matches += 1;
+        s.goalsScored += gf;
+        s.goalsConceded += ga;
+        if (won) {
+          s.wins += 1;
+          c.points += 3;
+        } else if (isDraw) {
+          s.draws += 1;
+          c.points += 1;
+        } else s.losses += 1;
+        c.formHistory = updateFormHistory(c.formHistory || "", won ? "W" : isDraw ? "D" : "L");
+        await c.save();
+      }
+    }
+
+    const [shaped] = await shapeFixtures([f.toObject()]);
+    const home = shaped.homePlayer?.fullName || shaped.homeClub?.name || "Home";
+    const away = shaped.awayPlayer?.fullName || shaped.awayClub?.name || "Away";
+    const title = isDraw ? `${home} and ${away} drew ${hs} - ${as}` : `${homeWon ? home : away} beat ${homeWon ? away : home} ${Math.max(hs, as)} - ${Math.min(hs, as)}`;
+    await db.addActivityEvent({
+      type: "MATCH_RESULT",
+      category: "Matches",
+      title,
+      description: [shaped.tournamentName, shaped.round].filter(Boolean).join(" · "),
+      avatar: (homeWon ? shaped.homePlayer?.avatar : shaped.awayPlayer?.avatar) || shaped.homeClub?.logo,
+      targetUrl: `/matches/${shaped.id}`,
+    });
+    for (const p of [shaped.homePlayer, shaped.awayPlayer]) {
+      if (!p) continue;
+      const pl = await Player.findById(p.id, { userId: 1 }).lean<any>();
+      await db.addActivityEvent({
+        type: "PLAYER_MATCH",
+        category: "Matches",
+        title: `Played ${home} vs ${away} (${hs} - ${as})`,
+        description: shaped.tournamentName || shaped.round,
+        targetUrl: `/matches/${shaped.id}`,
+        playerId: p.id,
+        userId: pl?.userId ? String(pl.userId) : undefined,
+        isPublic: false,
+      });
+      if (pl?.userId) await db.notify(String(pl.userId), "Match result confirmed", `${home} ${hs} - ${as} ${away}`, `/matches/${shaped.id}`);
+    }
+    if (motmId && shaped.result?.motmPlayerName) {
+      const pl = await Player.findById(motmId, { userId: 1, avatar: 1, username: 1 }).lean<any>();
+      await db.addActivityEvent({
+        type: "MOTM",
+        category: "Awards",
+        title: `${shaped.result.motmPlayerName} named Man of the Match`,
+        description: `${home} vs ${away}`,
+        avatar: pl?.avatar,
+        targetUrl: `/players/${pl?.username}`,
+        playerId: motmId,
+        userId: pl?.userId ? String(pl.userId) : undefined,
+      });
+    }
+    return shaped;
+  },
+
+  // ----- Tournaments -----
+  async getTournaments(filter: { status?: string; includeDrafts?: boolean } = {}) {
+    await connectDB();
+    const q: any = {};
+    if (filter.status && filter.status !== "ALL") q.status = filter.status;
+    else if (!filter.includeDrafts) q.status = { $ne: "DRAFT" };
+    const list = await Tournament.find(q).sort({ isFeatured: -1, startDate: -1, createdAt: -1 }).lean();
+    const prog = await tournamentProgress(list.map((t: any) => String(t._id)));
+    return list.map((t: any) => shapeTournament(t, prog.get(String(t._id))));
+  },
+
+  async getTournamentBySlug(slug: string, opts: { includeDrafts?: boolean } = {}) {
+    await connectDB();
+    const t = await Tournament.findOne(isId(slug) ? { $or: [{ slug }, { _id: slug }] } : { slug }).lean<any>();
+    if (!t || (t.status === "DRAFT" && !opts.includeDrafts)) return null;
+    return db._tournamentDetail(t);
+  },
+
+  async getTournamentById(id: string) {
+    if (!isId(id)) return null;
+    await connectDB();
+    const t = await Tournament.findById(id).lean<any>();
+    return t ? db._tournamentDetail(t) : null;
+  },
+
+  async _tournamentDetail(t: any) {
+    const prog = await tournamentProgress([String(t._id)]);
+    const fixtures = await shapeFixtures(await Fixture.find({ tournamentId: t._id }).sort({ scheduledDate: 1 }).lean());
+    const active = (t.participants || []).filter((p: any) => p.status !== "REMOVED");
+    const players = await Player.find({ userId: { $in: active.map((p: any) => p.userId) } }).lean();
+    const playerClubs = await clubMap(players.map((p: any) => p.clubId));
+    const byUser = new Map(players.map((p: any) => [String(p.userId), p]));
+    const participants = active
+      .map((p: any) => {
+        const pl = byUser.get(String(p.userId));
+        return pl ? { ...shapePlayer(pl, playerClubs), joinedAt: new Date(p.joinedAt).toISOString(), entryStatus: p.status } : null;
+      })
+      .filter(Boolean);
+    // The public club list shows approved entries only.
+    const clubEntries = (t.clubParticipants || []).filter((c: any) => c.status !== "REMOVED" && c.status !== "PENDING");
+    let clubs: any[] = [];
+    if (clubEntries.length) {
+      const ids = clubEntries.map((c: any) => c.clubId);
+      const docs = await Club.find({ _id: { $in: ids } }, { name: 1, shortName: 1, slug: 1, logo: 1, location: 1 }).lean();
+      const squad = await Player.aggregate([{ $match: { clubId: { $in: ids } } }, { $group: { _id: "$clubId", n: { $sum: 1 } } }]);
+      const sm = new Map(squad.map((x: any) => [String(x._id), x.n]));
+      const dm = new Map(docs.map((d: any) => [String(d._id), d]));
+      clubs = clubEntries
+        .map((c: any) => {
+          const d: any = dm.get(String(c.clubId));
+          return d ? { ...clubMini(d), location: d.location || "", squadCount: sm.get(String(d._id)) || 0, joinedAt: new Date(c.joinedAt).toISOString() } : null;
+        })
+        .filter(Boolean);
+    }
+    return { ...shapeTournament(t, prog.get(String(t._id))), fixtures, participants, clubs };
+  },
+
+  async createTournament(data: any) {
+    await connectDB();
+    const slug = await uniqueSlug(Tournament, data.name);
+    const doc = { ...data, slug };
+    if (!doc.winnerPlayerId) delete doc.winnerPlayerId;
+    const t = await Tournament.create(doc);
+    if (t.status !== "DRAFT") {
+      await db.addActivityEvent({
+        type: "TOURNAMENT_CREATED",
+        category: "Tournaments",
+        title: `New tournament: ${t.name}`,
+        description: t.prizePool ? `Prize pool ${t.prizePool}` : "",
+        avatar: t.logo,
+        targetUrl: `/tournaments/${t.slug}`,
+      });
+    }
+    return shapeTournament(t.toObject());
+  },
+
+  async updateTournament(id: string, data: any) {
+    if (!isId(id)) throw new ServiceError("Invalid tournament id", 400);
+    await connectDB();
+    const set = { ...data };
+    if (data.name) {
+      const existing = await Tournament.findById(id, { name: 1 }).lean<any>();
+      if (existing && existing.name !== data.name) set.slug = await uniqueSlug(Tournament, data.name, id);
+    }
+    const unset: any = {};
+    if ("winnerPlayerId" in set && !set.winnerPlayerId) {
+      delete set.winnerPlayerId;
+      unset.winnerPlayerId = 1;
+    }
+    const before = await Tournament.findById(id, { status: 1, winnerPlayerId: 1 }).lean<any>();
+    const t = await Tournament.findByIdAndUpdate(id, { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true }).lean<any>();
+    if (!t) throw new ServiceError("Tournament not found", 404);
+    if (set.winnerPlayerId && String(before?.winnerPlayerId || "") !== String(set.winnerPlayerId)) {
+      const champ = await Player.findById(set.winnerPlayerId, { fullName: 1, avatar: 1, username: 1, userId: 1 }).lean<any>();
+      if (champ) {
+        await db.addActivityEvent({
+          type: "CHAMPION",
+          category: "Awards",
+          title: `${champ.fullName} won ${t.name}!`,
+          avatar: champ.avatar,
+          targetUrl: `/tournaments/${t.slug}`,
+          playerId: String(champ._id),
+          userId: champ.userId ? String(champ.userId) : undefined,
+        });
+        if (champ.userId) await db.notify(String(champ.userId), "Champion!", `Congratulations on winning ${t.name}.`, `/tournaments/${t.slug}`);
+      }
+    }
+    if (before && data.status && before.status !== data.status) {
+      const labels: Record<string, string> = {
+        REGISTRATION_OPEN: "Registration is now open",
+        REGISTRATION_CLOSED: "Registration closed",
+        ONGOING: "Tournament has kicked off",
+        COMPLETED: "Tournament completed",
+        CANCELLED: "Tournament cancelled",
+      };
+      if (labels[data.status]) {
+        await db.addActivityEvent({
+          type: "TOURNAMENT_STATUS",
+          category: "Tournaments",
+          title: `${t.name}: ${labels[data.status]}`,
+          avatar: t.logo,
+          targetUrl: `/tournaments/${t.slug}`,
+        });
+        for (const p of t.participants || []) {
+          if (p.status !== "REMOVED") await db.notify(String(p.userId), t.name, labels[data.status], `/tournaments/${t.slug}`);
+        }
+      }
+    }
+    return shapeTournament(t);
+  },
+
+  async deleteTournament(id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid tournament id", 400);
+    await connectDB();
+    const played = await Fixture.exists({ tournamentId: id, status: "FINISHED" });
+    if (played) throw new ServiceError("This tournament has finished matches. Mark it CANCELLED or COMPLETED instead of deleting.", 409);
+    await Fixture.deleteMany({ tournamentId: id });
+    await Tournament.deleteOne({ _id: id });
+    return true;
+  },
+
+  async joinTournament(slugOrId: string, userId: string, postLink: string) {
+    await connectDB();
+    const t = await Tournament.findOne(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId });
+    if (!t || t.status === "DRAFT") throw new ServiceError("Tournament not found", 404);
+    // Tournaments are club competitions: only a club's main manager can register the club.
+    return db._joinTournamentAsClub(t, userId, postLink);
+  },
+
+  async _joinTournamentAsClub(t: any, userId: string, postLink: string) {
+    const club = await db.getMainManagedClub(userId);
+    if (!club) throw new ServiceError("Only a club's main manager can register the club for a tournament.", 403);
+    if (club.status !== "ACTIVE") throw new ServiceError("Your club is not active yet", 403);
+    if (t.status !== "REGISTRATION_OPEN") throw new ServiceError("Registration is not open for this tournament", 409);
+    if (t.registrationDeadline && new Date(t.registrationDeadline).getTime() < Date.now()) throw new ServiceError("Registration deadline has passed", 409);
+    const entries = (t.clubParticipants || []) as any[];
+    const existing = entries.find((c) => String(c.clubId) === String(club._id));
+    if (existing?.status === "REMOVED") throw new ServiceError("Your club was removed from this tournament. Contact an admin.", 403);
+    if (existing) throw new ServiceError("Your club is already registered", 409);
+    const active = entries.filter((c) => c.status !== "REMOVED").length;
+    if (active >= t.maxParticipants) throw new ServiceError("Tournament is full", 409);
+    // Entries wait for an admin: PENDING holds the spot, approval makes it CONFIRMED.
+    const res = await Tournament.updateOne(
+      { _id: t._id, "clubParticipants.clubId": { $ne: club._id } },
+      { $push: { clubParticipants: { clubId: club._id, registeredBy: userId, joinedAt: new Date(), status: "PENDING", paymentType: "free", fbPostLink: postLink } } }
+    );
+    if (!res.modifiedCount) throw new ServiceError("Could not register the club", 409);
+    await db.notify(userId, "Registration submitted", `${club.name}'s registration for ${t.name} is waiting for admin approval.`, "/dashboard/my-club");
+    return db.getTournamentBySlug(t.slug, { includeDrafts: true });
+  },
+
+  /** The club whose main manager (owner) is this user — moderators don't count. */
+  async getMainManagedClub(userId: string) {
+    if (!isId(userId)) return null;
+    await connectDB();
+    const list = await Club.find({ managerId: userId }).lean<any>();
+    if (list.length < 2) return list[0] || null;
+    const own = await Player.findOne({ userId }, { clubId: 1 }).lean<any>();
+    return list.find((c: any) => own?.clubId && String(c._id) === String(own.clubId)) || list[0];
+  },
+
+  /** The club this user may manage: its manager, or a full-control staff member. */
+  async getManagedClub(userId: string) {
+    if (!isId(userId)) return null;
+    await connectDB();
+    const byManager = await Club.findOne({ managerId: userId }).lean<any>();
+    if (byManager) return byManager;
+    return Club.findOne({ staff: { $elemMatch: { userId: oid(userId), access: "full_control" } } }).lean<any>();
+  },
+
+  /**
+   * What this user may do with a club: MANAGER (main manager), FULL (staff with full
+   * control) or CUSTOM (staff limited to the tools ticked for them). Null = no access.
+   */
+  async getClubAccess(userId: string, clubId: string): Promise<"MANAGER" | "FULL" | "CUSTOM" | null> {
+    return (await db.getClubPermissions(userId, clubId)).access;
+  },
+
+  /** Access level plus, for CUSTOM staff, the Club Control Center tools they may use. */
+  async getClubPermissions(userId: string, clubId: string): Promise<{ access: "MANAGER" | "FULL" | "CUSTOM" | null; permissions: string[] }> {
+    if (!isId(userId) || !isId(clubId)) return { access: null, permissions: [] };
+    await connectDB();
+    const club = await Club.findById(clubId, { managerId: 1, staff: 1 }).lean<any>();
+    if (!club) return { access: null, permissions: [] };
+    if (club.managerId && String(club.managerId) === userId) return { access: "MANAGER", permissions: [] };
+    const entry = (club.staff || []).find((s: any) => String(s.userId) === userId);
+    if (!entry) return { access: null, permissions: [] };
+    if (entry.access === "full_control") return { access: "FULL", permissions: [] };
+    return { access: "CUSTOM", permissions: staffPermissions(entry) };
+  },
+
+  /** May this user use a given Club Control Center tool for this club? */
+  async canUseClubTool(userId: string, clubId: string, tool: string) {
+    const { access, permissions } = await db.getClubPermissions(userId, clubId);
+    return access === "MANAGER" || access === "FULL" || (access === "CUSTOM" && permissions.includes(tool));
+  },
+
+  /** Club staff with their names and photos (for Access Control). */
+  async getClubStaff(clubId: string) {
+    if (!isId(clubId)) return [];
+    await connectDB();
+    const club = await Club.findById(clubId, { staff: 1 }).lean<any>();
+    const staff = club?.staff || [];
+    if (!staff.length) return [];
+    const ids = staff.map((s: any) => s.userId);
+    const [users, players] = await Promise.all([
+      User.find({ _id: { $in: ids } }, { fullName: 1, username: 1, avatar: 1 }).lean<any>(),
+      Player.find({ userId: { $in: ids } }, { userId: 1, fullName: 1, username: 1, avatar: 1, clubId: 1 }).lean<any>(),
+    ]);
+    const um = new Map(users.map((u: any) => [String(u._id), u]));
+    const pm = new Map(players.map((p: any) => [String(p.userId), p]));
+    return staff.map((s: any) => {
+      const id = String(s.userId);
+      const p: any = pm.get(id);
+      const u: any = um.get(id) || {};
+      return {
+        userId: id,
+        playerId: p ? String(p._id) : undefined,
+        fullName: p?.fullName || u.fullName || "Unknown",
+        username: p?.username || u.username || "",
+        avatar: p?.avatar || u.avatar || PLACEHOLDER.avatar,
+        inSquad: !!p && String(p.clubId || "") === clubId,
+        access: s.access === "full_control" ? "full_control" : "custom",
+        permissions: s.access === "full_control" ? [] : staffPermissions(s),
+      };
+    });
+  },
+
+  /** Grant or change a squad player's staff access. Max 10 staff per club. */
+  async setClubStaff(clubId: string, playerId: string, access: "full_control" | "custom", permissions: string[]) {
+    if (!isId(clubId) || !isId(playerId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const club = await Club.findById(clubId, { managerId: 1, staff: 1, name: 1 }).lean<any>();
+    if (!club) throw new ServiceError("Club not found", 404);
+    const player = await Player.findById(playerId, { userId: 1, clubId: 1, fullName: 1 }).lean<any>();
+    if (!player || String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
+    if (!player.userId) throw new ServiceError("That player has no account to sign in with", 400);
+    const userId = String(player.userId);
+    if (String(club.managerId || "") === userId) throw new ServiceError("The main manager already has full control", 400);
+    if (access === "custom" && !permissions.length) throw new ServiceError("Tick at least one tool, or choose Full control", 400);
+
+    const staff = club.staff || [];
+    const exists = staff.some((s: any) => String(s.userId) === userId);
+    if (!exists && staff.length >= MAX_CLUB_STAFF) throw new ServiceError(`A club can give access to at most ${MAX_CLUB_STAFF} players`, 409);
+
+    const entry = { userId: player.userId, access, permissions: access === "custom" ? permissions : [] };
+    if (exists) await Club.updateOne({ _id: clubId, "staff.userId": player.userId }, { $set: { "staff.$": entry } });
+    else await Club.updateOne({ _id: clubId }, { $push: { staff: entry } });
+    await db.notify(userId, `Club access: ${club.name}`, access === "full_control" ? `You now have full control of ${club.name}.` : `You can now use ${permissions.length} club tool${permissions.length === 1 ? "" : "s"} for ${club.name}.`, "/dashboard/my-club");
+    return db.getClubStaff(clubId);
+  },
+
+  async removeClubStaff(clubId: string, userId: string) {
+    if (!isId(clubId) || !isId(userId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    await Club.updateOne({ _id: clubId }, { $pull: { staff: { userId: oid(userId) } } });
+    return db.getClubStaff(clubId);
+  },
+
+  /**
+   * The main manager hands the club over to a player in its squad. That player's own
+   * account becomes the club's main manager (no separate club account needed).
+   */
+  async handOverClub(clubId: string, fromUserId: string, toPlayerId: string) {
+    if (!isId(clubId) || !isId(toPlayerId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const club = await Club.findById(clubId, { managerId: 1, name: 1 }).lean<any>();
+    if (!club) throw new ServiceError("Club not found", 404);
+    if (String(club.managerId || "") !== fromUserId) throw new ServiceError("Only the club's main manager can hand the club over", 403);
+    const player = await Player.findById(toPlayerId, { userId: 1, clubId: 1, fullName: 1 }).lean<any>();
+    if (!player || String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
+    if (!player.userId) throw new ServiceError("That player has no account to sign in with", 400);
+    if (String(player.userId) === fromUserId) throw new ServiceError("You are already the main manager", 400);
+    await Club.updateOne({ _id: clubId }, { $set: { managerId: player.userId }, $pull: { staff: { userId: player.userId } } });
+    await db.notify(String(player.userId), "You are now the club manager", `You are now the main manager of ${club.name}. Open My Club Management from your account menu.`, "/dashboard/my-club");
+    return { managerId: String(player.userId), managerName: player.fullName };
+  },
+
+  /** A player leaves their club and becomes a free agent. The main manager must hand over first. */
+  async leaveClub(userId: string) {
+    if (!isId(userId)) throw new ServiceError("Invalid user", 400);
+    await connectDB();
+    const player = await Player.findOne({ userId }, { clubId: 1, fullName: 1, frozenUntil: 1 }).lean<any>();
+    if (!player?.clubId) throw new ServiceError("You are not in a club", 400);
+    if (isFrozen(player.frozenUntil)) throw new ServiceError(`You joined recently and are frozen for ${FREEZE_DAYS} days. Try again later.`, 409);
+    const club = await Club.findById(player.clubId, { managerId: 1, name: 1 }).lean<any>();
+    if (club && String(club.managerId || "") === userId) {
+      throw new ServiceError("You are the club's main manager. Hand the club over to another player before leaving.", 409);
+    }
+    await lockSeats(player.clubId); // keep everyone else in their seat
+    await Player.updateOne({ _id: player._id }, { $unset: { clubId: 1, shirtNo: 1, seat: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    await User.updateOne({ _id: userId }, { $unset: { clubId: 1 } });
+    await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: club?.name || "",
+      oldClubId: club?._id,
+      newClubName: "No club",
+      fee: 0,
+      approvedBy: "Player",
+      transferType: "released",
+    });
+    if (club) {
+      await Club.updateOne({ _id: club._id }, { $pull: { staff: { userId: oid(userId) } } });
+      if (club.managerId) await db.notify(String(club.managerId), "Player left the club", `${player.fullName} has left ${club.name}.`, "/dashboard/my-club/squad");
+    }
+    return { left: club?.name || "" };
+  },
+
+  /** Clubs a user can edit (as manager or staff), used to pick "their" club. */
+  async getEditableClubId(userId: string, fallbackClubId?: string) {
+    if (!isId(userId)) return fallbackClubId;
+    await connectDB();
+    const list = await Club.find({ $or: [{ managerId: userId }, { "staff.userId": oid(userId) }] }, { _id: 1, managerId: 1 }).lean<any>();
+    if (!list.length) return fallbackClubId;
+    // Access to several clubs: the club they play for first, then one they're main manager of.
+    const own = await Player.findOne({ userId }, { clubId: 1 }).lean<any>();
+    const pick = list.find((c: any) => own?.clubId && String(c._id) === String(own.clubId)) || list.find((c: any) => String(c.managerId) === userId) || list[0];
+    return String(pick._id);
+  },
+
+  async updateClubProfile(clubId: string, data: Record<string, any>) {
+    if (!isId(clubId)) throw new ServiceError("Invalid club", 400);
+    await connectDB();
+    const c = await Club.findByIdAndUpdate(clubId, { $set: data }, { new: true }).lean<any>();
+    if (!c) throw new ServiceError("Club not found", 404);
+    return shapeClub(c);
+  },
+
+  async canManageClub(userId: string, clubId: string) {
+    const club = await db.getManagedClub(userId);
+    return !!club && String(club._id) === clubId;
+  },
+
+  async leaveTournament(slugOrId: string, userId: string) {
+    await connectDB();
+    const t = await Tournament.findOne(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId });
+    if (!t) throw new ServiceError("Tournament not found", 404);
+    if (t.status !== "REGISTRATION_OPEN") throw new ServiceError("You can only withdraw while registration is open", 409);
+    const club = await db.getMainManagedClub(userId);
+    if (!club) throw new ServiceError("Only the club's main manager can withdraw the club", 403);
+    const r = await Tournament.updateOne({ _id: t._id }, { $pull: { clubParticipants: { clubId: club._id, status: { $ne: "REMOVED" } } } });
+    if (!r.modifiedCount) throw new ServiceError("Your club is not registered for this tournament", 409);
+    return db.getTournamentBySlug(t.slug, { includeDrafts: true });
+  },
+
+  async setClubEntryStatus(tournamentId: string, clubId: string, status: "CONFIRMED" | "REMOVED") {
+    if (!isId(tournamentId) || !isId(clubId)) throw new ServiceError("Invalid id", 400);
+    await connectDB();
+    // Returns the document as it was, so we know what the entry changed from.
+    const t = await Tournament.findOneAndUpdate(
+      { _id: tournamentId, "clubParticipants.clubId": oid(clubId) },
+      { $set: { "clubParticipants.$.status": status } },
+      { projection: { name: 1, slug: 1, clubParticipants: { $elemMatch: { clubId: oid(clubId) } } } }
+    ).lean<any>();
+    if (!t) throw new ServiceError("Club entry not found", 404);
+    const before = t.clubParticipants?.[0]?.status || "CONFIRMED";
+    if (before === status) return true;
+
+    const club = await Club.findById(clubId, { name: 1, logo: 1, managerId: 1 }).lean<any>();
+    if (!club) return true;
+    const notifyClub = (title: string, message: string) => (club.managerId ? db.notify(String(club.managerId), title, message, `/tournaments/${t.slug}`) : undefined);
+    if (status === "CONFIRMED") {
+      await db.addActivityEvent({
+        type: "TOURNAMENT_JOIN",
+        category: "Tournaments",
+        title: `${club.name} entered ${t.name}`,
+        avatar: club.logo,
+        targetUrl: `/tournaments/${t.slug}`,
+      });
+      await notifyClub("Tournament registration approved", `${club.name} is approved for ${t.name}.`);
+    } else if (before === "PENDING") {
+      await notifyClub("Tournament registration rejected", `${club.name}'s registration for ${t.name} was not approved. Contact an admin for details.`);
+    } else {
+      await notifyClub("Removed from tournament", `An admin removed ${club.name} from ${t.name}.`);
+    }
+    return true;
+  },
+
+  /** Club tournament entries still waiting for an admin, oldest first. */
+  async getPendingClubEntries() {
+    await connectDB();
+    const list = await Tournament.find({ clubParticipants: { $elemMatch: { status: "PENDING" } } }, { name: 1, slug: 1, clubParticipants: 1 }).lean<any>();
+    const entries = list.flatMap((t: any) =>
+      (t.clubParticipants || []).filter((c: any) => c.status === "PENDING").map((c: any) => ({ t, c }))
+    );
+    const clubs = await clubMap(entries.map((e: any) => e.c.clubId));
+    return entries
+      .map(({ t, c }: any) => {
+        const club: any = clubs.get(String(c.clubId));
+        return {
+          tournamentId: String(t._id),
+          tournament: t.name,
+          tournamentSlug: t.slug,
+          clubId: String(c.clubId),
+          fbPostLink: c.fbPostLink || "",
+          club: club ? clubMini(club) : null,
+          joinedAt: new Date(c.joinedAt).toISOString(),
+        };
+      })
+      .sort((a: any, b: any) => +new Date(a.joinedAt) - +new Date(b.joinedAt));
+  },
+
+  async removeTournamentParticipant(tournamentId: string, userId: string) {
+    if (!isId(tournamentId) || !isId(userId)) throw new ServiceError("Invalid id", 400);
+    await connectDB();
+    const t = await Tournament.findOneAndUpdate(
+      { _id: tournamentId, "participants.userId": oid(userId) },
+      { $set: { "participants.$.status": "REMOVED" } },
+      { new: true }
+    ).lean<any>();
+    if (!t) throw new ServiceError("Participant not found", 404);
+    await db.notify(userId, "Removed from tournament", `An admin removed you from ${t.name}.`, `/tournaments/${t.slug}`);
+    return true;
+  },
+
+  async restoreTournamentParticipant(tournamentId: string, userId: string) {
+    if (!isId(tournamentId) || !isId(userId)) throw new ServiceError("Invalid id", 400);
+    await connectDB();
+    await Tournament.updateOne({ _id: tournamentId, "participants.userId": oid(userId) }, { $set: { "participants.$.status": "CONFIRMED" } });
+    return true;
+  },
+
+  async getTournamentParticipantsAdmin(tournamentId: string) {
+    if (!isId(tournamentId)) return [];
+    await connectDB();
+    const t = await Tournament.findById(tournamentId).lean<any>();
+    if (!t) return [];
+    if (t.participantType === "CLUB") {
+      const entries = t.clubParticipants || [];
+      const clubs = await Club.find({ _id: { $in: entries.map((c: any) => c.clubId) } }, { name: 1, shortName: 1, slug: 1, logo: 1, email: 1, managerId: 1 }).lean();
+      const managers = await User.find({ _id: { $in: clubs.map((c: any) => c.managerId).filter(Boolean) } }, { fullName: 1, email: 1 }).lean();
+      const cm = new Map(clubs.map((c: any) => [String(c._id), c]));
+      const mm = new Map(managers.map((m: any) => [String(m._id), m]));
+      return entries.map((e: any) => {
+        const c: any = cm.get(String(e.clubId)) || {};
+        const m: any = c.managerId ? mm.get(String(c.managerId)) || {} : {};
+        return {
+          clubId: String(e.clubId),
+          fullName: c.name,
+          username: c.shortName,
+          slug: c.slug,
+          email: m.email || c.email,
+          managerName: m.fullName,
+          avatar: clubLogo(c),
+          joinedAt: new Date(e.joinedAt).toISOString(),
+          status: e.status,
+          paymentType: e.paymentType,
+          fbPostLink: e.fbPostLink,
+        };
+      });
+    }
+    const users = await User.find({ _id: { $in: t.participants.map((p: any) => p.userId) } }, { email: 1, fullName: 1, username: 1 }).lean();
+    const players = await Player.find({ userId: { $in: t.participants.map((p: any) => p.userId) } }, { konamiId: 1, userId: 1, rating: 1, avatar: 1, phone: 1 }).lean();
+    const um = new Map(users.map((u: any) => [String(u._id), u]));
+    const pm = new Map(players.map((p: any) => [String(p.userId), p]));
+    return t.participants.map((p: any) => {
+      const u: any = um.get(String(p.userId)) || {};
+      const pl: any = pm.get(String(p.userId)) || {};
+      return {
+        userId: String(p.userId),
+        playerId: pl._id ? String(pl._id) : undefined,
+        fullName: u.fullName,
+        username: u.username,
+        email: u.email,
+        konamiId: pl.konamiId,
+        phone: pl.phone,
+        rating: pl.rating,
+        avatar: pl.avatar || PLACEHOLDER.avatar,
+        joinedAt: new Date(p.joinedAt).toISOString(),
+        status: p.status,
+      };
+    });
+  },
+
+  async getTournamentsForUser(userId: string) {
+    if (!isId(userId)) return [];
+    await connectDB();
+    const player = await Player.findOne({ userId }, { clubId: 1 }).lean<any>();
+    const or: any[] = [{ participants: { $elemMatch: { userId: oid(userId), status: { $ne: "REMOVED" } } } }];
+    if (player?.clubId) or.push({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: player.clubId, status: { $nin: ["REMOVED", "PENDING"] } } } });
+    const list = await Tournament.find({ $or: or }).sort({ startDate: -1 }).lean();
+    const prog = await tournamentProgress(list.map((t: any) => String(t._id)));
+    return list.map((t: any) => {
+      const entry =
+        t.participants.find((p: any) => String(p.userId) === userId) ||
+        (player?.clubId ? (t.clubParticipants || []).find((c: any) => String(c.clubId) === String(player.clubId)) : undefined);
+      return { ...shapeTournament(t, prog.get(String(t._id))), joinedAt: entry ? new Date(entry.joinedAt).toISOString() : undefined };
+    });
+  },
+
+  // ----- Events -----
+  async getEvents(opts: { includeDrafts?: boolean } = {}) {
+    await connectDB();
+    const q: any = opts.includeDrafts ? {} : { status: { $ne: "DRAFT" } };
+    const list = await Event.find(q).sort({ eventDate: 1 }).lean();
+    return list.map((e: any) => db._shapeEvent(e));
+  },
+
+  _shapeEvent(e: any) {
+    const regs = (e.registrations || []).filter((r: any) => r.status !== "REMOVED");
+    const deadline = e.registrationDeadline ? new Date(e.registrationDeadline) : new Date(e.eventDate);
+    const out = plain<any>({ ...e, registrations: undefined });
+    return {
+      ...out,
+      banner: e.banner || PLACEHOLDER.banner,
+      eventDate: new Date(e.eventDate).toISOString(),
+      registrationDeadline: e.registrationDeadline ? new Date(e.registrationDeadline).toISOString() : "",
+      registeredCount: regs.length,
+      registeredUserIds: regs.map((r: any) => String(r.userId)),
+      isRegistrationOpen: e.status === "ACTIVE" && e.registrationOpen && deadline.getTime() > Date.now() && regs.length < (e.capacity || 0),
+    };
+  },
+
+  async getEventBySlug(slug: string) {
+    await connectDB();
+    const e = await Event.findOne({ slug, status: { $ne: "DRAFT" } }).lean<any>();
+    return e ? db._shapeEvent(e) : null;
+  },
+
+  async createEvent(data: any) {
+    await connectDB();
+    const slug = await uniqueSlug(Event, data.name);
+    const e = await Event.create({ ...data, slug });
+    if (e.status === "ACTIVE") {
+      await db.addActivityEvent({ type: "EVENT_CREATED", category: "Tournaments", title: `New event: ${e.name}`, description: e.venue, targetUrl: `/events#${e.slug}` });
+    }
+    return db._shapeEvent(e.toObject());
+  },
+
+  async updateEvent(id: string, data: any) {
+    if (!isId(id)) throw new ServiceError("Invalid event id", 400);
+    await connectDB();
+    const set = { ...data };
+    if (data.name) {
+      const existing = await Event.findById(id, { name: 1 }).lean<any>();
+      if (existing && existing.name !== data.name) set.slug = await uniqueSlug(Event, data.name, id);
+    }
+    const e = await Event.findByIdAndUpdate(id, { $set: set }, { new: true }).lean<any>();
+    if (!e) throw new ServiceError("Event not found", 404);
+    return db._shapeEvent(e);
+  },
+
+  async registerForEvent(slugOrId: string, userId: string) {
+    await connectDB();
+    const e = await Event.findOne(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId });
+    if (!e) throw new ServiceError("Event not found", 404);
+    const shaped = db._shapeEvent(e.toObject());
+    if (shaped.registeredUserIds.includes(userId)) throw new ServiceError("You are already registered for this event", 409);
+    if (!shaped.isRegistrationOpen) throw new ServiceError("Registration for this event is closed", 409);
+    const player = await Player.findOne({ userId }, { fullName: 1, avatar: 1 }).lean<any>();
+    const user = await User.findById(userId, { fullName: 1, status: 1 }).lean<any>();
+    if (!user || user.status !== "ACTIVE") throw new ServiceError("Your account is not active", 403);
+    const res = await Event.updateOne(
+      { _id: e._id, "registrations.userId": { $ne: oid(userId) }, $expr: { $lt: [{ $size: "$registrations" }, e.capacity] } },
+      { $push: { registrations: { userId, playerId: player?._id, joinedAt: new Date(), status: "CONFIRMED" } } }
+    );
+    if (!res.modifiedCount) throw new ServiceError("Could not register — the event may be full", 409);
+    await db.addActivityEvent({
+      type: "EVENT_REGISTER",
+      category: "Players",
+      title: `${user.fullName} registered for ${e.name}`,
+      avatar: player?.avatar,
+      targetUrl: `/events#${e.slug}`,
+      userId,
+      playerId: player ? String(player._id) : undefined,
+    });
+    await db.notify(userId, "Event registration confirmed", `You're registered for ${e.name}.`, `/events#${e.slug}`);
+    const fresh = await Event.findById(e._id).lean<any>();
+    return db._shapeEvent(fresh);
+  },
+
+  async unregisterFromEvent(slugOrId: string, userId: string) {
+    await connectDB();
+    const e = await Event.findOneAndUpdate(isId(slugOrId) ? { _id: slugOrId } : { slug: slugOrId }, { $pull: { registrations: { userId: oid(userId) } } }, { new: true }).lean<any>();
+    if (!e) throw new ServiceError("Event not found", 404);
+    return db._shapeEvent(e);
+  },
+
+  async getEventRegistrationsAdmin(eventId: string) {
+    if (!isId(eventId)) return [];
+    await connectDB();
+    const e = await Event.findById(eventId).lean<any>();
+    if (!e) return [];
+    const users = await User.find({ _id: { $in: e.registrations.map((r: any) => r.userId) } }, { email: 1, fullName: 1, username: 1 }).lean();
+    const um = new Map(users.map((u: any) => [String(u._id), u]));
+    return e.registrations.map((r: any) => {
+      const u: any = um.get(String(r.userId)) || {};
+      return { userId: String(r.userId), fullName: u.fullName, username: u.username, email: u.email, joinedAt: new Date(r.joinedAt).toISOString(), status: r.status };
+    });
+  },
+
+  async removeEventRegistration(eventId: string, userId: string) {
+    if (!isId(eventId) || !isId(userId)) throw new ServiceError("Invalid id", 400);
+    await connectDB();
+    await Event.updateOne({ _id: eventId }, { $pull: { registrations: { userId: oid(userId) } } });
+    return true;
+  },
+
+  async getEventsForUser(userId: string) {
+    if (!isId(userId)) return [];
+    await connectDB();
+    const list = await Event.find({ "registrations.userId": oid(userId) }).sort({ eventDate: -1 }).lean();
+    return list.map((e: any) => db._shapeEvent(e));
+  },
+
+  // ----- Referees -----
+  async getReferees() {
+    await connectDB();
+    const list = await Referee.find({}).sort({ tier: 1, rating: -1 }).lean();
+    return list.map((r: any) => ({ ...plain<any>(r), avatar: r.avatar || PLACEHOLDER.avatar, completedMatches: r.matchesOfficiated }));
+  },
+
+  // ----- Transfers -----
+  async getTransferListings() {
+    await connectDB();
+    const list = await TransferListing.find({ status: { $ne: "CLOSED" } }).sort({ createdAt: -1 }).lean();
+    const players = await Player.find({ _id: { $in: list.map((l: any) => l.playerId) } }).lean();
+    const clubs = await clubMap(players.map((p: any) => p.clubId));
+    const pm = new Map(players.map((p: any) => [String(p._id), shapePlayer(p, clubs)]));
+    return list
+      .map((l: any) => ({ ...plain<any>(l), listedDate: new Date(l.createdAt).toISOString(), player: pm.get(String(l.playerId)) }))
+      .filter((l: any) => l.player);
+  },
+
+  async createTransferListing(data: { playerId: string; askingPrice: number; listedBy?: string }) {
+    if (!isId(data.playerId)) throw new ServiceError("Invalid player", 400);
+    await connectDB();
+    const player = await Player.findById(data.playerId);
+    if (!player) throw new ServiceError("Player not found", 404);
+    const existing = await TransferListing.findOne({ playerId: data.playerId, status: { $ne: "CLOSED" } });
+    if (existing) throw new ServiceError("Player is already listed", 409);
+    const l = await TransferListing.create({ playerId: data.playerId, askingPrice: data.askingPrice, listedBy: data.listedBy });
+    player.contract = { ...(player.contract as any), status: "TRANSFER_LISTED" } as any;
+    await player.save();
+    await db.addActivityEvent({
+      type: "TRANSFER_LISTED",
+      category: "Transfers",
+      title: `${player.fullName} is on the transfer list`,
+      description: `Asking price $${data.askingPrice}M`,
+      avatar: player.avatar,
+      targetUrl: `/players/${player.username}`,
+      playerId: String(player._id),
+      userId: player.userId ? String(player.userId) : undefined,
+    });
+    return plain(l.toObject());
+  },
+
+  async closeTransferListing(id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid listing", 400);
+    await connectDB();
+    const l = await TransferListing.findByIdAndUpdate(id, { $set: { status: "CLOSED" } }).lean<any>();
+    if (l) await Player.updateOne({ _id: l.playerId, "contract.status": "TRANSFER_LISTED" }, { $set: { "contract.status": "FREE_AGENT" } });
+    return true;
+  },
+
+  async createTransferRequest(data: any) {
+    await connectDB();
+    if (!isId(data.playerId) || !isId(data.targetClubId)) throw new ServiceError("Invalid player or club", 400);
+    const [player, club] = await Promise.all([Player.findById(data.playerId).lean<any>(), Club.findById(data.targetClubId).lean<any>()]);
+    if (!player || !club) throw new ServiceError("Player or club not found", 404);
+    const dup = await TransferRequest.findOne({ playerId: data.playerId, targetClubId: data.targetClubId, status: "PENDING" });
+    if (dup) throw new ServiceError("A pending offer already exists for this player from this club", 409);
+    const r = await TransferRequest.create(data);
+    if (player.userId) await db.notify(String(player.userId), "New transfer offer", `${club.name} made an offer of $${data.offeredFee}M.`, "/dashboard");
+    return plain(r.toObject());
+  },
+
+  async getTransferRequests(filter: { status?: string } = {}) {
+    await connectDB();
+    const q: any = {};
+    if (filter.status) q.status = filter.status;
+    const list = await TransferRequest.find(q).sort({ createdAt: -1 }).lean();
+    const [players, clubs] = await Promise.all([
+      Player.find({ _id: { $in: list.map((r: any) => r.playerId) } }, { fullName: 1, username: 1, avatar: 1, konamiId: 1, clubId: 1 }).lean(),
+      Club.find({ _id: { $in: list.map((r: any) => r.targetClubId) } }, { name: 1, shortName: 1, slug: 1, logo: 1 }).lean(),
+    ]);
+    const pm = new Map(players.map((p: any) => [String(p._id), p]));
+    const cm = new Map(clubs.map((c: any) => [String(c._id), c]));
+    return list.map((r: any) => ({ ...plain<any>(r), player: plain(pm.get(String(r.playerId))), club: clubMini(cm.get(String(r.targetClubId))) }));
+  },
+
+  async setTransferRequestStatus(id: string, status: "ACCEPTED" | "REJECTED" | "CANCELLED", approverName: string) {
+    if (!isId(id)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const r = await TransferRequest.findById(id);
+    if (!r) throw new ServiceError("Request not found", 404);
+    if (r.status !== "PENDING") throw new ServiceError("Request already handled", 409);
+    r.status = status;
+    await r.save();
+    if (status === "ACCEPTED") {
+      if (r.type === "SIGNING") await db._executeSigning(r, approverName);
+      else await db._executeTransfer(String(r.playerId), String(r.targetClubId), r.offeredFee || 0, approverName);
+    } else if (r.type === "SIGNING") {
+      const [club, player] = await Promise.all([Club.findById(r.targetClubId, { name: 1, managerId: 1 }).lean<any>(), Player.findById(r.playerId, { fullName: 1 }).lean<any>()]);
+      const to = r.requesterUserId || club?.managerId;
+      if (to) await db.notify(String(to), "Transfer request declined", `The request to sign ${player?.fullName || "the player"} for ${club?.name || "your club"} was not approved.`, "/dashboard/my-club/transfer-window");
+    }
+    return plain(r.toObject());
+  },
+
+  async approveTransfer(listingId: string, buyerClubId: string, approverName = "Admin") {
+    if (!isId(listingId) || !isId(buyerClubId)) throw new ServiceError("Invalid listing or club", 400);
+    await connectDB();
+    const listing = await TransferListing.findById(listingId);
+    if (!listing || listing.status === "CLOSED") throw new ServiceError("Listing not found", 404);
+    const hist = await db._executeTransfer(String(listing.playerId), buyerClubId, listing.askingPrice, approverName);
+    listing.status = "CLOSED";
+    await listing.save();
+    return hist;
+  },
+
+  async _executeTransfer(playerId: string, clubId: string, fee: number, approverName: string) {
+    const [player, club] = await Promise.all([Player.findById(playerId), Club.findById(clubId)]);
+    if (!player || !club) throw new ServiceError("Player or club not found", 404);
+    if (player.clubId && String(player.clubId) === clubId) throw new ServiceError("Player already belongs to this club", 409);
+    if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined a club recently and is frozen for ${FREEZE_DAYS} days`, 409);
+    await assertSquadSpace(club._id, player._id);
+    const oldClub = player.clubId ? await Club.findById(player.clubId, { name: 1, _id: 1 }).lean<any>() : null;
+    if (oldClub) await lockSeats(oldClub._id);
+    // A seat belongs to one club: the player gets a free seat in the new squad.
+    const newSeat = await nextFreeSeat(club._id);
+    player.clubId = club._id;
+    player.seat = newSeat;
+    player.contract = { status: "UNDER_CONTRACT", durationMonths: 12, endDate: new Date(Date.now() + 365 * 86400000) } as any;
+    await player.save();
+    await TransferListing.updateMany({ playerId, status: { $ne: "CLOSED" } }, { $set: { status: "CLOSED" } });
+    const hist = await TransferHistory.create({
+      playerId,
+      playerName: player.fullName,
+      previousClubName: oldClub?.name || "No club",
+      oldClubId: oldClub?._id,
+      newClubName: club.name,
+      newClubId: club._id,
+      fee,
+      approvedBy: approverName,
+      transferType: "transfer",
+      contractEndDate: player.contract?.endDate,
+    });
+    await db.addActivityEvent({
+      type: "TRANSFER",
+      category: "Transfers",
+      title: `${player.fullName} signed for ${club.name}`,
+      description: fee ? `Fee $${fee}M` : "",
+      avatar: player.avatar,
+      targetUrl: `/players/${player.username}`,
+      playerId,
+      userId: player.userId ? String(player.userId) : undefined,
+    });
+    if (player.userId) await db.notify(String(player.userId), "Transfer completed", `You are now part of ${club.name}.`, `/clubs/${club.slug}`);
+    return plain(hist.toObject());
+  },
+
+  /**
+   * Transfer Window: a club asks to sign a free agent into a squad seat. Needs a Facebook
+   * post link and goes to the admins for approval.
+   */
+  async createSigningRequest(data: { clubId: string; playerId: string; squad: string; seat: number; postLink: string; requesterUserId: string }) {
+    if (!isId(data.clubId) || !isId(data.playerId)) throw new ServiceError("Invalid player or club", 400);
+    await connectDB();
+    await db.releaseExpiredContracts(true);
+    const squadDef = SQUADS.find((x) => x.id === data.squad);
+    if (!squadDef) throw new ServiceError("Choose a squad", 400);
+    const [player, club] = await Promise.all([Player.findById(data.playerId).lean<any>(), Club.findById(data.clubId).lean<any>()]);
+    if (!player || !club) throw new ServiceError("Player or club not found", 404);
+    if (club.status !== "ACTIVE") throw new ServiceError("Your club must be approved before signing players", 409);
+    if (player.clubId) throw new ServiceError(`${player.fullName} is already in a club`, 409);
+    if (player.status && player.status !== "ACTIVE") throw new ServiceError(`${player.fullName} can't be signed right now`, 409);
+    const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+    if (squad.length >= squadDef.size) throw new ServiceError(`${squadDef.label} is full`, 409);
+    if (!Number.isInteger(data.seat) || data.seat < 1 || data.seat > squadDef.size) throw new ServiceError("Choose a seat", 400);
+    await lockSeats(club._id);
+    if (await Player.exists({ clubId: club._id, seat: data.seat })) throw new ServiceError(`Seat ${data.seat} is already taken`, 409);
+    const pending = await TransferRequest.find({ targetClubId: club._id, type: "SIGNING", status: "PENDING" }, { playerId: 1, seat: 1 }).lean<any>();
+    if (pending.some((r: any) => String(r.playerId) === data.playerId)) throw new ServiceError("You already requested this player", 409);
+    if (pending.some((r: any) => r.seat === data.seat)) throw new ServiceError(`Seat ${data.seat} is reserved by another pending request`, 409);
+    if (squad.length + pending.length >= squadDef.size) throw new ServiceError(`${squadDef.label} has no free seats left (including pending requests)`, 409);
+    const r = await TransferRequest.create({
+      playerId: player._id,
+      targetClubId: club._id,
+      type: "SIGNING",
+      squad: data.squad,
+      seat: data.seat,
+      postLink: data.postLink,
+      offeredFee: 0,
+      requesterUserId: data.requesterUserId,
+    });
+    return plain(r.toObject());
+  },
+
+  /** A club unregisters (releases) one of its players; they leave with no club. */
+  async clubReleasePlayer(clubId: string, playerId: string, byName: string) {
+    if (!isId(clubId) || !isId(playerId)) throw new ServiceError("Invalid request", 400);
+    await connectDB();
+    const [club, player] = await Promise.all([Club.findById(clubId, { name: 1, managerId: 1, slug: 1 }).lean<any>(), Player.findById(playerId)]);
+    if (!club || !player) throw new ServiceError("Player or club not found", 404);
+    if (String(player.clubId || "") !== clubId) throw new ServiceError("That player is not in your squad", 400);
+    if (player.userId && String(player.userId) === String(club.managerId || "")) throw new ServiceError("The main manager can't be unregistered. Hand the club over first.", 409);
+    if (isFrozen(player.frozenUntil)) throw new ServiceError(`${player.fullName} joined recently and is frozen for ${FREEZE_DAYS} days`, 409);
+    await lockSeats(player.clubId);
+    player.clubId = undefined;
+    player.seat = undefined;
+    player.shirtNo = undefined;
+    player.set("contract.status", "FREE_AGENT");
+    await player.save();
+    if (player.userId) {
+      await User.updateOne({ _id: player.userId }, { $unset: { clubId: 1 } });
+      await Club.updateOne({ _id: club._id }, { $pull: { staff: { userId: player.userId } } });
+      await db.notify(String(player.userId), `Unregistered from ${club.name}`, `${club.name} has released you. You now have no club and can join another one.`, "/dashboard");
+    }
+    await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: club.name,
+      oldClubId: club._id,
+      newClubName: "No club",
+      fee: 0,
+      approvedBy: byName,
+      transferType: "released",
+    });
+    return { player: player.fullName };
+  },
+
+  /**
+   * Admin moves a player into a club (seat + new 120-day contract) or out of their club,
+   * recording it in the transfer history like any other move.
+   */
+  async adminMovePlayer(playerId: string, clubId: string, adminName: string) {
+    if (!isId(playerId)) throw new ServiceError("Invalid player", 400);
+    await connectDB();
+    const player = await Player.findById(playerId);
+    if (!player) throw new ServiceError("Player not found", 404);
+    const oldClubId = player.clubId ? String(player.clubId) : "";
+    if (oldClubId === (clubId || "")) return;
+    const oldClub = oldClubId ? await Club.findById(oldClubId, { name: 1 }).lean<any>() : null;
+
+    if (oldClubId) await lockSeats(oldClubId);
+    if (!clubId) {
+      player.clubId = undefined;
+      player.seat = undefined;
+      player.shirtNo = undefined;
+      player.set("contract.status", "FREE_AGENT");
+      await player.save();
+      if (player.userId) await User.updateOne({ _id: player.userId }, { $unset: { clubId: 1 } });
+      if (oldClub) await Club.updateOne({ _id: oldClub._id }, { $pull: { staff: { userId: player.userId } } });
+      await TransferHistory.create({ playerId: player._id, playerName: player.fullName, previousClubName: oldClub?.name || "", oldClubId: oldClub?._id, newClubName: "No club", fee: 0, approvedBy: adminName, transferType: "released" });
+      return;
+    }
+
+    if (!isId(clubId)) throw new ServiceError("Invalid club", 400);
+    const club = await Club.findById(clubId);
+    if (!club) throw new ServiceError("Club not found", 404);
+    await assertSquadSpace(club._id, player._id);
+    const squad = await Player.find({ clubId: club._id }, { seat: 1, shirtNo: 1, fullName: 1 }).lean<any>();
+    const now = Date.now();
+    player.clubId = club._id;
+    player.squad = "main";
+    player.seat = await nextFreeSeat(club._id);
+    if (player.shirtNo && squad.some((p: any) => p.shirtNo === player.shirtNo)) player.shirtNo = undefined; // number already worn there
+    player.contract = { status: "UNDER_CONTRACT", durationMonths: 4, startDate: new Date(now), endDate: new Date(now + CONTRACT_DAYS * 86400000) } as any;
+    await player.save();
+    if (player.userId) await User.updateOne({ _id: player.userId }, { $set: { clubId: club._id } });
+    if (oldClub) await Club.updateOne({ _id: oldClub._id }, { $pull: { staff: { userId: player.userId } } });
+    await TransferRequest.updateMany({ playerId: player._id, status: "PENDING" }, { $set: { status: "CANCELLED" } });
+    await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: oldClub?.name || "No club",
+      oldClubId: oldClub?._id,
+      newClubName: club.name,
+      newClubId: club._id,
+      fee: 0,
+      approvedBy: adminName,
+      transferType: oldClub ? "transfer" : "signing",
+      contractEndDate: player.contract?.endDate,
+      seat: player.seat,
+    });
+    if (player.userId) await db.notify(String(player.userId), `You joined ${club.name}`, `An admin added you to ${club.name} on a ${CONTRACT_DAYS}-day contract.`, `/clubs/${club.slug}`);
+  },
+
+  /** Admin approved a signing: the player joins the seat on a 120-day contract, frozen for 3 days. */
+  async _executeSigning(r: any, approverName: string) {
+    const [player, club] = await Promise.all([Player.findById(r.playerId), Club.findById(r.targetClubId)]);
+    if (!player || !club) throw new ServiceError("Player or club not found", 404);
+    if (player.clubId) throw new ServiceError(`${player.fullName} has joined another club in the meantime`, 409);
+    await assertSquadSpace(club._id, player._id);
+    // The requested seat was reserved for this request; only fall back if it is somehow held.
+    const open = await freeSeats(club._id, { ignoreRequestId: r._id });
+    if (!open.length) throw new ServiceError("Main Team Squad has no free seats left", 409);
+    const seat = r.seat && open.includes(r.seat) ? r.seat : open[0];
+    const now = Date.now();
+    // "Free Agent" only if a previous club contract ran out; otherwise they simply had no club.
+    const cameFrom = player.contract?.endDate && new Date(player.contract.endDate).getTime() < now ? "Free Agent" : "No club";
+    player.clubId = club._id;
+    player.squad = r.squad || "main";
+    player.seat = seat;
+    player.frozenUntil = new Date(now + FREEZE_DAYS * 86400000);
+    player.contract = { status: "UNDER_CONTRACT", durationMonths: 4, startDate: new Date(now), endDate: new Date(now + CONTRACT_DAYS * 86400000) } as any;
+    await player.save();
+    if (player.userId) await User.updateOne({ _id: player.userId }, { $set: { clubId: club._id } });
+    await TransferListing.updateMany({ playerId: player._id, status: { $ne: "CLOSED" } }, { $set: { status: "CLOSED" } });
+    // Other clubs' pending requests for this player can no longer happen.
+    await TransferRequest.updateMany({ _id: { $ne: r._id }, playerId: player._id, status: "PENDING" }, { $set: { status: "CANCELLED" } });
+    const hist = await TransferHistory.create({
+      playerId: player._id,
+      playerName: player.fullName,
+      previousClubName: cameFrom,
+      newClubName: club.name,
+      newClubId: club._id,
+      fee: 0,
+      approvedBy: approverName,
+      transferType: "signing",
+      contractEndDate: player.contract?.endDate,
+      postLink: r.postLink || "",
+      seat,
+    });
+    await db.addActivityEvent({
+      type: "TRANSFER",
+      category: "Transfers",
+      title: `${player.fullName} joined ${club.name}`,
+      description: `Seat ${seat} · ${CONTRACT_DAYS}-day contract`,
+      avatar: player.avatar,
+      targetUrl: `/players/${player.username}`,
+      playerId: String(player._id),
+      userId: player.userId ? String(player.userId) : undefined,
+    });
+    if (player.userId) await db.notify(String(player.userId), `Welcome to ${club.name}!`, `You signed a ${CONTRACT_DAYS}-day contract (seat ${seat}). You are frozen for ${FREEZE_DAYS} days.`, `/clubs/${club.slug}`);
+    const to = r.requesterUserId || club.managerId;
+    if (to) await db.notify(String(to), "Transfer approved", `${player.fullName} has joined ${club.name} in seat ${seat}.`, "/dashboard/my-club/squad");
+    return plain(hist.toObject());
+  },
+
+  /**
+   * Players whose contract has ended become free agents. Runs at most every few minutes
+   * (one cheap query) from the pages that list squads.
+   */
+  async releaseExpiredContracts(force = false) {
+    const now = Date.now();
+    if (!force && now - lastContractSweep < 5 * 60 * 1000) return 0;
+    lastContractSweep = now;
+    await connectDB();
+    const expired = await Player.find({ clubId: { $ne: null }, "contract.endDate": { $lt: new Date(now) } }, { _id: 1, userId: 1, fullName: 1, clubId: 1, contract: 1 }).lean<any>();
+    if (!expired.length) return 0;
+    const exClubs = await clubMap(expired.map((p: any) => p.clubId));
+    await TransferHistory.insertMany(
+      expired.map((p: any) => ({
+        playerId: p._id,
+        playerName: p.fullName,
+        previousClubName: exClubs.get(String(p.clubId))?.name || "",
+        oldClubId: p.clubId,
+        newClubName: "Free Agent",
+        fee: 0,
+        approvedBy: "System",
+        transferType: "expired",
+        transferDate: p.contract?.endDate || new Date(now),
+        contractEndDate: p.contract?.endDate,
+      }))
+    );
+    const ids = expired.map((p: any) => p._id);
+    for (const cid of new Set(expired.map((p: any) => String(p.clubId)))) await lockSeats(cid);
+    await Player.updateMany({ _id: { $in: ids } }, { $unset: { clubId: 1, seat: 1, shirtNo: 1 }, $set: { "contract.status": "FREE_AGENT" } });
+    const userIds = expired.map((p: any) => p.userId).filter(Boolean);
+    if (userIds.length) await User.updateMany({ _id: { $in: userIds } }, { $unset: { clubId: 1 } });
+    for (const p of expired) if (p.userId) await db.notify(String(p.userId), "Contract ended", "Your club contract has ended. You are now a free agent.", "/dashboard");
+    return expired.length;
+  },
+
+  /**
+   * Overall rank by rating among players who have played at least one official
+   * match (ties broken by matches played, then join date). Null = unranked.
+   */
+  async getPlayerRank(p: { id: string; rating: number; stats: { matchesPlayed: number }; createdAt?: string }): Promise<{ rank: number | null; total: number }> {
+    await connectDB();
+    const ranked = { status: "ACTIVE", "stats.matchesPlayed": { $gt: 0 } };
+    if (!p.stats.matchesPlayed) return { rank: null, total: await Player.countDocuments(ranked) };
+    const created = p.createdAt ? new Date(p.createdAt) : new Date();
+    const [ahead, total] = await Promise.all([
+      Player.countDocuments({
+        ...ranked,
+        $or: [
+          { rating: { $gt: p.rating } },
+          { rating: p.rating, "stats.matchesPlayed": { $gt: p.stats.matchesPlayed } },
+          { rating: p.rating, "stats.matchesPlayed": p.stats.matchesPlayed, createdAt: { $lt: created } },
+        ],
+      }),
+      Player.countDocuments(ranked),
+    ]);
+    return { rank: ahead + 1, total };
+  },
+
+  /** Everything the public club profile needs beyond the club + squad. */
+  async getClubProfileExtras(clubId: string) {
+    if (!isId(clubId)) return null;
+    await connectDB();
+    const club = await Club.findById(clubId).lean<any>();
+    if (!club) return null;
+
+    const leaderIds = [club.presidentId, club.captainId, club.viceCaptainId].filter(Boolean);
+    const [leaders, manager, staffUsers, moves, tourns, rankAhead, rankTotal] = await Promise.all([
+      Player.find({ _id: { $in: leaderIds } }, { fullName: 1, username: 1, avatar: 1 }).lean(),
+      club.managerId ? User.findById(club.managerId, { fullName: 1, username: 1, avatar: 1 }).lean<any>() : null,
+      Player.find({ userId: { $in: (club.staff || []).map((s: any) => s.userId) } }, { fullName: 1, username: 1, avatar: 1, userId: 1 }).lean(),
+      TransferHistory.find({ $or: [{ newClubId: club._id }, { oldClubId: club._id }] }).sort({ transferDate: -1 }).limit(60).lean(),
+      Tournament.find({ participantType: "CLUB", clubParticipants: { $elemMatch: { clubId: club._id, status: { $nin: ["REMOVED", "PENDING"] } } } }, { name: 1, slug: 1, logo: 1, status: 1, winnerClubId: 1, clubParticipants: 1 }).lean(),
+      Club.countDocuments({ status: "ACTIVE", "stats.matches": { $gt: 0 }, points: { $gt: club.points || 0 } }),
+      Club.countDocuments({ status: "ACTIVE", "stats.matches": { $gt: 0 } }),
+    ]);
+    const lm = new Map(leaders.map((p: any) => [String(p._id), p]));
+    const mini = (p: any) => (p ? { username: p.username, fullName: p.fullName, avatar: p.avatar || PLACEHOLDER.avatar } : null);
+
+    const moverIds = moves.map((m: any) => m.playerId).filter(Boolean);
+    const movers = await Player.find({ _id: { $in: moverIds } }, { username: 1, avatar: 1 }).lean();
+    const mm = new Map(movers.map((p: any) => [String(p._id), p]));
+
+    return {
+      manager: manager ? { username: manager.username, fullName: manager.fullName, avatar: manager.avatar || PLACEHOLDER.avatar } : null,
+      president: mini(lm.get(String(club.presidentId))),
+      captain: mini(lm.get(String(club.captainId))),
+      viceCaptain: mini(lm.get(String(club.viceCaptainId))),
+      staff: staffUsers.map((p: any) => ({
+        ...mini(p),
+        access: (club.staff || []).find((s: any) => String(s.userId) === String(p.userId))?.access || "full_control",
+      })),
+      transfers: moves.map((m: any) => {
+        const p: any = mm.get(String(m.playerId)) || {};
+        return {
+          id: String(m._id),
+          date: new Date(m.transferDate).toISOString(),
+          direction: String(m.newClubId) === String(club._id) ? "IN" : "OUT",
+          playerName: m.playerName,
+          username: p.username,
+          avatar: p.avatar || PLACEHOLDER.avatar,
+          otherClub: String(m.newClubId) === String(club._id) ? m.previousClubName : m.newClubName,
+          fee: m.fee || 0,
+          type: m.transferType || "free",
+        };
+      }),
+      tournaments: tourns.map((t: any) => {
+        const entry = (t.clubParticipants || []).find((c: any) => String(c.clubId) === String(club._id));
+        return {
+          id: String(t._id),
+          name: t.name,
+          slug: t.slug,
+          logo: t.logo || PLACEHOLDER.logo,
+          status: t.status,
+          won: t.winnerClubId && String(t.winnerClubId) === String(club._id),
+          joinedAt: entry ? new Date(entry.joinedAt).toISOString() : undefined,
+        };
+      }),
+      rank: club.stats?.matches ? { rank: rankAhead + 1, total: rankTotal } : { rank: null, total: rankTotal },
+    };
+  },
+
+  /** Every move in or out of a club (newest first) for the club's Transfer History tool. */
+  async getClubTransferLog(clubId: string) {
+    if (!isId(clubId)) return [];
+    await connectDB();
+    const moves = await TransferHistory.find({ $or: [{ newClubId: clubId }, { oldClubId: clubId }] }).sort({ transferDate: -1 }).limit(500).lean<any>();
+    const [players, clubs] = await Promise.all([
+      Player.find({ _id: { $in: moves.map((m: any) => m.playerId).filter(Boolean) } }, { fullName: 1, username: 1, avatar: 1, konamiId: 1, clubId: 1 }).lean<any>(),
+      clubMap(moves.flatMap((m: any) => [m.newClubId, m.oldClubId]).filter(Boolean)),
+    ]);
+    const pm = new Map(players.map((p: any) => [String(p._id), p]));
+    return moves.map((m: any) => {
+      const into = String(m.newClubId || "") === clubId;
+      const otherId = into ? m.oldClubId : m.newClubId;
+      const other: any = otherId ? clubs.get(String(otherId)) : null;
+      const p: any = pm.get(String(m.playerId)) || {};
+      const contractEnd = m.contractEndDate || m.legacy?.contractTill;
+      return {
+        id: String(m._id),
+        date: new Date(m.transferDate).toISOString(),
+        direction: into ? "IN" : "OUT",
+        type: m.transferType || "free",
+        player: { id: p._id ? String(p._id) : "", fullName: p.fullName || m.playerName, username: p.username || "", avatar: p.avatar || PLACEHOLDER.avatar, konamiId: p.konamiId || "", stillHere: String(p.clubId || "") === clubId },
+        // Old-site registrations say "Free Agent" for players who simply had no club yet.
+        otherClub: other ? clubMini(other) : { name: into ? (m.previousClubName && m.previousClubName !== "Free Agent" ? m.previousClubName : "No club") : m.newClubName || "No club" },
+        contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,
+        postLink: m.postLink || m.legacy?.fbPost || "",
+        seat: m.seat || null,
+        shirtNo: m.legacy?.shirtNo || "",
+        fee: m.fee || 0,
+        approvedBy: m.approvedBy || "",
+      };
+    });
+  },
+
+  /** A player's club moves, newest first, with club logos for the timeline. */
+  async getTransferHistoryForPlayer(playerId: string) {
+    if (!isId(playerId)) return [];
+    await connectDB();
+    const list = await TransferHistory.find({ playerId }).sort({ transferDate: -1 }).lean();
+    const clubs = await clubMap(list.flatMap((h: any) => [h.newClubId, h.oldClubId]).filter(Boolean));
+    return list.map((h: any) => {
+      const contractEnd = h.contractEndDate || h.legacy?.contractTill;
+      return {
+        id: String(h._id),
+        date: new Date(h.transferDate).toISOString(),
+        newClub: h.newClubId ? clubMini(clubs.get(String(h.newClubId))) || { name: h.newClubName } : h.newClubName ? { name: h.newClubName } : null,
+        oldClub: h.oldClubId ? clubMini(clubs.get(String(h.oldClubId))) || { name: h.previousClubName } : null,
+        oldClubName: h.previousClubName || "",
+        fee: h.fee || 0,
+        type: h.transferType || "free",
+        shirtNo: h.legacy?.shirtNo || "",
+        seat: h.seat || null,
+        contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,
+        postLink: h.postLink || h.legacy?.fbPost || "",
+        approvedBy: h.approvedBy || "",
+      };
+    });
+  },
+
+  /** Site-wide transfer feed for the public Transfer Market (newest first). */
+  async getTransferFeed(limit = 3000) {
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const moves = await TransferHistory.find({}).sort({ transferDate: -1 }).limit(limit).lean<any>();
+    const [players, clubs] = await Promise.all([
+      Player.find({ _id: { $in: moves.map((m: any) => m.playerId).filter(Boolean) } }, { fullName: 1, username: 1, avatar: 1, preferredPosition: 1, rating: 1, "stats.matchesPlayed": 1 }).lean<any>(),
+      clubMap(moves.flatMap((m: any) => [m.newClubId, m.oldClubId]).filter(Boolean)),
+    ]);
+    const pm = new Map(players.map((p: any) => [String(p._id), p]));
+    const side = (id: any, name?: string) => (id && clubs.get(String(id)) ? clubMini(clubs.get(String(id))) : { name: name && name !== "Free Agent" ? name : "No club" });
+    return moves.map((m: any) => {
+      const p: any = pm.get(String(m.playerId)) || {};
+      const type = m.transferType || "free";
+      const contractEnd = m.contractEndDate || m.legacy?.contractTill;
+      return {
+        id: String(m._id),
+        date: new Date(m.transferDate).toISOString(),
+        type: type === "registered" ? "free" : type,
+        player: { fullName: p.fullName || m.playerName, username: p.username || "", avatar: p.avatar || PLACEHOLDER.avatar, position: p.preferredPosition || "", rating: p.stats?.matchesPlayed ? p.rating : 0 },
+        from: type === "expired" || type === "released" || type === "transfer" ? side(m.oldClubId, m.previousClubName) : { name: type === "signing" ? m.previousClubName || "No club" : "No club" },
+        to: type === "expired" ? { name: "Free Agent" } : type === "released" ? { name: "No club" } : side(m.newClubId, m.newClubName),
+        contractEnd: contractEnd ? new Date(contractEnd).toISOString() : null,
+        postLink: m.postLink || m.legacy?.fbPost || "",
+        fee: m.fee || 0,
+      };
+    });
+  },
+
+  async getTransferHistory() {
+    await connectDB();
+    const list = await TransferHistory.find({}).sort({ transferDate: -1 }).limit(200).lean();
+    return plain<any[]>(list);
+  },
+
+  // ----- Disciplinary -----
+  async getDisciplinaryRecords() {
+    await connectDB();
+    await Disciplinary.updateMany({ status: "ACTIVE", endDate: { $lt: new Date() } }, { $set: { status: "EXPIRED" } });
+    const list = await Disciplinary.find({}).sort({ createdAt: -1 }).lean();
+    return plain<any[]>(list);
+  },
+
+  async issueDisciplinaryAction(data: any) {
+    if (!isId(data.targetId)) throw new ServiceError("Invalid target", 400);
+    await connectDB();
+    const durations: Record<string, number | null> = { WARNING: 0, SUSPENSION_1W: 7, SUSPENSION_1M: 30, BAN_SEASON: 180, PERMANENT_BAN: null };
+    const days = durations[data.penalty];
+    const target: any =
+      data.targetType === "PLAYER" ? await Player.findById(data.targetId).lean() : await Club.findById(data.targetId).lean();
+    if (!target) throw new ServiceError("Target not found", 404);
+    const rec = await Disciplinary.create({
+      ...data,
+      targetName: target.fullName || target.name,
+      endDate: days === null ? undefined : new Date(Date.now() + (days || 0) * 86400000),
+      status: data.penalty === "WARNING" ? "EXPIRED" : "ACTIVE",
+    });
+    if (data.penalty !== "WARNING") {
+      const status = data.penalty === "PERMANENT_BAN" || data.penalty === "BAN_SEASON" ? "BANNED" : "SUSPENDED";
+      if (data.targetType === "PLAYER") {
+        await Player.updateOne({ _id: target._id }, { $set: { status } });
+      } else {
+        await Club.updateOne({ _id: target._id }, { $set: { status: "SUSPENDED" } });
+      }
+    }
+    if (data.targetType === "PLAYER" && target.userId) {
+      await db.notify(String(target.userId), "Disciplinary notice", `${data.penalty.replace(/_/g, " ")}: ${data.reason}`, "/disciplinary");
+    }
+    await db.addActivityEvent({
+      type: "DISCIPLINARY",
+      category: "Disciplinary",
+      title: `${data.penalty.replace(/_/g, " ")} issued to ${rec.targetName}`,
+      description: data.reason,
+      targetUrl: "/disciplinary",
+      playerId: data.targetType === "PLAYER" ? data.targetId : undefined,
+    });
+    return plain(rec.toObject());
+  },
+
+  async revokeDisciplinary(id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid record", 400);
+    await connectDB();
+    const rec = await Disciplinary.findByIdAndUpdate(id, { $set: { status: "REVOKED" } }, { new: true }).lean<any>();
+    if (!rec) throw new ServiceError("Record not found", 404);
+    const stillActive = await Disciplinary.exists({ targetId: rec.targetId, status: "ACTIVE" });
+    if (!stillActive) {
+      if (rec.targetType === "PLAYER") await Player.updateOne({ _id: rec.targetId }, { $set: { status: "ACTIVE" } });
+      else await Club.updateOne({ _id: rec.targetId }, { $set: { status: "ACTIVE" } });
+    }
+    return plain(rec);
+  },
+
+  // ----- Activity / Audit / Notifications -----
+  async getActivityEvents(category?: string, limit = 60) {
+    await connectDB();
+    const q: any = { isPublic: { $ne: false } };
+    if (category && category !== "All") q.category = category;
+    const list = await Activity.find(q).sort({ createdAt: -1 }).limit(limit).lean();
+    return plain<any[]>(list);
+  },
+
+  async getActivityForUser(userId: string, playerId?: string, limit = 50) {
+    await connectDB();
+    const or: any[] = [];
+    if (isId(userId)) or.push({ userId });
+    if (playerId && isId(playerId)) or.push({ playerId });
+    if (!or.length) return [];
+    const list = await Activity.find({ $or: or }).sort({ createdAt: -1 }).limit(limit).lean();
+    return plain<any[]>(list);
+  },
+
+  async addActivityEvent(event: {
+    type?: string;
+    category?: string;
+    title: string;
+    description?: string;
+    avatar?: string;
+    targetUrl?: string;
+    userId?: string;
+    playerId?: string;
+    isPublic?: boolean;
+  }) {
+    await connectDB();
+    const doc: any = { ...event };
+    if (doc.userId && !isId(doc.userId)) delete doc.userId;
+    if (doc.playerId && !isId(doc.playerId)) delete doc.playerId;
+    return plain((await Activity.create(doc)).toObject());
+  },
+
+  async getAuditLogs(limit = 300) {
+    await connectDB();
+    return plain<any[]>(await AuditLog.find({}).sort({ createdAt: -1 }).limit(limit).lean());
+  },
+
+  async addAuditLog(log: { adminId?: string; adminName?: string; action: string; target?: string; details?: string; ipAddress?: string }) {
+    await connectDB();
+    const doc: any = { ...log };
+    if (doc.adminId && !isId(doc.adminId)) delete doc.adminId;
+    return AuditLog.create(doc);
+  },
+
+  async notify(userId: string, title: string, message = "", link?: string) {
+    if (!isId(userId)) return;
+    await connectDB();
+    await Notification.create({ userId, title, message, link });
+  },
+
+  async getNotifications(userId: string) {
+    if (!isId(userId)) return [];
+    await connectDB();
+    return plain<any[]>(await Notification.find({ userId }).sort({ createdAt: -1 }).limit(100).lean());
+  },
+
+  async markNotificationsRead(userId: string) {
+    await connectDB();
+    await Notification.updateMany({ userId, read: false }, { $set: { read: true } });
+  },
+
+  async unreadNotificationCount(userId: string) {
+    if (!isId(userId)) return 0;
+    await connectDB();
+    return Notification.countDocuments({ userId, read: false });
+  },
+
+  // ----- CMS -----
+  async getNews(category?: string, opts: { includeUnpublished?: boolean; limit?: number } = {}) {
+    await connectDB();
+    const q: any = opts.includeUnpublished ? {} : { isPublished: true, publishedDate: { $lte: new Date() } };
+    if (category && category !== "ALL") q.category = category;
+    const list = await News.find(q).sort({ publishedDate: -1 }).limit(opts.limit || 200).lean();
+    return list.map((n: any) => ({ ...plain<any>(n), featuredImage: n.featuredImage || PLACEHOLDER.news, publishedDate: new Date(n.publishedDate).toISOString() }));
+  },
+
+  async getNewsBySlug(slug: string) {
+    await connectDB();
+    const n = await News.findOneAndUpdate({ slug, isPublished: true }, { $inc: { views: 1 } }, { new: true }).lean<any>();
+    return n ? { ...plain<any>(n), featuredImage: n.featuredImage || PLACEHOLDER.news, publishedDate: new Date(n.publishedDate).toISOString() } : null;
+  },
+
+  /** Every club with the addresses an admin message can go to: the club's own email and its main manager's account email. */
+  async getClubMailingList() {
+    await connectDB();
+    const clubs = await Club.find({}, { name: 1, shortName: 1, slug: 1, logo: 1, status: 1, email: 1, managerId: 1 }).sort({ name: 1 }).lean<any[]>();
+    const managers = await User.find({ _id: { $in: clubs.map((c) => c.managerId).filter(Boolean) } }, { email: 1, fullName: 1 }).lean<any[]>();
+    const mm = new Map(managers.map((m) => [String(m._id), m]));
+    return clubs.map((c) => {
+      const m: any = c.managerId ? mm.get(String(c.managerId)) : null;
+      return {
+        ...clubMini(c)!,
+        status: c.status,
+        clubEmail: (c.email || "").trim().toLowerCase(),
+        managerEmail: (m?.email || "").trim().toLowerCase(),
+        managerName: m?.fullName || "",
+      };
+    });
+  },
+
+  async getLeadership() {
+    await connectDB();
+    const list = await Leader.find({}).sort({ order: 1, createdAt: 1 }).lean();
+    return list.map((l: any) => ({ ...plain<any>(l), photo: l.photo || PLACEHOLDER.avatar }));
+  },
+
+  async getPartners() {
+    await connectDB();
+    const list = await Partner.find({}).sort({ order: 1, createdAt: 1 }).lean();
+    return list.map((p: any) => ({ ...plain<any>(p), logo: p.logo || PLACEHOLDER.logo }));
+  },
+
+  async getSponsors() {
+    await connectDB();
+    const list = await Sponsor.find({}).sort({ priority: 1, createdAt: 1 }).lean();
+    return list.map((s: any) => ({ ...plain<any>(s), logo: s.logo || PLACEHOLDER.logo }));
+  },
+
+  // Generic admin CRUD for simple content collections (data is validated by the caller).
+  async adminList(resource: AdminResource) {
+    await connectDB();
+    const M = RESOURCE_MODELS[resource];
+    const projection = resource === "tournaments" ? { "participants.userId": 0, "participants.playerId": 0, "participants.clubId": 0 } : resource === "events" ? { "registrations.userId": 0, "registrations.playerId": 0 } : {};
+    const list = await M.find({}, projection).sort(RESOURCE_SORT[resource]).limit(1000).lean();
+    return plain<any[]>(list).map((row: any) => {
+      if (resource === "tournaments") {
+        const { participants, ...rest } = row;
+        return { ...rest, currentParticipants: (participants || []).filter((p: any) => p.status !== "REMOVED").length };
+      }
+      if (resource === "events") {
+        const { registrations, ...rest } = row;
+        return { ...rest, registeredCount: (registrations || []).length };
+      }
+      return row;
+    });
+  },
+
+  async adminCreate(resource: AdminResource, data: any) {
+    switch (resource) {
+      case "clubs":
+        return db.createClub(data);
+      case "tournaments":
+        return db.createTournament(data);
+      case "events":
+        return db.createEvent(data);
+    }
+    await connectDB();
+    const M = RESOURCE_MODELS[resource];
+    const doc: any = { ...data };
+    if (resource === "news") doc.slug = await uniqueSlug(News, data.title);
+    const created = await M.create(doc);
+    if (resource === "news" && created.isPublished) {
+      await db.addActivityEvent({ type: "NEWS", category: "Tournaments", title: `News: ${created.title}`, avatar: created.featuredImage, targetUrl: `/news/${created.slug}` });
+    }
+    return plain(created.toObject());
+  },
+
+  async adminUpdate(resource: AdminResource, id: string, data: any) {
+    if (!isId(id)) throw new ServiceError("Invalid id", 400);
+    switch (resource) {
+      case "clubs":
+        return db.updateClub(id, data);
+      case "tournaments":
+        return db.updateTournament(id, data);
+      case "events":
+        return db.updateEvent(id, data);
+    }
+    await connectDB();
+    const M = RESOURCE_MODELS[resource];
+    const set = { ...data };
+    if (resource === "news" && data.title) {
+      const existing = await News.findById(id, { title: 1 }).lean<any>();
+      if (existing && existing.title !== data.title) set.slug = await uniqueSlug(News, data.title, id);
+    }
+    const doc = await M.findByIdAndUpdate(id, { $set: set }, { new: true, runValidators: true }).lean();
+    if (!doc) throw new ServiceError("Not found", 404);
+    return plain(doc);
+  },
+
+  async adminDelete(resource: AdminResource, id: string) {
+    if (!isId(id)) throw new ServiceError("Invalid id", 400);
+    switch (resource) {
+      case "clubs":
+        return db.deleteClub(id);
+      case "tournaments":
+        return db.deleteTournament(id);
+    }
+    await connectDB();
+    const M = RESOURCE_MODELS[resource];
+    if (resource === "referees") await Fixture.updateMany({ refereeId: id }, { $unset: { refereeId: 1 } });
+    await M.deleteOne({ _id: id });
+    return true;
+  },
+
+  // ----- Settings -----
+  async getSiteSettings(): Promise<SiteSettings> {
+    try {
+      await connectDB();
+      const s = await Setting.findOne({ key: "site" }).lean<any>();
+      return mergeSettings(DEFAULT_SITE_SETTINGS, s?.value);
+    } catch (err) {
+      console.error("Failed to load site settings:", err);
+      return DEFAULT_SITE_SETTINGS;
+    }
+  },
+
+  async updateSiteSettings(value: SiteSettings) {
+    await connectDB();
+    const merged = mergeSettings(DEFAULT_SITE_SETTINGS, value);
+    await Setting.updateOne({ key: "site" }, { $set: { value: merged } }, { upsert: true });
+    return merged;
+  },
+
+  // ----- Media -----
+  async saveMedia(data: Buffer, contentType: string, filename: string, uploadedBy?: string) {
+    await connectDB();
+    const m = await Media.create({ data, contentType, size: data.length, filename, uploadedBy: uploadedBy && isId(uploadedBy) ? uploadedBy : undefined });
+    return String(m._id);
+  },
+
+  async getMedia(id: string) {
+    if (!isId(id)) return null;
+    await connectDB();
+    return Media.findById(id).lean<any>();
+  },
+
+  // ----- Stats -----
+  /** Everything the admin dashboard needs about players, clubs, contracts and transfers. */
+  async getAdminInsights() {
+    await connectDB();
+    await db.releaseExpiredContracts().catch(() => 0);
+    const now = new Date();
+    const in30 = new Date(Date.now() + 30 * 86400000);
+    const ago7 = new Date(Date.now() - 7 * 86400000);
+    const ago30 = new Date(Date.now() - 30 * 86400000);
+    const [
+      players,
+      inClub,
+      freeAgents,
+      frozen,
+      verified,
+      pendingPlayers,
+      endingSoon,
+      clubs,
+      squadCounts,
+      signingReqs,
+      offerReqs,
+      moves7,
+      moves30,
+      recentMoves,
+      roles,
+      newUsers7,
+      openTournaments,
+    ] = await Promise.all([
+      Player.countDocuments({}),
+      Player.countDocuments({ clubId: { $ne: null } }),
+      Player.countDocuments({ clubId: null, "contract.endDate": { $lt: now } }),
+      Player.countDocuments({ frozenUntil: { $gt: now } }),
+      Player.countDocuments({ isVerified: true }),
+      Player.countDocuments({ status: "PENDING_VERIFICATION" }),
+      Player.find({ clubId: { $ne: null }, "contract.endDate": { $gte: now, $lte: in30 } }, { fullName: 1, username: 1, avatar: 1, clubId: 1, "contract.endDate": 1 })
+        .sort({ "contract.endDate": 1 })
+        .limit(8)
+        .lean<any>(),
+      Club.find({}, { name: 1, slug: 1, logo: 1, shortName: 1, status: 1, managerId: 1, createdAt: 1 }).lean<any>(),
+      Player.aggregate([{ $match: { clubId: { $ne: null } } }, { $group: { _id: "$clubId", n: { $sum: 1 } } }]),
+      TransferRequest.find({ status: "PENDING", type: "SIGNING" }).sort({ createdAt: 1 }).limit(8).lean<any>(),
+      TransferRequest.countDocuments({ status: "PENDING", type: { $ne: "SIGNING" } }),
+      TransferHistory.countDocuments({ transferDate: { $gte: ago7 } }),
+      TransferHistory.countDocuments({ transferDate: { $gte: ago30 } }),
+      TransferHistory.find({}).sort({ transferDate: -1 }).limit(6).lean<any>(),
+      User.aggregate([{ $group: { _id: "$role", n: { $sum: 1 } } }]),
+      User.countDocuments({ createdAt: { $gte: ago7 } }),
+      Tournament.find({ status: { $in: ["REGISTRATION_OPEN", "ONGOING"] } }, { name: 1, slug: 1, status: 1, maxParticipants: 1, clubParticipants: 1, registrationDeadline: 1 }).lean<any>(),
+    ]);
+
+    const cmap = new Map(clubs.map((c: any) => [String(c._id), c]));
+    const sq = new Map(squadCounts.map((x: any) => [String(x._id), x.n as number]));
+    const mini = (c: any) => (c ? clubMini(c) : null);
+    const pendingSignPlayers = await Player.find({ _id: { $in: signingReqs.map((r: any) => r.playerId) } }, { fullName: 1, username: 1, avatar: 1 }).lean<any>();
+    const psp = new Map(pendingSignPlayers.map((p: any) => [String(p._id), p]));
+    const pendingSigning = await TransferRequest.countDocuments({ status: "PENDING", type: "SIGNING" });
+
+    return {
+      players: { total: players, inClub, noClub: players - inClub - freeAgents, freeAgents, frozen, verified, pendingVerification: pendingPlayers },
+      contractsEnding: endingSoon.map((p: any) => ({
+        name: p.fullName,
+        username: p.username,
+        avatar: p.avatar || PLACEHOLDER.avatar,
+        club: mini(cmap.get(String(p.clubId))),
+        endDate: new Date(p.contract.endDate).toISOString(),
+      })),
+      clubs: {
+        total: clubs.length,
+        active: clubs.filter((c: any) => c.status === "ACTIVE").length,
+        pending: clubs
+          .filter((c: any) => c.status === "PENDING")
+          .map((c: any) => ({ ...mini(c), createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : null })),
+        full: clubs.filter((c: any) => (sq.get(String(c._id)) || 0) >= SQUAD_LIMIT).length,
+        withoutManager: clubs.filter((c: any) => !c.managerId).length,
+        squads: clubs
+          .filter((c: any) => c.status === "ACTIVE")
+          .map((c: any) => ({ ...mini(c), count: sq.get(String(c._id)) || 0 }))
+          .sort((a: any, b: any) => b.count - a.count),
+      },
+      transfers: {
+        pendingSigning,
+        pendingOffers: offerReqs,
+        last7: moves7,
+        last30: moves30,
+        requests: signingReqs.map((r: any) => {
+          const p: any = psp.get(String(r.playerId)) || {};
+          return {
+            id: String(r._id),
+            createdAt: new Date(r.createdAt).toISOString(),
+            seat: r.seat,
+            player: { name: p.fullName, username: p.username, avatar: p.avatar || PLACEHOLDER.avatar },
+            club: mini(cmap.get(String(r.targetClubId))),
+          };
+        }),
+        recent: recentMoves.map((m: any) => ({
+          id: String(m._id),
+          date: new Date(m.transferDate).toISOString(),
+          type: m.transferType || "free",
+          player: m.playerName,
+          from: m.oldClubId ? mini(cmap.get(String(m.oldClubId))) : null,
+          to: m.newClubId ? mini(cmap.get(String(m.newClubId))) : null,
+        })),
+      },
+      users: { roles: Object.fromEntries(roles.map((r: any) => [r._id, r.n])), newLast7: newUsers7 },
+      tournaments: openTournaments.map((t: any) => ({
+        name: t.name,
+        slug: t.slug,
+        status: t.status,
+        clubs: (t.clubParticipants || []).filter((c: any) => c.status !== "REMOVED").length,
+        max: t.maxParticipants || 0,
+        deadline: t.registrationDeadline ? new Date(t.registrationDeadline).toISOString() : null,
+      })),
+    };
+  },
+
+  async getPlatformStats() {
+    await connectDB();
+    const [players, clubs, finished, live, activeTourn, refs, transfers, goals, users, pendingResults] = await Promise.all([
+      Player.countDocuments({}),
+      Club.countDocuments({ status: "ACTIVE" }),
+      Fixture.countDocuments({ status: "FINISHED" }),
+      Fixture.countDocuments({ status: "LIVE" }),
+      Tournament.countDocuments({ status: { $in: ["ONGOING", "REGISTRATION_OPEN"] } }),
+      Referee.countDocuments({}),
+      TransferHistory.countDocuments({}),
+      Player.aggregate([{ $group: { _id: null, g: { $sum: "$stats.goalsScored" } } }]),
+      User.countDocuments({}),
+      Fixture.countDocuments({ "result.status": "PENDING" }),
+    ]);
+    const totalTournaments = await Tournament.countDocuments({ status: { $ne: "DRAFT" } });
+    return {
+      registeredPlayers: players,
+      registeredUsers: users,
+      activeClubs: clubs,
+      completedMatches: finished,
+      liveMatches: live,
+      activeTournaments: activeTourn,
+      totalTournaments,
+      registeredOfficials: refs,
+      totalTransfers: transfers,
+      totalGoalsScored: goals[0]?.g || 0,
+      pendingResults,
+    };
+  },
+};
+
+export type AdminResource = "news" | "events" | "partners" | "sponsors" | "leaders" | "referees" | "clubs" | "tournaments";
+
+const RESOURCE_MODELS: Record<AdminResource, any> = {
+  news: News,
+  events: Event,
+  partners: Partner,
+  sponsors: Sponsor,
+  leaders: Leader,
+  referees: Referee,
+  clubs: Club,
+  tournaments: Tournament,
+};
+
+const RESOURCE_SORT: Record<AdminResource, any> = {
+  news: { publishedDate: -1 },
+  events: { eventDate: -1 },
+  partners: { order: 1 },
+  sponsors: { priority: 1 },
+  leaders: { order: 1 },
+  referees: { tier: 1, name: 1 },
+  clubs: { name: 1 },
+  tournaments: { createdAt: -1 },
+};

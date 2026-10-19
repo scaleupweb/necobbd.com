@@ -1,0 +1,418 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 222 47% 11%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222 47% 11%;
+    --radius: 0.75rem;
+  }
+
+  body {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    background-color: #ffffff;
+    color: #111111;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: var(--font-outfit), var(--font-sans), sans-serif;
+    letter-spacing: -0.025em;
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono), monospace;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Clean White & Black Glassmorphism & Card Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+}
+
+.glass-panel-hover {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel-hover:hover {
+  background: #ffffff;
+  border-color: #09090b;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+/* High-contrast Black & White typography */
+.text-gradient-electric {
+  background: linear-gradient(135deg, #09090b 0%, #1e293b 50%, #334155 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #b45309 0%, #d97706 60%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Glow Border */
+.glow-border-cyan {
+  border-color: #09090b;
+  box-shadow: 0 0 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Utility for hiding scrollbars in horizontal scroll lists */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area insets for mobile devices */
+.safe-bottom-padding {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.safe-bottom-fixed {
+  bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Looping strip: pauses while hovered or focused; speed set with --marquee-duration */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-loop var(--marquee-duration, 60s) linear infinite;
+}
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+  .marquee {
+    overflow-x: auto;
+  }
+}
+
+/* Infinite Marquee Looping Animation */
+@keyframes marquee-loop {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-loop 28s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Password "flashlight": a gold beam from the eye button across the revealed password. */
+.pw-beam {
+  --pw-tilt: 0deg;
+  position: absolute;
+  z-index: 15;
+  /* A long cone: the apex sits on the eye button's centre and the light spreads far past the field. */
+  right: 22px;
+  top: 50%;
+  width: min(900px, 140vw);
+  height: 340px;
+  margin-top: -170px;
+  pointer-events: none;
+  clip-path: polygon(100% 50%, 0 0, 0 100%);
+  background: linear-gradient(
+    to left,
+    rgba(255, 221, 128, 0.95),
+    rgba(245, 200, 96, 0.6) 22%,
+    rgba(232, 182, 76, 0.3) 48%,
+    rgba(214, 160, 60, 0.1) 75%,
+    transparent
+  );
+  filter: drop-shadow(0 0 12px rgba(245, 200, 96, 0.45));
+  transform: rotate(var(--pw-tilt)) scaleX(0);
+  transform-origin: right center;
+  opacity: 0;
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
+}
+.pw-beam-on {
+  transform: rotate(var(--pw-tilt)) scaleX(1);
+  opacity: 1;
+  animation: pw-flicker 0.45s ease-out 1;
+  transition: transform 0.18s ease-out, opacity 0.25s ease;
+}
+.pw-eye-on {
+  box-shadow: 0 0 0 1px rgba(199, 154, 59, 0.35), 0 0 14px rgba(232, 190, 92, 0.55);
+}
+@keyframes pw-flicker {
+  0% { opacity: 0; }
+  20% { opacity: 0.9; }
+  30% { opacity: 0.4; }
+  45% { opacity: 1; }
+  55% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pw-beam,
+  .pw-beam-on {
+    transition: opacity 0.15s ease;
+    transform: scaleX(1);
+  }
+  .pw-beam-on {
+    animation: none;
+  }
+  .pw-dark {
+    transition: none;
+  }
+}
+
+/* The room goes dark while the flashlight is on, so the lit password stands out. */
+.pw-dark {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 9, 12, 0.86);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.pw-dark-on {
+  opacity: 1;
+}
+.pw-lit main {
+  z-index: 70 !important;
+}
+.pw-input-lit {
+  background-color: #0b0c0f !important;
+  border-color: rgba(199, 154, 59, 0.6) !important;
+  color: #fff3d1 !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px rgba(255, 214, 120, 0.55);
+}
+
+/* Countdown banner: rotating gold border, dropping digits, blinking colons, shiny CTA. */
+@property --cd-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.cd-border {
+  background: conic-gradient(from var(--cd-angle), rgba(199, 154, 59, 0.15), #f7dc8b, rgba(199, 154, 59, 0.15) 40%, rgba(199, 154, 59, 0.15) 60%, #c79a3b, rgba(199, 154, 59, 0.15));
+  animation: cd-spin 6s linear infinite;
+  box-shadow: 0 30px 60px -30px rgba(199, 154, 59, 0.45);
+}
+@keyframes cd-spin {
+  to {
+    --cd-angle: 360deg;
+  }
+}
+.cd-drop {
+  animation: cd-drop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes cd-drop {
+  from {
+    transform: translateY(-35%);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+.cd-colon {
+  animation: cd-blink 1s steps(2, start) infinite;
+}
+@keyframes cd-blink {
+  to {
+    opacity: 0.25;
+  }
+}
+.cd-cta {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fff3c4, #e8b95a 55%, #c79a3b);
+  box-shadow: 0 10px 30px -8px rgba(232, 185, 90, 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cd-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 36px -8px rgba(232, 185, 90, 0.8);
+}
+.cd-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.6) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: cd-shine 3.2s ease-in-out infinite;
+}
+@keyframes cd-shine {
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+.cd-bar {
+  background-size: 200% 100%;
+  animation: cd-bar 2.5s linear infinite;
+}
+@keyframes cd-bar {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cd-border,
+  .cd-drop,
+  .cd-colon,
+  .cd-cta::after,
+  .cd-bar {
+    animation: none;
+  }
+}
+
+/* Homepage card: one look for every section's cards. */
+.home-card {
+  border-radius: 1.5rem;
+  background: #fff;
+  border: 1px solid rgb(226 232 240);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.home-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(199, 154, 59, 0.6);
+  box-shadow: 0 20px 40px -18px rgba(15, 23, 42, 0.25);
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-card,
+  .home-card:hover {
+    transform: none;
+  }
+}
+
+/* Login intro: on wide screens the card waits off to the right until the 3D footballer pulls it in
+   (data-anim="go"). If the 3D scene never loads, it slides in on its own after 3.4s. */
+@keyframes ls-card-wait {
+  from { transform: translateX(min(60vw, 720px)) rotate(4deg); opacity: 0.4; }
+  70% { opacity: 1; }
+  /* `none` (not translateX(0)) so the card doesn't trap the password flashlight's stacking */
+  to { transform: none; opacity: 1; }
+}
+@keyframes ls-card-pull {
+  from { transform: translateX(min(60vw, 720px)) rotate(4deg); opacity: 0.4; }
+  70% { opacity: 1; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ls-card-rise {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .ls-stage[data-anim="pending"] .ls-card {
+    animation: ls-card-wait 0.85s 3.4s cubic-bezier(0.3, 0.9, 0.3, 1.12) both;
+  }
+  .ls-stage[data-anim="go"] .ls-card {
+    animation: ls-card-pull 0.85s cubic-bezier(0.3, 0.9, 0.3, 1.12) both;
+  }
+}
+@media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
+  .ls-stage:not([data-anim="done"]) .ls-card {
+    animation: ls-card-rise 0.5s ease-out both;
+  }
+}
+/* After it lands the card has no animation at all (see LoginStage). */
+.ls-stage[data-anim="done"] .ls-card {
+  animation: none;
+}
+
+/* When the password flashlight darkens the page, keep the footballer lit (above the dark layer
+   and the beam) so he can be seen peeking. */
+.pw-lit .ls-3d {
+  z-index: 62;
+}
+
+/* Rich text written in the admin editor (rulebook etc.) — Tailwind's reset removes
+   default heading/list styles, so they are restored here for the editor and the page. */
+.rich-content { color: #334155; line-height: 1.7; word-break: break-word; }
+.rich-content > * + * { margin-top: 0.75em; }
+.rich-content h1 { font-size: 1.6em; font-weight: 900; color: #020617; line-height: 1.25; margin-top: 1.2em; }
+.rich-content h2 { font-size: 1.3em; font-weight: 800; color: #020617; line-height: 1.3; margin-top: 1.1em; }
+.rich-content h3 { font-size: 1.1em; font-weight: 800; color: #0f172a; margin-top: 1em; }
+.rich-content > :first-child { margin-top: 0; }
+.rich-content ul { list-style: disc; padding-left: 1.4em; }
+.rich-content ol { list-style: decimal; padding-left: 1.4em; }
+.rich-content li + li { margin-top: 0.25em; }
+.rich-content li > p { margin: 0; }
+.rich-content blockquote { border-left: 4px solid #c79a3b; background: #fffbeb; padding: 0.6em 1em; border-radius: 0 0.75rem 0.75rem 0; color: #422006; }
+.rich-content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
+.rich-content a { color: #2563eb; text-decoration: underline; font-weight: 600; }
+.rich-content img { max-width: 100%; height: auto; border-radius: 1rem; margin-left: auto; margin-right: auto; }
+.rich-content code { background: #f1f5f9; padding: 0.1em 0.35em; border-radius: 0.3em; font-size: 0.9em; }
+.rich-content strong { color: inherit; font-weight: 800; }
+.rich-content .ProseMirror-selectednode img, .rich-content img.ProseMirror-selectednode { outline: 3px solid #c79a3b; }
+.rich-content.ProseMirror p.is-editor-empty:first-child::before,
+.rich-content[data-placeholder]:has(> p:only-child:empty)::before { content: attr(data-placeholder); color: #94a3b8; float: left; height: 0; pointer-events: none; }
