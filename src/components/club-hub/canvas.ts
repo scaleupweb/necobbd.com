@@ -3,15 +3,36 @@
 export const FONT = `"Plus Jakarta Sans", "Segoe UI", Arial, sans-serif`;
 const MONO = `"JetBrains Mono", Consolas, monospace`;
 
-export function loadImage(src: string): Promise<HTMLImageElement | null> {
+function loadOnce(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
-    if (!src) return resolve(null);
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
     img.src = src;
   });
+}
+
+/**
+ * Load an image a canvas may draw and export. Photos on another host (Cloudflare R2, Google Drive)
+ * only work directly when that host sends CORS headers, so on failure we retry through our own
+ * /api/image-proxy, which needs no CORS.
+ */
+export async function loadImage(src: string): Promise<HTMLImageElement | null> {
+  if (!src) return null;
+  const direct = await loadOnce(src);
+  if (direct) return direct;
+  let abs: URL;
+  try {
+    abs = new URL(src, window.location.href);
+  } catch {
+    return null;
+  }
+  if (abs.origin === window.location.origin) {
+    // /api/media/<id> may redirect to R2; other same-site images have nothing to retry.
+    return /^\/api\/media\/[a-f0-9]{24}$/i.test(abs.pathname) ? loadOnce(`/api/image-proxy?src=${encodeURIComponent(abs.pathname)}`) : null;
+  }
+  return loadOnce(`/api/image-proxy?src=${encodeURIComponent(abs.href)}`);
 }
 
 export function fitFont(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, size: number, weight = 900, family = FONT) {
