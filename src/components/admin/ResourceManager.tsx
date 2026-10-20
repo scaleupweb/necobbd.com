@@ -34,6 +34,7 @@ export function ResourceManager({
   headerActions,
   reloadKey,
   onChanged,
+  statusFilter,
 }: {
   resource: string;
   title: string;
@@ -46,11 +47,14 @@ export function ResourceManager({
   headerActions?: ReactNode;
   reloadKey?: number;
   onChanged?: () => void;
+  /** One-click filter pills (with counts) for a status-like field, e.g. { key: "status", options: ["PENDING", "ACTIVE"] }. */
+  statusFilter?: { key: string; options: string[]; first?: string };
 }) {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [statusSel, setStatusSel] = useState("ALL");
   const [editing, setEditing] = useState<any | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
@@ -128,9 +132,18 @@ export function ResourceManager({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => searchKeys.some((k) => String(r[k] || "").toLowerCase().includes(q)));
-  }, [rows, query, searchKeys]);
+    return rows.filter(
+      (r) =>
+        (!statusFilter || statusSel === "ALL" || String(r[statusFilter.key] || "") === statusSel) &&
+        (!q || searchKeys.some((k) => String(r[k] || "").toLowerCase().includes(q)))
+    );
+  }, [rows, query, searchKeys, statusFilter, statusSel]);
+
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    if (statusFilter) for (const r of rows) c[String(r[statusFilter.key] || "")] = (c[String(r[statusFilter.key] || "")] || 0) + 1;
+    return c;
+  }, [rows, statusFilter]);
 
   return (
     <div className="space-y-5">
@@ -147,9 +160,34 @@ export function ResourceManager({
         }
       />
 
-      <div className="relative w-full sm:max-w-sm">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className={`${inputCls} pl-9`} />
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className={`${inputCls} pl-9`} />
+        </div>
+        {statusFilter && (
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar p-1 rounded-2xl bg-white border border-slate-200 w-fit max-w-full">
+            {["ALL", ...statusFilter.options].map((opt) => {
+              const n = opt === "ALL" ? rows.length : statusCounts[opt] || 0;
+              const on = statusSel === opt;
+              const urgent = opt === statusFilter.first && n > 0;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setStatusSel(opt)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+                    on ? "bg-[#0B0C0F] text-white" : urgent ? "text-amber-800 bg-amber-50 hover:bg-amber-100" : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {urgent && !on && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />}
+                  {opt === "ALL" ? "All" : opt.charAt(0) + opt.slice(1).toLowerCase()}
+                  <span className={`px-1.5 rounded-md text-[10px] font-black ${on ? "bg-white/15 text-[#F7DC8B]" : urgent ? "bg-amber-200/70 text-amber-900" : "bg-slate-100 text-slate-500"}`}>{n}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {error && <Notice kind="err">{error}</Notice>}
@@ -159,7 +197,7 @@ export function ResourceManager({
           <Loader2 className="w-5 h-5 animate-spin mx-auto" />
         </div>
       ) : filtered.length === 0 ? (
-        <Empty>{rows.length ? "No matches for your search." : `No ${title.toLowerCase()} yet. Click "Add ${singular}" to create one.`}</Empty>
+        <Empty>{rows.length ? (statusFilter && statusSel !== "ALL" && !query ? `No ${statusSel.toLowerCase()} ${title.toLowerCase()}.` : "No matches for your search.") : `No ${title.toLowerCase()} yet. Click "Add ${singular}" to create one.`}</Empty>
       ) : (
         <>
         {/* Phones: one card per row — first column as the heading, the rest as label/value pairs. */}

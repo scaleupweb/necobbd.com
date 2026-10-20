@@ -46,6 +46,7 @@ export default function AdminClubsPage() {
       singular="club"
       subtitle="Create clubs, assign managers and keep club details up to date. Assign players to clubs from the Players page."
       searchKeys={["name", "shortName", "location"]}
+      statusFilter={{ key: "status", options: ["PENDING", "ACTIVE", "SUSPENDED", "INACTIVE"], first: "PENDING" }}
       fields={fields}
       columns={[
         {
