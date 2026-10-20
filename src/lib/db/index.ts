@@ -1242,7 +1242,7 @@ export const db = {
     if (!staff.length) return [];
     const ids = staff.map((s: any) => s.userId);
     const [users, players] = await Promise.all([
-      User.find({ _id: { $in: ids } }, { fullName: 1, username: 1, avatar: 1 }).lean<any>(),
+      User.find({ _id: { $in: ids } }, { fullName: 1, username: 1, avatar: 1, lastLoginAt: 1 }).lean<any>(),
       Player.find({ userId: { $in: ids } }, { userId: 1, fullName: 1, username: 1, avatar: 1, clubId: 1 }).lean<any>(),
     ]);
     const um = new Map(users.map((u: any) => [String(u._id), u]));
@@ -1258,6 +1258,10 @@ export const db = {
         username: p?.username || u.username || "",
         avatar: p?.avatar || u.avatar || PLACEHOLDER.avatar,
         inSquad: !!p && String(p.clubId || "") === clubId,
+        // A staff account with no player profile is the club's own login (e.g. from the old site).
+        clubLogin: !p,
+        loginName: u.username || "",
+        lastLoginAt: u.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : undefined,
         access: s.access === "full_control" ? "full_control" : "custom",
         permissions: s.access === "full_control" ? [] : staffPermissions(s),
       };

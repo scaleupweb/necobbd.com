@@ -799,14 +799,35 @@ export function AccessControl() {
             <div key={s.userId} className="rounded-2xl bg-white border border-slate-200 overflow-hidden flex flex-col">
               <div className="relative aspect-[4/3] bg-slate-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={s.avatar} alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+                <img
+                  src={s.clubLogin && club.logo ? club.logo : s.avatar}
+                  alt=""
+                  className={`absolute inset-0 w-full h-full ${s.clubLogin ? "object-contain p-6" : "object-cover object-top"}`}
+                />
+                {s.clubLogin && (
+                  <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-[#0B0C0F] text-[#F7DC8B] text-[10px] font-black uppercase">Club login</span>
+                )}
               </div>
               <div className="p-3 flex-1 flex flex-col gap-2 text-center">
                 <span className={`self-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${s.access === "full_control" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700"}`}>
                   {s.access === "full_control" ? "Full control" : `Custom · ${s.permissions.length} tool${s.permissions.length === 1 ? "" : "s"}`}
                 </span>
                 <div className="text-sm font-black text-slate-950 leading-tight">{s.fullName}</div>
-                {!s.inSquad && <div className="text-[10px] font-bold text-rose-600">Not in your squad any more</div>}
+                {s.clubLogin ? (
+                  <div className="text-[10px] text-slate-500 leading-snug">
+                    The club&apos;s own login account (from the old site)
+                    {s.loginName && (
+                      <>
+                        {" "}· <span className="font-mono font-bold text-slate-700">{s.loginName}</span>
+                      </>
+                    )}
+                    <div className={s.lastLoginAt ? "text-slate-400" : "text-amber-600 font-bold"}>
+                      {s.lastLoginAt ? `Last login ${new Date(s.lastLoginAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : "Never used on this site"}
+                    </div>
+                  </div>
+                ) : (
+                  !s.inSquad && <div className="text-[10px] font-bold text-rose-600">Not in your squad any more</div>
+                )}
                 {s.access === "custom" && (
                   <div className="flex flex-wrap justify-center gap-1">
                     {s.permissions.slice(0, 4).map((p: string) => (
