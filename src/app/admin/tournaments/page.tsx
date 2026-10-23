@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Crown, Download, Swords, UserMinus, UserPlus, ExternalLink, Check, X } from "lucide-react";
+import { Users, Crown, Download, Swords, UserMinus, UserPlus, ExternalLink, Check, X, Copy } from "lucide-react";
 import { ResourceManager, FieldDef } from "@/components/admin/ResourceManager";
 import { api, Badge, Button, Empty, Modal, Notice, statusTone } from "@/components/admin/ui";
 import { toast, confirmDialog } from "@/lib/feedback";
@@ -163,6 +163,32 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
   const active = (list || []).filter((p) => p.status !== "REMOVED");
   const pendingCount = active.filter((p) => p.status === "PENDING").length;
 
+  /** A numbered plain-text list to paste into Facebook / Messenger (no emails). */
+  const copyList = async () => {
+    const line = (p: any, i: number) =>
+      isClub ? `${i + 1}. ${p.fullName}${p.username ? ` (${p.username})` : ""}${p.managerName ? ` — ${p.managerName}` : ""}` : `${i + 1}. ${p.fullName} (@${p.username})`;
+    const approved = active.filter((p) => p.status !== "PENDING");
+    const pending = active.filter((p) => p.status === "PENDING");
+    const unit = isClub ? "clubs" : "players";
+    const parts = [`${tournament.name} — registered ${unit} (${approved.length}/${tournament.maxParticipants})`, "", ...approved.map(line)];
+    if (pending.length) parts.push("", `Waiting for approval (${pending.length}):`, ...pending.map(line));
+    const text = parts.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Older browsers / no permission: fall back to a hidden textarea.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    toast.success(`Copied ${approved.length} ${unit}${pending.length ? ` + ${pending.length} waiting` : ""}`);
+  };
+
   return (
     <Modal open onClose={onClose} title={`${tournament.name} — participants`} wide>
       <div className="space-y-3">
@@ -172,9 +198,14 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
             <strong>{active.length}</strong> / {tournament.maxParticipants} registered
             {pendingCount > 0 && <span className="ml-2 font-bold text-amber-700">· {pendingCount} waiting for approval</span>}
           </div>
-          <Button small variant="secondary" onClick={exportCsv} disabled={!list?.length}>
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </Button>
+          <div className="flex gap-1.5">
+            <Button small onClick={copyList} disabled={!active.length}>
+              <Copy className="w-3.5 h-3.5" /> Copy list
+            </Button>
+            <Button small variant="secondary" onClick={exportCsv} disabled={!list?.length}>
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </Button>
+          </div>
         </div>
         {list === null ? (
           <div className="py-8 text-center text-xs text-slate-500 animate-pulse">Loading…</div>
