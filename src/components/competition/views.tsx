@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { Trophy, Crown, CalendarDays, ChevronRight, Swords } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { ordinal } from "@/lib/competition";
 
 type ClubMini = { id: string; name: string; shortName?: string; slug?: string; logo?: string } | null;
 
@@ -48,7 +49,20 @@ function FormDots({ form }: { form: string[] }) {
   );
 }
 
-export function GroupTables({ tables, advancePerGroup, clubHref = true }: { tables: any[]; advancePerGroup: number; clubHref?: boolean }) {
+export function GroupTables({
+  tables,
+  advancePerGroup,
+  bestPlacedIds = [],
+  bestPlaced,
+  clubHref = true,
+}: {
+  tables: any[];
+  advancePerGroup: number;
+  bestPlacedIds?: string[];
+  bestPlaced?: number;
+  clubHref?: boolean;
+}) {
+  const extra = bestPlaced ?? bestPlacedIds.length;
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
       {tables.map((t) => (
@@ -86,6 +100,7 @@ export function GroupTables({ tables, advancePerGroup, clubHref = true }: { tabl
               <tbody>
                 {t.rows.map((r: any, i: number) => {
                   const q = i < advancePerGroup;
+                  const bp = !q && bestPlacedIds.includes(r.clubId);
                   const gd = r.goalsFor - r.goalsAgainst;
                   const name = (
                     <span className="flex items-center gap-2 min-w-0">
@@ -94,10 +109,10 @@ export function GroupTables({ tables, advancePerGroup, clubHref = true }: { tabl
                     </span>
                   );
                   return (
-                    <tr key={r.clubId} className={`border-t border-slate-100 ${q ? "bg-emerald-50/40" : ""}`}>
+                    <tr key={r.clubId} className={`border-t border-slate-100 ${q ? "bg-emerald-50/40" : bp ? "bg-amber-50/60" : ""}`}>
                       <td className="pl-4 pr-1 py-2.5 relative">
-                        {q && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-emerald-500" />}
-                        <span className={`font-mono font-black ${q ? "text-emerald-700" : "text-slate-400"}`}>{i + 1}</span>
+                        {(q || bp) && <span className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r ${q ? "bg-emerald-500" : "bg-amber-500"}`} />}
+                        <span className={`font-mono font-black ${q ? "text-emerald-700" : bp ? "text-amber-700" : "text-slate-400"}`}>{i + 1}</span>
                       </td>
                       <td className="px-2 py-2.5">
                         {clubHref && r.club?.slug ? (
@@ -131,7 +146,14 @@ export function GroupTables({ tables, advancePerGroup, clubHref = true }: { tabl
             </table>
           </div>
           <div className="px-4 py-2 border-t border-slate-100 text-[10px] text-slate-500 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Top {advancePerGroup} go through to the knockout
+            <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Top {advancePerGroup} go through
+            {extra ? (
+              <>
+                <span className="w-2 h-2 rounded-sm bg-amber-500 ml-2" /> Best {extra} {ordinal(advancePerGroup + 1)}-placed (across all groups) also go through
+              </>
+            ) : (
+              " to the knockout"
+            )}
           </div>
         </div>
       ))}

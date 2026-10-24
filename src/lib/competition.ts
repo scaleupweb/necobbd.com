@@ -15,6 +15,10 @@ export type CompetitionConfig = {
   playersPerTie: number;
   firstMatchday?: string; // ISO date of round 1
   daysBetweenRounds: number;
+  /** Custom club count per group (A, B, C…). Empty = split evenly. */
+  groupSizes?: number[];
+  /** Extra qualifiers: the best clubs finishing just below the qualifying places (e.g. best 3rd-placed). */
+  bestPlaced?: number;
 };
 
 export type Group = { name: string; clubIds: string[] };
@@ -64,19 +68,46 @@ export function groupSizes(clubs: number, groups: number) {
 /** Matches one club plays in a group of `size` (every other club, once or twice). */
 export const matchesPerClub = (size: number, legs: number) => (size - 1) * legs;
 
-/** Formats that work for `clubs` entrants: qualifiers must make a power-of-two bracket. */
-export function suggestFormats(clubs: number) {
-  const out: { groupCount: number; advancePerGroup: number; minSize: number; maxSize: number; bracket: number }[] = [];
-  for (const groupCount of [1, 2, 4, 8, 16, 32]) {
+/** The group sizes a config uses: the custom sizes when set, otherwise an even split. */
+export function sizesFor(c: Pick<CompetitionConfig, "groupCount" | "groupSizes">, clubs: number) {
+  if (c.groupSizes?.length) return c.groupSizes;
+  return groupSizes(clubs, Math.max(1, c.groupCount));
+}
+
+/** Clubs in the first knockout round. */
+export const knockoutSize = (c: Pick<CompetitionConfig, "groupCount" | "advancePerGroup" | "bestPlaced">) => c.groupCount * c.advancePerGroup + (c.bestPlaced || 0);
+
+/** "1st", "2nd", "3rd"… */
+export const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
+
+/** Best-placed clubs needed to fill the next power-of-two bracket (0 when already a power of two or it can't be filled). */
+export function autoBestPlaced(groupCount: number, advancePerGroup: number) {
+  const base = groupCount * advancePerGroup;
+  if (base < 2 || isPowerOfTwo(base)) return 0;
+  let n = 2;
+  while (n < base) n *= 2;
+  return n - base < groupCount ? n - base : 0;
+}
+
+export type FormatOption = { groupCount: number; advancePerGroup: number; bestPlaced: number; minSize: number; maxSize: number; bracket: number };
+
+/** Formats that work for `clubs` entrants. Qualifiers make a power-of-two bracket, topped up with best-placed clubs when needed. */
+export function suggestFormats(clubs: number): FormatOption[] {
+  const out: FormatOption[] = [];
+  for (const groupCount of [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]) {
     if (groupCount > clubs / 2) continue;
     const sizes = groupSizes(clubs, groupCount);
     const minSize = Math.min(...sizes);
     const maxSize = Math.max(...sizes);
     if (maxSize > 10) continue; // groups larger than 10 mean too many matches
+    if (groupCount > 1 && minSize < 3) continue; // a group of 2 is just one match
     for (const advancePerGroup of [1, 2, 4]) {
-      const bracket = groupCount * advancePerGroup;
-      if (advancePerGroup >= minSize || !isPowerOfTwo(bracket)) continue;
-      out.push({ groupCount, advancePerGroup, minSize, maxSize, bracket });
+      if (advancePerGroup >= minSize) continue;
+      const base = groupCount * advancePerGroup;
+      const bestPlaced = autoBestPlaced(groupCount, advancePerGroup);
+      if (!isPowerOfTwo(base + bestPlaced)) continue;
+      if (bestPlaced && advancePerGroup + 1 > minSize) continue;
+      out.push({ groupCount, advancePerGroup, bestPlaced, minSize, maxSize, bracket: base + bestPlaced });
     }
   }
   return out;
@@ -88,9 +119,26 @@ export function validateConfig(c: CompetitionConfig, clubs: number): string[] {
   if (clubs < 2) errs.push("At least 2 approved clubs are needed.");
   if (c.groupCount < 1) errs.push("Choose at least 1 group.");
   if (c.groupCount > clubs / 2) errs.push(`${c.groupCount} groups is too many for ${clubs} clubs (each group needs 2+).`);
-  const minSize = Math.min(...groupSizes(clubs, Math.max(1, c.groupCount)));
+  const sizes = sizesFor(c, clubs);
+  if (c.groupSizes?.length) {
+    if (c.groupSizes.length !== c.groupCount) errs.push(`Set a size for each of the ${c.groupCount} groups.`);
+    const total = c.groupSizes.reduce((a, b) => a + b, 0);
+    if (total !== clubs) errs.push(`The groups hold ${total} clubs but ${clubs} are approved. Make them add up to ${clubs}.`);
+    if (c.groupSizes.some((n) => n < 2)) errs.push("Each group needs at least 2 clubs.");
+  }
+  const minSize = Math.min(...sizes);
+  const best = c.bestPlaced || 0;
   if (c.advancePerGroup >= minSize) errs.push(`Only ${minSize - 1} club(s) can advance from the smallest group (${minSize} clubs).`);
-  if (!isPowerOfTwo(c.groupCount * c.advancePerGroup)) errs.push(`${c.groupCount} groups × ${c.advancePerGroup} advancing = ${c.groupCount * c.advancePerGroup} clubs; the knockout needs 2, 4, 8, 16, 32 or 64.`);
+  if (best && best >= c.groupCount) errs.push(`Best-placed qualifiers must be fewer than the number of groups (${c.groupCount}).`);
+  else if (best && c.advancePerGroup + 1 > minSize) errs.push(`The smallest group has no ${ordinal(c.advancePerGroup + 1)} place for best-placed qualifiers.`);
+  const ko = knockoutSize(c);
+  if (!isPowerOfTwo(ko)) {
+    const hint = autoBestPlaced(c.groupCount, c.advancePerGroup);
+    errs.push(
+      `${ko} clubs would reach the knockout, but it needs 2, 4, 8, 16, 32 or 64.` +
+        (hint && !best ? ` Add the ${hint} best ${ordinal(c.advancePerGroup + 1)}-placed clubs to make ${ko + hint}.` : "")
+    );
+  }
   if (c.playersPerTie < 1 || c.playersPerTie > 30) errs.push("Players per match must be between 1 and 30.");
   return errs;
 }
@@ -105,10 +153,17 @@ export function shuffle<T>(items: T[], rand: () => number = Math.random) {
   return a;
 }
 
-/** Random group draw: clubs dealt round-robin into groups A, B, C… */
-export function drawGroups(clubIds: string[], groupCount: number, rand?: () => number): Group[] {
+/** Random group draw: clubs dealt round-robin into groups A, B, C…, each filled up to its size. */
+export function drawGroups(clubIds: string[], groupCount: number, rand?: () => number, sizes?: number[]): Group[] {
+  const cap = sizes?.length === groupCount ? sizes : groupSizes(clubIds.length, groupCount);
   const groups: Group[] = Array.from({ length: groupCount }, (_, i) => ({ name: groupLetter(i), clubIds: [] }));
-  shuffle(clubIds, rand).forEach((id, i) => groups[i % groupCount].clubIds.push(id));
+  let g = 0;
+  for (const id of shuffle(clubIds, rand)) {
+    let tries = 0;
+    while (groups[g % groupCount].clubIds.length >= cap[g % groupCount] && tries++ < groupCount) g++;
+    groups[g % groupCount].clubIds.push(id);
+    g++;
+  }
   return groups;
 }
 
@@ -234,20 +289,40 @@ export function bracketSeedOrder(n: number): number[] {
   return order;
 }
 
+/** Compare clubs from different groups (groups can differ in size, so per-match averages are used). */
+function crossGroupOrder(x: StandingRow, y: StandingRow) {
+  const pm = (r: StandingRow, v: number) => (r.played ? v / r.played : 0);
+  return (
+    pm(y, y.points) - pm(x, x.points) ||
+    pm(y, y.pointsFor - y.pointsAgainst) - pm(x, x.pointsFor - x.pointsAgainst) ||
+    pm(y, y.goalsFor - y.goalsAgainst) - pm(x, x.goalsFor - x.goalsAgainst) ||
+    pm(y, y.goalsFor) - pm(x, x.goalsFor)
+  );
+}
+
+/** The best clubs at place `place` (0-based) across all groups, best first. */
+export function bestAtPlace(tables: { name: string; rows: StandingRow[] }[], place: number, count: number) {
+  return tables
+    .filter((t) => t.rows[place])
+    .map((t) => ({ row: t.rows[place], group: t.name }))
+    .sort((a, b) => crossGroupOrder(a.row, b.row))
+    .slice(0, count);
+}
+
 /**
  * First knockout round from the group tables, in bracket order (consecutive pairs meet in the next round).
- * Group winners always face lower-placed clubs, never a club from their own group, and clubs from the
- * same group start in different halves of the bracket.
+ * Group winners face lower-placed clubs, and clubs from the same group don't meet in the first round
+ * whenever that can be avoided.
  */
-export function firstKnockoutPairs(tables: { name: string; rows: StandingRow[] }[], advancePerGroup: number): [string, string][] {
+export function firstKnockoutPairs(tables: { name: string; rows: StandingRow[] }[], advancePerGroup: number, bestPlaced = 0): [string, string][] {
   if (tables.length === 1) {
-    const seeds = tables[0].rows.slice(0, advancePerGroup).map((r) => r.clubId);
+    const seeds = tables[0].rows.slice(0, advancePerGroup + bestPlaced).map((r) => r.clubId);
     const order = bracketSeedOrder(seeds.length);
     const pairs: [string, string][] = [];
     for (let i = 0; i < order.length; i += 2) pairs.push([seeds[order[i] - 1], seeds[order[i + 1] - 1]]);
     return pairs;
   }
-  if (advancePerGroup === 2) {
+  if (advancePerGroup === 2 && !bestPlaced && tables.length % 2 === 0) {
     // A1–B2 and C1–D2 … in the top half, B1–A2 and D1–C2 … in the bottom half.
     const top: [string, string][] = [];
     const bottom: [string, string][] = [];
@@ -259,13 +334,27 @@ export function firstKnockoutPairs(tables: { name: string; rows: StandingRow[] }
     }
     return [...top, ...bottom];
   }
-  // General case: all 1st places (by group), then all 2nds, …; seeded into a standard bracket.
-  const seeds: string[] = [];
-  for (let place = 0; place < advancePerGroup; place++) for (const t of tables) seeds.push(t.rows[place].clubId);
+  // General case: all 1st places (best first), then all 2nds, …, then the best-placed; seeded into a standard bracket.
+  const seeds: { id: string; group: string }[] = [];
+  for (let place = 0; place < advancePerGroup; place++) {
+    for (const x of bestAtPlace(tables, place, tables.length)) seeds.push({ id: x.row.clubId, group: x.group });
+  }
+  if (bestPlaced) for (const x of bestAtPlace(tables, advancePerGroup, bestPlaced)) seeds.push({ id: x.row.clubId, group: x.group });
   const order = bracketSeedOrder(seeds.length);
-  const pairs: [string, string][] = [];
+  const pairs: { id: string; group: string }[][] = [];
   for (let i = 0; i < order.length; i += 2) pairs.push([seeds[order[i] - 1], seeds[order[i + 1] - 1]]);
-  return pairs;
+  // Avoid same-group first-round meetings by swapping the lower-seeded clubs between ties.
+  for (let i = 0; i < pairs.length; i++) {
+    if (pairs[i][0].group !== pairs[i][1].group) continue;
+    for (let j = 0; j < pairs.length; j++) {
+      if (j === i) continue;
+      if (pairs[j][0].group !== pairs[i][1].group && pairs[i][0].group !== pairs[j][1].group) {
+        [pairs[i][1], pairs[j][1]] = [pairs[j][1], pairs[i][1]];
+        break;
+      }
+    }
+  }
+  return pairs.map(([a, b]) => [a.id, b.id] as [string, string]);
 }
 
 /** Winner of a knockout tie over one or two legs: aggregate internal points, then aggregate goals, then the admin's pick. */

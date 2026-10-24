@@ -27,6 +27,7 @@ import { plain, isId, slugify, escapeRegex, PLACEHOLDER } from "./serialize";
 import { calculateNewRating, updateFormHistory } from "../ranking/engine";
 import { calculatePlayerMarketValue } from "../valuation/engine";
 import {
+  bestAtPlace,
   DEFAULT_COMPETITION,
   drawGroups,
   firstKnockoutPairs,
@@ -1159,6 +1160,8 @@ export const db = {
         total: groupFixtures.length,
       };
     });
+    // Clubs currently holding a best-placed qualifying spot (e.g. best 3rd-placed).
+    const bestPlacedIds = comp.bestPlaced ? bestAtPlace(tables, comp.advancePerGroup, comp.bestPlaced).map((x) => x.row.clubId) : [];
     const groupFixtures = raw.filter((f: any) => f.stage === "GROUP");
     const groupsDone = groupFixtures.length > 0 && groupFixtures.every((f: any) => f.result?.status === "APPROVED");
 
@@ -1204,6 +1207,7 @@ export const db = {
       competition: comp,
       clubs,
       tables,
+      bestPlacedIds,
       fixtures,
       knockout,
       groupsDone,
@@ -1231,11 +1235,14 @@ export const db = {
       playersPerTie: Math.max(1, Math.min(30, Math.round(Number(cfg.playersPerTie ?? cur.playersPerTie)))),
       daysBetweenRounds: Math.max(1, Math.min(30, Math.round(Number(cfg.daysBetweenRounds ?? cur.daysBetweenRounds)))),
       firstMatchday: cfg.firstMatchday !== undefined ? cfg.firstMatchday || undefined : cur.firstMatchday,
+      groupSizes: Array.isArray(cfg.groupSizes) ? cfg.groupSizes.map((n) => Math.max(0, Math.round(Number(n) || 0))).slice(0, 32) : cur.groupSizes,
+      bestPlaced: cfg.bestPlaced !== undefined ? Math.max(0, Math.round(Number(cfg.bestPlaced) || 0)) : cur.bestPlaced || 0,
     };
+    if (!next.groupSizes?.length) delete next.groupSizes;
     const errs = validateConfig(next, clubs);
     if (errs.length) throw new ServiceError(errs[0], 400);
-    // Changing the number of groups invalidates an existing draw.
-    if (cur.groups?.length && cur.groupCount !== next.groupCount) next.groups = [];
+    // Changing the number or sizes of groups invalidates an existing draw.
+    if (cur.groups?.length && (cur.groupCount !== next.groupCount || JSON.stringify(cur.groupSizes || []) !== JSON.stringify(next.groupSizes || []))) next.groups = [];
     t.competition = next;
     t.markModified("competition");
     await t.save();
@@ -1261,9 +1268,11 @@ export const db = {
         throw new ServiceError("Every approved club must be in exactly one group", 400);
       }
       if (manual.some((g) => g.clubIds.length < 2)) throw new ServiceError("Each group needs at least 2 clubs", 400);
+      const need = comp.advancePerGroup + 1;
+      if (manual.some((g) => g.clubIds.length < need)) throw new ServiceError(`Each group needs at least ${need} clubs for this format`, 400);
       groups = manual.map((g, i) => ({ name: groupLetter(i), clubIds: g.clubIds }));
     } else {
-      groups = drawGroups(ids, comp.groupCount);
+      groups = drawGroups(ids, comp.groupCount, undefined, comp.groupSizes);
     }
     t.competition = { ...comp, groups, drawnAt: new Date().toISOString() };
     t.markModified("competition");
@@ -1520,7 +1529,8 @@ export const db = {
     if (nextAction === "START_KNOCKOUT") {
       pairs = firstKnockoutPairs(
         tables.map((x: any) => ({ name: x.name, rows: x.rows })),
-        comp.advancePerGroup
+        comp.advancePerGroup,
+        comp.bestPlaced || 0
       );
     } else if (nextAction === "NEXT_ROUND") {
       const last = knockout[knockout.length - 1];

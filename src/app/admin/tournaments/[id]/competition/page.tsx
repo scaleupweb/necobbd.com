@@ -21,10 +21,11 @@ import {
   GitFork,
   Save,
   Info,
+  SlidersHorizontal,
 } from "lucide-react";
 import { api, Button, Empty, Notice, inputCls } from "@/components/admin/ui";
 import { toast, confirmDialog } from "@/lib/feedback";
-import { groupLetter, groupSizes, knockoutRoundName, matchesPerClub, suggestFormats, validateConfig } from "@/lib/competition";
+import { autoBestPlaced, groupLetter, groupSizes, isPowerOfTwo, knockoutRoundName, knockoutSize, matchesPerClub, ordinal, sizesFor, suggestFormats, validateConfig } from "@/lib/competition";
 import { Bracket, ClubLogo, FixtureRounds, GroupBadge, GroupTables } from "@/components/competition/views";
 import { TieResultModal } from "@/components/competition/TieResultModal";
 
@@ -186,7 +187,7 @@ export default function CompetitionAdminPage() {
             ))}
           </div>
 
-          {tab === "tables" && (tables.length ? <GroupTables tables={tables} advancePerGroup={comp.advancePerGroup} clubHref={false} /> : <Empty>No groups.</Empty>)}
+          {tab === "tables" && (tables.length ? <GroupTables tables={tables} advancePerGroup={comp.advancePerGroup} bestPlacedIds={data.bestPlacedIds} clubHref={false} /> : <Empty>No groups.</Empty>)}
           {tab === "fixtures" && (
             <FixtureRounds
               fixtures={fixtures}
@@ -255,15 +256,18 @@ export default function CompetitionAdminPage() {
 /* ---------------- Format settings ---------------- */
 
 function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount: number; busy: string; onSave: (cfg: any) => void }) {
+  const suggestions = useMemo(() => suggestFormats(clubCount), [clubCount]);
   // Before the first save, start from the best fit for this many clubs (groups of 4–6, top 2 advance).
   const best = (() => {
     if (comp.enabled) return null;
-    const s = suggestFormats(clubCount);
-    return s.find((x) => x.advancePerGroup === 2 && x.minSize >= 4 && x.maxSize <= 6) || s.find((x) => x.advancePerGroup === 2 && x.minSize >= 3) || s[0] || null;
+    const s = suggestions;
+    return s.find((x) => x.advancePerGroup === 2 && !x.bestPlaced && x.minSize >= 4 && x.maxSize <= 6) || s.find((x) => x.advancePerGroup === 2 && x.minSize >= 3) || s[0] || null;
   })();
   const [cfg, setCfg] = useState(() => ({
     groupCount: best?.groupCount ?? comp.groupCount,
     advancePerGroup: best?.advancePerGroup ?? comp.advancePerGroup,
+    bestPlaced: best ? best.bestPlaced : comp.bestPlaced || 0,
+    groupSizes: (best ? [] : comp.groupSizes || []) as number[],
     groupLegs: comp.groupLegs,
     knockoutLegs: comp.knockoutLegs,
     finalLegs: comp.finalLegs,
@@ -271,14 +275,24 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
     daysBetweenRounds: comp.daysBetweenRounds,
     firstMatchday: comp.firstMatchday ? String(comp.firstMatchday).slice(0, 10) : "",
   }));
+  const isPreset = (c: typeof cfg) =>
+    !c.groupSizes.length && suggestions.some((s) => s.groupCount === c.groupCount && s.advancePerGroup === c.advancePerGroup && s.bestPlaced === (c.bestPlaced || 0));
+  const [custom, setCustom] = useState(() => !isPreset(cfg));
   const set = (k: string, v: any) => setCfg((c) => ({ ...c, [k]: v }));
-  const suggestions = useMemo(() => suggestFormats(clubCount), [clubCount]);
+
   const errors = clubCount >= 2 ? validateConfig({ ...comp, ...cfg }, clubCount) : [];
-  const sizes = clubCount >= 2 && cfg.groupCount >= 1 ? groupSizes(clubCount, cfg.groupCount) : [];
+  const sizes = clubCount >= 2 && cfg.groupCount >= 1 ? sizesFor(cfg, clubCount) : [];
+  const placed = sizes.reduce((a, b) => a + b, 0);
   const groupMatches = sizes.reduce((s, n) => s + ((n * (n - 1)) / 2) * cfg.groupLegs, 0);
-  const bracket = cfg.groupCount * cfg.advancePerGroup;
+  const koSize = knockoutSize(cfg);
   const rounds: string[] = [];
-  for (let n = bracket; n >= 2 && Number.isInteger(Math.log2(n)); n /= 2) rounds.push(knockoutRoundName(n));
+  for (let n = koSize; n >= 2 && Number.isInteger(Math.log2(n)); n /= 2) rounds.push(knockoutRoundName(n));
+  const nextPlace = ordinal(cfg.advancePerGroup + 1);
+
+  // Custom: changing the number of groups re-splits the clubs evenly; sizes can then be edited one by one.
+  const setGroupCount = (n: number) => setCfg((c) => ({ ...c, groupCount: n, groupSizes: groupSizes(clubCount, n), bestPlaced: Math.min(c.bestPlaced, Math.max(0, n - 1)) }));
+  const setAllSizes = (n: number) => setCfg((c) => ({ ...c, groupSizes: Array.from({ length: c.groupCount }, () => n) }));
+  const setSize = (i: number, n: number) => setCfg((c) => ({ ...c, groupSizes: (c.groupSizes.length ? c.groupSizes : groupSizes(clubCount, c.groupCount)).map((x, j) => (j === i ? n : x)) }));
 
   return (
     <section className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">
@@ -287,55 +301,146 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
         <h2 className="text-sm font-black">1 · Competition format</h2>
       </div>
       <div className="p-5 space-y-5">
-        {suggestions.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Suggested for {clubCount} clubs
+        <div className="space-y-2">
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Suggested for {clubCount} clubs
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {suggestions.map((s) => {
+              const on = !custom && s.groupCount === cfg.groupCount && s.advancePerGroup === cfg.advancePerGroup && s.bestPlaced === (cfg.bestPlaced || 0) && !cfg.groupSizes.length;
+              return (
+                <button
+                  key={`${s.groupCount}-${s.advancePerGroup}-${s.bestPlaced}`}
+                  onClick={() => {
+                    setCustom(false);
+                    setCfg((c) => ({ ...c, groupCount: s.groupCount, advancePerGroup: s.advancePerGroup, bestPlaced: s.bestPlaced, groupSizes: [] }));
+                  }}
+                  className={`text-left p-3 rounded-2xl border transition-all ${on ? "border-black bg-black text-white shadow-lg" : "border-slate-200 hover:border-amber-400 bg-white"}`}
+                >
+                  <div className="text-sm font-black">{s.groupCount === 1 ? "1 league" : `${s.groupCount} groups`}</div>
+                  <div className={`text-[11px] ${on ? "text-white/70" : "text-slate-500"}`}>
+                    {s.minSize === s.maxSize ? s.minSize : `${s.minSize}–${s.maxSize}`} clubs each · top {s.advancePerGroup}
+                    {s.bestPlaced ? ` + ${s.bestPlaced} best ${ordinal(s.advancePerGroup + 1)}` : ""}
+                  </div>
+                  <div className={`mt-1.5 text-[10px] font-black uppercase tracking-wider ${on ? "text-amber-400" : "text-amber-600"}`}>→ {knockoutRoundName(s.bracket)}</div>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                setCustom(true);
+                setCfg((c) => ({ ...c, groupSizes: c.groupSizes.length ? c.groupSizes : groupSizes(clubCount, c.groupCount) }));
+              }}
+              className={`text-left p-3 rounded-2xl border-2 border-dashed transition-all ${custom ? "border-amber-500 bg-amber-50 shadow-lg" : "border-slate-300 hover:border-amber-400 bg-white"}`}
+            >
+              <div className="text-sm font-black flex items-center gap-1.5">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" /> Custom
+              </div>
+              <div className="text-[11px] text-slate-500">Choose groups, clubs per group and who goes through</div>
+              <div className="mt-1.5 text-[10px] font-black uppercase tracking-wider text-amber-600">Make your own →</div>
+            </button>
+          </div>
+        </div>
+
+        {custom && (
+          <div className="rounded-2xl border border-amber-300 bg-gradient-to-b from-amber-50/80 to-white p-4 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-black text-amber-900">
+              <SlidersHorizontal className="w-4 h-4" /> Custom format
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {suggestions.map((s) => {
-                const on = s.groupCount === cfg.groupCount && s.advancePerGroup === cfg.advancePerGroup;
-                return (
-                  <button
-                    key={`${s.groupCount}-${s.advancePerGroup}`}
-                    onClick={() => setCfg((c) => ({ ...c, groupCount: s.groupCount, advancePerGroup: s.advancePerGroup }))}
-                    className={`text-left p-3 rounded-2xl border transition-all ${on ? "border-black bg-black text-white shadow-lg" : "border-slate-200 hover:border-amber-400 bg-white"}`}
-                  >
-                    <div className="text-sm font-black">
-                      {s.groupCount === 1 ? "1 league" : `${s.groupCount} groups`}
-                    </div>
-                    <div className={`text-[11px] ${on ? "text-white/70" : "text-slate-500"}`}>
-                      {s.minSize === s.maxSize ? s.minSize : `${s.minSize}–${s.maxSize}`} clubs each · top {s.advancePerGroup}
-                    </div>
-                    <div className={`mt-1.5 text-[10px] font-black uppercase tracking-wider ${on ? "text-amber-400" : "text-amber-600"}`}>→ {knockoutRoundName(s.bracket)}</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Num label="Number of groups" value={cfg.groupCount} onChange={setGroupCount} min={1} max={Math.max(1, Math.min(26, Math.floor(clubCount / 2)))} />
+              <Num
+                label="Clubs in every group"
+                value={sizes.length ? Math.round(placed / sizes.length) : 2}
+                onChange={(n) => setAllSizes(Math.max(2, n))}
+                min={2}
+                max={64}
+                hint="Sets all groups to the same size"
+              />
+              <Num label="Go through from each group" value={cfg.advancePerGroup} onChange={(v) => set("advancePerGroup", v)} min={1} max={8} hint={`Top ${cfg.advancePerGroup} of every group`} />
+              <Num
+                label={`Best ${nextPlace}-placed also go through`}
+                value={cfg.bestPlaced || 0}
+                onChange={(v) => set("bestPlaced", v)}
+                min={0}
+                max={Math.max(0, cfg.groupCount - 1)}
+                hint="Fills the knockout up to 8, 16, 32…"
+              />
+            </div>
+
+            {/* Per-group sizes */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Clubs per group</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${placed === clubCount ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-700"}`}>
+                    {placed === clubCount ? "✓ " : ""}
+                    {placed} / {clubCount} clubs
+                    {placed < clubCount ? ` · ${clubCount - placed} left` : placed > clubCount ? ` · ${placed - clubCount} too many` : ""}
+                  </span>
+                  <button type="button" onClick={() => setCfg((c) => ({ ...c, groupSizes: groupSizes(clubCount, c.groupCount) }))} className="text-[11px] font-bold text-slate-600 hover:text-black underline">
+                    Split evenly
                   </button>
-                );
-              })}
+                </div>
+              </div>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-2">
+                {sizes.map((n, i) => (
+                  <div key={i} className="flex items-center gap-1.5 p-1.5 rounded-xl bg-white border border-slate-200">
+                    <GroupBadge name={groupLetter(i)} size={24} />
+                    <button type="button" onClick={() => setSize(i, Math.max(2, n - 1))} className="w-6 h-6 rounded-lg hover:bg-slate-100 font-black text-slate-500">
+                      −
+                    </button>
+                    <span className="flex-1 text-center font-mono font-black text-sm">{n}</span>
+                    <button type="button" onClick={() => setSize(i, Math.min(64, n + 1))} className="w-6 h-6 rounded-lg hover:bg-slate-100 font-black text-slate-500">
+                      +
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Knockout check */}
+            <div className={`flex flex-wrap items-center gap-2 p-3 rounded-xl text-xs font-bold ${isPowerOfTwo(koSize) ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+              <span className="font-mono">
+                {cfg.groupCount} × {cfg.advancePerGroup}
+                {cfg.bestPlaced ? ` + ${cfg.bestPlaced}` : ""} = {koSize} clubs
+              </span>
+              <span>→ {isPowerOfTwo(koSize) ? knockoutRoundName(koSize) : "needs 2, 4, 8, 16, 32 or 64"}</span>
+              {!isPowerOfTwo(koSize) && autoBestPlaced(cfg.groupCount, cfg.advancePerGroup) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => set("bestPlaced", autoBestPlaced(cfg.groupCount, cfg.advancePerGroup))}
+                  className="ml-auto px-2.5 py-1 rounded-lg bg-black text-white text-[11px]"
+                >
+                  Fix: add {autoBestPlaced(cfg.groupCount, cfg.advancePerGroup)} best {nextPlace}-placed
+                </button>
+              )}
             </div>
           </div>
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Num label="Groups" value={cfg.groupCount} onChange={(v) => set("groupCount", v)} min={1} max={32} />
-          <Num label="Advance per group" value={cfg.advancePerGroup} onChange={(v) => set("advancePerGroup", v)} min={1} max={8} />
           <Num label="Players per match" value={cfg.playersPerTie} onChange={(v) => set("playersPerTie", v)} min={1} max={30} hint="1v1 games in one club match" />
           <Num label="Days between rounds" value={cfg.daysBetweenRounds} onChange={(v) => set("daysBetweenRounds", v)} min={1} max={30} />
           <Legs label="Group stage" value={cfg.groupLegs} onChange={(v) => set("groupLegs", v)} one="Play once" two="Home & away" />
-          <Legs label="Knockout rounds" value={cfg.knockoutLegs} onChange={(v) => set("knockoutLegs", v)} one="One match" two="Two legs" />
-          <Legs label="Final" value={cfg.finalLegs} onChange={(v) => set("finalLegs", v)} one="One match" two="Two legs" />
           <label className="block space-y-1">
             <span className="block text-xs font-bold text-slate-700">First matchday</span>
             <input type="date" value={cfg.firstMatchday} onChange={(e) => set("firstMatchday", e.target.value)} className={inputCls} />
           </label>
+          <Legs label="Knockout rounds" value={cfg.knockoutLegs} onChange={(v) => set("knockoutLegs", v)} one="One match" two="Two legs" />
+          <Legs label="Final" value={cfg.finalLegs} onChange={(v) => set("finalLegs", v)} one="One match" two="Two legs" />
         </div>
 
         {/* Summary */}
         {sizes.length > 0 && (
           <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Group sizes" value={[...new Set(sizes)].sort((a, b) => b - a).join(" / ")} />
+            <Stat label="Groups" value={`${cfg.groupCount} × ${[...new Set(sizes)].sort((a, b) => b - a).join(" / ")} clubs`} />
             <Stat label="Matches per club" value={`${matchesPerClub(Math.min(...sizes), cfg.groupLegs)}${Math.min(...sizes) !== Math.max(...sizes) ? `–${matchesPerClub(Math.max(...sizes), cfg.groupLegs)}` : ""}`} />
             <Stat label="Group matches" value={String(groupMatches)} />
-            <Stat label="Knockout" value={rounds.length ? rounds.join(" → ") : "—"} />
+            <Stat
+              label="Knockout"
+              value={rounds.length ? `${cfg.bestPlaced ? `Top ${cfg.advancePerGroup} + ${cfg.bestPlaced} best ${nextPlace} · ` : ""}${rounds.join(" → ")}` : "—"}
+            />
           </div>
         )}
         {errors.length > 0 && <Notice kind="err">{errors[0]}</Notice>}
@@ -343,9 +448,19 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
         <div className="flex items-start gap-2 text-[11px] text-slate-500">
           <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           Match = {cfg.playersPerTie} individual games. Game win 3 pts, draw 1. More game points wins the match: 3 table points (draw 1). Table order: points → game-point difference → goal difference → goals.
+          {cfg.bestPlaced ? ` Best ${nextPlace}-placed clubs are compared by points per match, then game-point and goal difference.` : ""}
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => onSave({ ...cfg, firstMatchday: cfg.firstMatchday ? new Date(cfg.firstMatchday + "T18:00:00").toISOString() : "" })} disabled={!!busy || errors.length > 0 || clubCount < 2}>
+          <Button
+            onClick={() =>
+              onSave({
+                ...cfg,
+                groupSizes: custom ? sizes : [],
+                firstMatchday: cfg.firstMatchday ? new Date(cfg.firstMatchday + "T18:00:00").toISOString() : "",
+              })
+            }
+            disabled={!!busy || errors.length > 0 || clubCount < 2}
+          >
             {busy === "save" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {comp.enabled ? "Update format" : "Save format"}
           </Button>
         </div>
@@ -553,7 +668,7 @@ function NextStepBanner({ nextAction, knockout, comp, busy, champion, onAdvance 
   const last = knockout[knockout.length - 1];
   const nextName =
     nextAction === "START_KNOCKOUT"
-      ? knockoutRoundName(comp.groupCount * comp.advancePerGroup)
+      ? knockoutRoundName(knockoutSize(comp))
       : nextAction === "NEXT_ROUND" && last
         ? knockoutRoundName(last.ties.length)
         : "";
@@ -587,7 +702,7 @@ function NextStepBanner({ nextAction, knockout, comp, busy, champion, onAdvance 
 
 function BracketPreview({ comp }: { comp: any }) {
   const rounds: string[] = [];
-  for (let n = comp.groupCount * comp.advancePerGroup; n >= 2; n /= 2) rounds.push(knockoutRoundName(n));
+  for (let n = knockoutSize(comp); n >= 2; n /= 2) rounds.push(knockoutRoundName(n));
   return (
     <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center space-y-3">
       <GitFork className="w-8 h-8 mx-auto text-slate-300" />
@@ -601,7 +716,9 @@ function BracketPreview({ comp }: { comp: any }) {
         ))}
       </div>
       <div className="text-[11px] text-slate-500">
-        Top {comp.advancePerGroup} of each group advance{comp.advancePerGroup === 2 ? " · group winners face runners-up of another group" : ""}.
+        Top {comp.advancePerGroup} of each group advance
+        {comp.bestPlaced ? ` + the ${comp.bestPlaced} best ${ordinal(comp.advancePerGroup + 1)}-placed clubs` : ""}
+        {comp.advancePerGroup === 2 && !comp.bestPlaced ? " · group winners face runners-up of another group" : ""}.
       </div>
     </div>
   );

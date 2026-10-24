@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ListOrdered, CalendarDays, GitFork, Info } from "lucide-react";
 import { Bracket, ClubLogo, FixtureRounds, GroupBadge, GroupTables } from "./views";
-import { knockoutRoundName } from "@/lib/competition";
+import { knockoutRoundName, knockoutSize, ordinal } from "@/lib/competition";
 
 /** Public tournament view: group tables, fixtures and the knockout bracket. */
 export function PublicCompetition({ data }: { data: any }) {
@@ -11,7 +11,7 @@ export function PublicCompetition({ data }: { data: any }) {
   const started = fixtures.length > 0;
   const [tab, setTab] = useState<"tables" | "fixtures" | "bracket">(knockout.length && comp.stage !== "GROUPS" ? "bracket" : "tables");
   const rounds: string[] = [];
-  for (let n = comp.groupCount * comp.advancePerGroup; n >= 2; n /= 2) rounds.push(knockoutRoundName(n));
+  for (let n = knockoutSize(comp); n >= 2; n /= 2) rounds.push(knockoutRoundName(n));
 
   const tabs = [
     { k: "tables", label: comp.groupCount === 1 ? "Table" : "Groups", icon: ListOrdered },
@@ -30,7 +30,7 @@ export function PublicCompetition({ data }: { data: any }) {
             Competition
           </h2>
           <p className="text-[11px] text-slate-500 mt-1">
-            {comp.groupCount === 1 ? "League" : `${comp.groupCount} groups`} · top {comp.advancePerGroup} advance → {rounds.join(" → ")} · {comp.playersPerTie} players per match
+            {comp.groupCount === 1 ? "League" : `${comp.groupCount} groups`} · top {comp.advancePerGroup}{comp.bestPlaced ? ` + ${comp.bestPlaced} best ${ordinal(comp.advancePerGroup + 1)}` : ""} advance → {rounds.join(" → ")} · {comp.playersPerTie} players per match
           </p>
         </div>
         <div className="inline-flex p-1 rounded-2xl bg-slate-100 self-start">
@@ -48,7 +48,7 @@ export function PublicCompetition({ data }: { data: any }) {
 
       {tab === "tables" &&
         (started ? (
-          <GroupTables tables={tables} advancePerGroup={comp.advancePerGroup} />
+          <GroupTables tables={tables} advancePerGroup={comp.advancePerGroup} bestPlacedIds={data.bestPlacedIds} bestPlaced={comp.bestPlaced} />
         ) : (
           // Groups drawn, fixtures not out yet: show who is in which group.
           <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-3">
