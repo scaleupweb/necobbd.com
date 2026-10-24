@@ -28,6 +28,7 @@ import { toast, confirmDialog } from "@/lib/feedback";
 import { autoBestPlaced, groupLetter, groupSizes, isPowerOfTwo, knockoutRoundName, knockoutSize, matchesPerClub, ordinal, sizesFor, suggestFormats, validateConfig } from "@/lib/competition";
 import { Bracket, ClubLogo, FixtureRounds, GroupBadge, GroupTables } from "@/components/competition/views";
 import { TieResultModal } from "@/components/competition/TieResultModal";
+import { FixturesPanel } from "@/components/competition/FixtureTools";
 
 const STEPS = [
   { key: "settings", label: "Format", icon: Settings2 },
@@ -189,19 +190,7 @@ export default function CompetitionAdminPage() {
 
           {tab === "tables" && (tables.length ? <GroupTables tables={tables} advancePerGroup={comp.advancePerGroup} bestPlacedIds={data.bestPlacedIds} clubHref={false} /> : <Empty>No groups.</Empty>)}
           {tab === "fixtures" && (
-            <FixtureRounds
-              fixtures={fixtures}
-              renderAction={(f) => (
-                <button
-                  onClick={() => setTieOf(f.id)}
-                  className={`w-full mt-1 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
-                    f.result?.status === "APPROVED" ? "bg-slate-50 text-slate-600 hover:bg-slate-100" : "bg-black text-white hover:bg-zinc-800"
-                  }`}
-                >
-                  {f.result?.status === "APPROVED" ? "View games" : "Enter result"}
-                </button>
-              )}
-            />
+            <FixturesPanel data={data} onOpenTie={(f) => setTieOf(f.id)} reload={load} />
           )}
           {tab === "bracket" &&
             (knockout.length ? (
@@ -248,7 +237,7 @@ export default function CompetitionAdminPage() {
         </>
       )}
 
-      {tieOf && <TieResultModal fixtureId={tieOf} onClose={() => setTieOf(null)} onDone={load} />}
+      {tieOf && <TieResultModal fixtureId={tieOf} lockReason={fixtures.find((x: any) => x.id === tieOf)?.rollbackLock} onClose={() => setTieOf(null)} onDone={load} />}
     </div>
   );
 }

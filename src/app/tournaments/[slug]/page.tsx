@@ -50,7 +50,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const winner = t.winnerPlayerId ? participants.find((p) => p.id === t.winnerPlayerId) : null;
   // Group + knockout competition (shown once the groups are drawn). Game-by-game details stay on the match pages.
   const compData = (t as any).competition?.enabled && (t as any).competition?.groups?.length ? await db.getCompetition(t.id) : null;
-  const comp = compData ? { ...compData, fixtures: compData.fixtures.map(({ games, ...f }: any) => f) } : null;
+  const comp = compData ? { ...compData, fixtures: compData.fixtures.map(({ games, groupLink, judge, rollbackLock, ...f }: any) => f) } : null;
   const championClub = comp?.champion || null;
 
   return (

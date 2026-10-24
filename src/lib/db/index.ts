@@ -1142,7 +1142,18 @@ export const db = {
     const clubs = clubDocs.map((c: any) => clubMini(c)!).sort((a: any, b: any) => a.name.localeCompare(b.name));
     const clubById = new Map(clubs.map((c: any) => [c.id, c]));
     const raw = await Fixture.find({ tournamentId, stage: { $in: ["GROUP", "KNOCKOUT"] } }).sort({ matchNo: 1 }).lean<any>();
-    const fixtures = await shapeFixtures(raw);
+    const hasKnockout = raw.some((f: any) => f.stage === "KNOCKOUT");
+    const lastKoRound = Math.max(-1, ...raw.filter((f: any) => f.stage === "KNOCKOUT").map((f: any) => f.roundNo ?? 0));
+    const rawById = new Map(raw.map((f: any) => [String(f._id), f]));
+    // Admin extras: judge, chat link, and whether an approved result can still be rolled back.
+    const fixtures = (await shapeFixtures(raw)).map((f: any) => {
+      const r: any = rawById.get(f.id);
+      let rollbackLock = "";
+      if (comp.stage === "COMPLETED") rollbackLock = "The tournament is finished";
+      else if (r.stage === "GROUP" && hasKnockout) rollbackLock = "The knockout was already drawn from the group tables";
+      else if (r.stage === "KNOCKOUT" && (r.roundNo ?? 0) < lastKoRound) rollbackLock = "The next knockout round was already drawn";
+      return { ...f, judge: r.judge || "", groupLink: r.groupLink || "", rollbackLock };
+    });
 
     const tieOf = (f: any) =>
       f.result?.status === "APPROVED"
@@ -1203,7 +1214,7 @@ export const db = {
     else if (comp.stage === "KNOCKOUT") nextAction = last?.done ? (last.ties.length === 1 ? "FINISH" : "NEXT_ROUND") : "PLAY_KNOCKOUT";
 
     return {
-      tournament: { id: String(t._id), name: t.name, slug: t.slug, status: t.status, banner: t.banner || "", winnerClubId: t.winnerClubId ? String(t.winnerClubId) : undefined },
+      tournament: { id: String(t._id), name: t.name, slug: t.slug, status: t.status, banner: t.banner || "", logo: t.logo || "", season: t.season || "", winnerClubId: t.winnerClubId ? String(t.winnerClubId) : undefined },
       competition: comp,
       clubs,
       tables,
@@ -1326,6 +1337,29 @@ export const db = {
       targetUrl: `/tournaments/${t.slug}`,
     });
     return db.getCompetition(tournamentId);
+  },
+
+  /** Reschedule a competition match and set its judge / captains' chat link. */
+  async updateCompetitionFixture(fixtureId: string, data: { scheduledDate?: string; judge?: string; groupLink?: string }) {
+    if (!isId(fixtureId)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findById(fixtureId);
+    if (!f || !f.stage) throw new ServiceError("Competition match not found", 404);
+    if (data.scheduledDate !== undefined) {
+      const d = new Date(data.scheduledDate);
+      if (isNaN(d.getTime())) throw new ServiceError("Invalid date", 400);
+      if (f.result?.status === "APPROVED") throw new ServiceError("This match is already played", 409);
+      f.scheduledDate = d;
+      if (f.status === "POSTPONED") f.status = "SCHEDULED";
+    }
+    if (data.judge !== undefined) f.judge = String(data.judge).trim().slice(0, 80);
+    if (data.groupLink !== undefined) {
+      const link = String(data.groupLink).trim().slice(0, 300);
+      if (link && !/^https?:\/\//i.test(link)) throw new ServiceError("The group link must start with http:// or https://", 400);
+      f.groupLink = link;
+    }
+    await f.save();
+    return db.getFixtureById(fixtureId);
   },
 
   /** Remove every competition fixture and go back to setup (only when no result has been approved). */

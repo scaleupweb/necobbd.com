@@ -25,6 +25,17 @@ export const POST = handle(async (req: NextRequest, { params }: Ctx) => {
   return ok(fixture);
 });
 
+/** body: { scheduledDate?, judge?, groupLink? } — reschedule / announcement details. */
+export const PATCH = handle(async (req: NextRequest, { params }: Ctx) => {
+  const { id } = await params;
+  const session = await requireRole(TOURNAMENT_STAFF);
+  const body = (await req.json()) || {};
+  const pick = (k: string) => (typeof body[k] === "string" ? body[k] : undefined);
+  const fixture = await db.updateCompetitionFixture(id, { scheduledDate: pick("scheduledDate"), judge: pick("judge"), groupLink: pick("groupLink") });
+  await audit(req, session, "COMPETITION_FIXTURE_UPDATE", `Fixture ${id}`, Object.keys(body).join(", "));
+  return ok(fixture);
+});
+
 /** Roll an approved result back so it can be entered again. */
 export const DELETE = handle(async (req: NextRequest, { params }: Ctx) => {
   const { id } = await params;

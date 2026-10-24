@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Wand2, RotateCcw, Check, Star, Plus, Minus } from "lucide-react";
+import { Loader2, Wand2, RotateCcw, Check, Star, Plus, Minus, Lock, Pencil } from "lucide-react";
 import { api, Button, Modal, Notice, inputCls } from "@/components/admin/ui";
 import { toast, confirmDialog } from "@/lib/feedback";
 import { scoreGames } from "@/lib/competition";
@@ -11,7 +11,7 @@ type Row = { homePlayerId: string; awayPlayerId: string; homeGoals: string; away
 const emptyRow = (): Row => ({ homePlayerId: "", awayPlayerId: "", homeGoals: "", awayGoals: "" });
 
 /** Enter a club-vs-club result game by game (or view / roll back an approved one). */
-export function TieResultModal({ fixtureId, onClose, onDone }: { fixtureId: string; onClose: () => void; onDone: () => void }) {
+export function TieResultModal({ fixtureId, lockReason, onClose, onDone }: { fixtureId: string; lockReason?: string; onClose: () => void; onDone: () => void }) {
   const [sheet, setSheet] = useState<any>(null);
   const [err, setErr] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -20,11 +20,23 @@ export function TieResultModal({ fixtureId, onClose, onDone }: { fixtureId: stri
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = () =>
+  /** Load the sheet; `prefill` (an old result) fills the form so a mistake can be corrected. */
+  const load = (prefill?: any) =>
     api(`/api/admin/fixtures/${fixtureId}/tie`)
       .then((d) => {
         setSheet(d);
-        setRows(Array.from({ length: d.playersPerTie }, emptyRow));
+        const old = (prefill?.games || []).map((g: any) => ({
+          homePlayerId: g.homePlayer?.id || "",
+          awayPlayerId: g.awayPlayer?.id || "",
+          homeGoals: String(g.homeGoals ?? ""),
+          awayGoals: String(g.awayGoals ?? ""),
+        }));
+        setRows([...old, ...Array.from({ length: Math.max(0, d.playersPerTie - old.length) }, emptyRow)]);
+        if (prefill) {
+          setMotm(prefill.result?.motmPlayerId || "");
+          setDecider(prefill.result?.decider || "");
+          setNotes(prefill.result?.notes || "");
+        }
       })
       .catch((e) => setErr(e.message));
   useEffect(() => {
@@ -84,14 +96,20 @@ export function TieResultModal({ fixtureId, onClose, onDone }: { fixtureId: stri
     }
   };
 
-  const rollback = async () => {
-    if (!(await confirmDialog({ title: "Roll back this result?", text: "Player ratings, records and club stats from this match are reversed so it can be entered again.", confirmText: "Roll back", danger: true }))) return;
+  const rollback = async (edit: boolean) => {
+    const ok = await confirmDialog(
+      edit
+        ? { title: "Edit this result?", text: "The result is taken back (ratings, records and club stats are reversed) and the form opens with the old games filled in. Fix what's wrong and approve again.", confirmText: "Edit result" }
+        : { title: "Roll back this result?", text: "Player ratings, records and club stats from this match are reversed. The match goes back to not played.", confirmText: "Roll back", danger: true }
+    );
+    if (!ok) return;
+    const before = f;
     setBusy(true);
     try {
       await api(`/api/admin/fixtures/${fixtureId}/tie`, { method: "DELETE" });
-      toast.success("Result rolled back");
+      toast.success(edit ? "Result opened for editing" : "Result rolled back");
       onDone();
-      await load();
+      await load(edit ? before : undefined);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -146,11 +164,22 @@ export function TieResultModal({ fixtureId, onClose, onDone }: { fixtureId: stri
             <>
               <GamesList games={f.games} motmId={f.result.motmPlayerId} />
               {f.result.notes && <p className="text-xs text-slate-600 whitespace-pre-line">{f.result.notes}</p>}
-              <div className="flex justify-end">
-                <Button variant="danger" onClick={rollback} disabled={busy}>
-                  <RotateCcw className="w-3.5 h-3.5" /> Roll back result
-                </Button>
-              </div>
+              {lockReason ? (
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-[11px] text-slate-600">
+                    <Lock className="w-3.5 h-3.5 inline mr-1 -mt-0.5" /> Locked: {lockReason}.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button variant="secondary" onClick={() => rollback(false)} disabled={busy}>
+                    <RotateCcw className="w-3.5 h-3.5" /> Roll back
+                  </Button>
+                  <Button onClick={() => rollback(true)} disabled={busy}>
+                    <Pencil className="w-3.5 h-3.5" /> Edit result
+                  </Button>
+                </div>
+              )}
             </>
           ) : (
             <>

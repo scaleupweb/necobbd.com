@@ -213,6 +213,9 @@ const FixtureSchema = new Schema<any>(
     tieKey: String,
     // Club-vs-club match made of individual 1v1 games: { homePlayerId, awayPlayerId, homeGoals, awayGoals, ratingDelta }.
     games: { type: [Mixed], default: undefined },
+    // Competition match admin notes for the announcement text (judge name, captains' chat link).
+    judge: { type: String, default: "" },
+    groupLink: { type: String, default: "" },
     scheduledDate: { type: Date, required: true },
     venue: { type: String, default: "Online" },
     status: { type: String, enum: ["SCHEDULED", "LIVE", "FINISHED", "POSTPONED", "CANCELLED"], default: "SCHEDULED" },
