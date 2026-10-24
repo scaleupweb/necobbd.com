@@ -26,6 +26,23 @@ import {
 import { plain, isId, slugify, escapeRegex, PLACEHOLDER } from "./serialize";
 import { calculateNewRating, updateFormHistory } from "../ranking/engine";
 import { calculatePlayerMarketValue } from "../valuation/engine";
+import {
+  DEFAULT_COMPETITION,
+  drawGroups,
+  firstKnockoutPairs,
+  groupLetter,
+  knockoutRoundName,
+  roundDate,
+  roundRobin,
+  scoreGames,
+  standings,
+  tieWinner,
+  validateConfig,
+  type Competition,
+  type CompetitionConfig,
+  type Game,
+  type Group,
+} from "../competition";
 import { DEFAULT_SITE_SETTINGS, mergeSettings, SiteSettings } from "../site-settings";
 import { clubLogo } from "../crest";
 import { SQUAD_LIMIT, CONTRACT_DAYS, FREEZE_DAYS, SQUADS, seatLayout, isFrozen } from "../squad";
@@ -208,6 +225,10 @@ async function shapeFixtures(list: any[]) {
     if (f.homePlayerId) playerIds.add(String(f.homePlayerId));
     if (f.awayPlayerId) playerIds.add(String(f.awayPlayerId));
     if (f.result?.motmPlayerId) playerIds.add(String(f.result.motmPlayerId));
+    for (const g of f.games || []) {
+      if (g.homePlayerId) playerIds.add(String(g.homePlayerId));
+      if (g.awayPlayerId) playerIds.add(String(g.awayPlayerId));
+    }
     if (f.homeClubId) clubIds.add(String(f.homeClubId));
     if (f.awayClubId) clubIds.add(String(f.awayClubId));
     if (f.refereeId) refIds.add(String(f.refereeId));
@@ -245,6 +266,18 @@ async function shapeFixtures(list: any[]) {
       tournamentName: t?.name,
       tournamentSlug: t?.slug,
       round: f.round,
+      stage: f.stage || undefined,
+      group: f.group || undefined,
+      roundNo: f.roundNo ?? undefined,
+      leg: f.leg ?? undefined,
+      matchNo: f.matchNo ?? undefined,
+      tieKey: f.tieKey || undefined,
+      games: (f.games || []).map((g: any) => ({
+        homePlayer: pMini(g.homePlayerId),
+        awayPlayer: pMini(g.awayPlayerId),
+        homeGoals: g.homeGoals ?? 0,
+        awayGoals: g.awayGoals ?? 0,
+      })),
       scheduledDate: new Date(f.scheduledDate).toISOString(),
       venue: f.venue,
       status: f.status,
@@ -265,6 +298,9 @@ async function shapeFixtures(list: any[]) {
               awayScore: f.result.awayScore ?? 0,
               homePenalties: f.result.homePenalties,
               awayPenalties: f.result.awayPenalties,
+              homeGoals: f.result.homeGoals,
+              awayGoals: f.result.awayGoals,
+              decider: f.result.decider ? String(f.result.decider) : undefined,
               motmPlayerId: f.result.motmPlayerId ? String(f.result.motmPlayerId) : undefined,
               motmPlayerName: motm?.fullName,
               motmPlayerAvatar: motm?.avatar,
@@ -334,6 +370,80 @@ const formatKonamiId = (v: unknown) => {
   const k = konamiKey(v);
   return KONAMI_RE.test(k) ? `${k.slice(0, 4)}-${k.slice(4, 7)}-${k.slice(7, 10)}-${k.slice(10)}` : String(v ?? "").trim();
 };
+
+// ----- Club-tie games: one 1v1 game counts for both players like a normal match -----
+
+function refreshMarketValue(p: any) {
+  const s: any = p.stats;
+  p.marketValue = calculatePlayerMarketValue({
+    rating: p.rating,
+    matchesPlayed: s.matchesPlayed,
+    winRate: s.matchesPlayed ? (s.wins / s.matchesPlayed) * 100 : 0,
+    goalsScored: s.goalsScored,
+    motmCount: p.motmCount,
+    cleanSheets: s.cleanSheets,
+    recentForm: p.formHistory,
+  });
+}
+
+/** Apply one game to both players. Returns the rating change so it can be undone exactly. */
+function applyPlayerGame(hp: any, ap: any, hs: number, as: number, motmId?: string) {
+  const homeWon = hs > as;
+  const awayWon = as > hs;
+  const isDraw = hs === as;
+  const hr = hp.rating;
+  const ar = ap.rating;
+  hp.rating = calculateNewRating(hr, ar, { isWin: homeWon, isDraw, goalsScored: hs, goalsConceded: as, isMotm: motmId === String(hp._id) });
+  ap.rating = calculateNewRating(ar, hr, { isWin: awayWon, isDraw, goalsScored: as, goalsConceded: hs, isMotm: motmId === String(ap._id) });
+  for (const [p, won, gf, ga] of [
+    [hp, homeWon, hs, as],
+    [ap, awayWon, as, hs],
+  ] as const) {
+    p.formHistory = updateFormHistory(p.formHistory || "", won ? "W" : isDraw ? "D" : "L");
+    const s: any = p.stats;
+    s.matchesPlayed += 1;
+    s.goalsScored += gf;
+    s.goalsConceded = (s.goalsConceded || 0) + ga;
+    if (won) {
+      s.wins += 1;
+      s.points += 3;
+    } else if (isDraw) {
+      s.draws += 1;
+      s.points += 1;
+    } else s.losses += 1;
+    if (ga === 0) s.cleanSheets += 1;
+    if (motmId === String(p._id)) p.motmCount += 1;
+    refreshMarketValue(p);
+  }
+  return { home: hp.rating - hr, away: ap.rating - ar };
+}
+
+/** Reverse applyPlayerGame. */
+function undoPlayerGame(hp: any, ap: any, hs: number, as: number, delta: { home: number; away: number } | undefined, motmId?: string) {
+  const isDraw = hs === as;
+  hp.rating -= delta?.home || 0;
+  ap.rating -= delta?.away || 0;
+  for (const [p, won, gf, ga] of [
+    [hp, hs > as, hs, as],
+    [ap, as > hs, as, hs],
+  ] as const) {
+    p.formHistory = (p.formHistory || "").split(",").filter(Boolean).slice(0, -1).join(",");
+    const s: any = p.stats;
+    s.matchesPlayed = Math.max(0, s.matchesPlayed - 1);
+    s.goalsScored = Math.max(0, s.goalsScored - gf);
+    s.goalsConceded = Math.max(0, (s.goalsConceded || 0) - ga);
+    if (won) {
+      s.wins = Math.max(0, s.wins - 1);
+      s.points = Math.max(0, s.points - 3);
+    } else if (isDraw) {
+      s.draws = Math.max(0, s.draws - 1);
+      s.points = Math.max(0, s.points - 1);
+    } else s.losses = Math.max(0, s.losses - 1);
+    if (ga === 0) s.cleanSheets = Math.max(0, s.cleanSheets - 1);
+    if (motmId === String(p._id)) p.motmCount = Math.max(0, p.motmCount - 1);
+    refreshMarketValue(p);
+  }
+}
 
 export const db = {
   // ----- Users -----
@@ -880,6 +990,7 @@ export const db = {
     const f = await Fixture.findById(id);
     if (!f) throw new ServiceError("Fixture not found", 404);
     if (f.status === "FINISHED" && f.result?.status === "APPROVED") throw new ServiceError("Result already approved for this match", 409);
+    if (f.stage === "GROUP" || f.stage === "KNOCKOUT") throw new ServiceError("This is a competition match. Enter its games from Admin → Tournaments → Competition.", 409);
 
     const hs = Number(data.homeScore) || 0;
     const as = Number(data.awayScore) || 0;
@@ -1014,6 +1125,474 @@ export const db = {
       });
     }
     return shaped;
+  },
+
+  // ----- Club competition (groups → knockout) -----
+
+  /** Everything the admin and public pages need: settings, groups, tables, fixtures and bracket. */
+  async getCompetition(tournamentId: string) {
+    if (!isId(tournamentId)) return null;
+    await connectDB();
+    const t = await Tournament.findById(tournamentId).lean<any>();
+    if (!t) return null;
+    const comp: Competition = { ...DEFAULT_COMPETITION, ...(t.competition || {}) };
+    const entries = (t.clubParticipants || []).filter((c: any) => c.status === "CONFIRMED");
+    const clubDocs = await Club.find({ _id: { $in: entries.map((c: any) => c.clubId) } }, { name: 1, shortName: 1, slug: 1, logo: 1 }).lean();
+    const clubs = clubDocs.map((c: any) => clubMini(c)!).sort((a: any, b: any) => a.name.localeCompare(b.name));
+    const clubById = new Map(clubs.map((c: any) => [c.id, c]));
+    const raw = await Fixture.find({ tournamentId, stage: { $in: ["GROUP", "KNOCKOUT"] } }).sort({ matchNo: 1 }).lean<any>();
+    const fixtures = await shapeFixtures(raw);
+
+    const tieOf = (f: any) =>
+      f.result?.status === "APPROVED"
+        ? { homeClubId: String(f.homeClubId), awayClubId: String(f.awayClubId), homePoints: f.result.homeScore ?? 0, awayPoints: f.result.awayScore ?? 0, homeGoals: f.result.homeGoals ?? 0, awayGoals: f.result.awayGoals ?? 0, decider: f.result.decider ? String(f.result.decider) : undefined }
+        : null;
+
+    // Group tables
+    const tables = (comp.groups || []).map((g) => {
+      const results = raw.filter((f: any) => f.stage === "GROUP" && f.group === g.name).map(tieOf).filter(Boolean) as any[];
+      const groupFixtures = raw.filter((f: any) => f.stage === "GROUP" && f.group === g.name);
+      return {
+        name: g.name,
+        rows: standings(g.clubIds, results).map((r) => ({ ...r, club: clubById.get(r.clubId) || null })),
+        played: groupFixtures.filter((f: any) => f.result?.status === "APPROVED").length,
+        total: groupFixtures.length,
+      };
+    });
+    const groupFixtures = raw.filter((f: any) => f.stage === "GROUP");
+    const groupsDone = groupFixtures.length > 0 && groupFixtures.every((f: any) => f.result?.status === "APPROVED");
+
+    // Knockout rounds and ties
+    const koRaw = raw.filter((f: any) => f.stage === "KNOCKOUT");
+    const roundNos = [...new Set(koRaw.map((f: any) => f.roundNo))].sort((a: any, b: any) => a - b) as number[];
+    const knockout = roundNos.map((rn) => {
+      const inRound = koRaw.filter((f: any) => f.roundNo === rn);
+      const keys = [...new Set(inRound.map((f: any) => f.tieKey))] as string[];
+      const ties = keys.map((key) => {
+        const legs = inRound.filter((f: any) => f.tieKey === key).sort((a: any, b: any) => (a.leg || 1) - (b.leg || 1));
+        const a = String(legs[0].homeClubId);
+        const b = String(legs[0].awayClubId);
+        const done = legs.every((f: any) => f.result?.status === "APPROVED");
+        const agg = tieWinner(legs.map(tieOf).filter(Boolean) as any[], a, b);
+        return {
+          key,
+          clubA: clubById.get(a) || null,
+          clubB: clubById.get(b) || null,
+          fixtureIds: legs.map((f: any) => String(f._id)),
+          done,
+          aPoints: agg.aPoints,
+          bPoints: agg.bPoints,
+          aGoals: agg.aGoals,
+          bGoals: agg.bGoals,
+          winnerId: done ? agg.winner : undefined,
+          needsDecider: done && !agg.winner,
+        };
+      });
+      const name = String(inRound[0].round || "").replace(/ · Leg \d+$/, "");
+      return { roundNo: rn, name, ties, done: ties.every((x) => x.done && x.winnerId) };
+    });
+
+    const last = knockout[knockout.length - 1];
+    let nextAction: "CONFIG" | "DRAW" | "FIXTURES" | "PLAY_GROUPS" | "START_KNOCKOUT" | "PLAY_KNOCKOUT" | "NEXT_ROUND" | "FINISH" | "DONE" = "CONFIG";
+    if (comp.stage === "COMPLETED") nextAction = "DONE";
+    else if (comp.stage === "SETUP") nextAction = comp.groups?.length ? "FIXTURES" : comp.enabled ? "DRAW" : "CONFIG";
+    else if (comp.stage === "GROUPS") nextAction = groupsDone ? "START_KNOCKOUT" : "PLAY_GROUPS";
+    else if (comp.stage === "KNOCKOUT") nextAction = last?.done ? (last.ties.length === 1 ? "FINISH" : "NEXT_ROUND") : "PLAY_KNOCKOUT";
+
+    return {
+      tournament: { id: String(t._id), name: t.name, slug: t.slug, status: t.status, banner: t.banner || "", winnerClubId: t.winnerClubId ? String(t.winnerClubId) : undefined },
+      competition: comp,
+      clubs,
+      tables,
+      fixtures,
+      knockout,
+      groupsDone,
+      nextAction,
+      champion: t.winnerClubId ? clubById.get(String(t.winnerClubId)) || null : null,
+    };
+  },
+
+  /** Save the competition settings (only before fixtures exist). */
+  async saveCompetitionConfig(tournamentId: string, cfg: Partial<CompetitionConfig>) {
+    await connectDB();
+    const t = await Tournament.findById(tournamentId);
+    if (!t) throw new ServiceError("Tournament not found", 404);
+    const cur: Competition = { ...DEFAULT_COMPETITION, ...(t.competition || {}) };
+    if (cur.stage !== "SETUP") throw new ServiceError("Settings are locked once fixtures are generated. Reset the competition first.", 409);
+    const clubs = (t.clubParticipants || []).filter((c: any) => c.status === "CONFIRMED").length;
+    const next: Competition = {
+      ...cur,
+      enabled: true,
+      groupCount: Math.max(1, Math.round(Number(cfg.groupCount ?? cur.groupCount))),
+      advancePerGroup: Math.max(1, Math.round(Number(cfg.advancePerGroup ?? cur.advancePerGroup))),
+      groupLegs: Number(cfg.groupLegs ?? cur.groupLegs) === 2 ? 2 : 1,
+      knockoutLegs: Number(cfg.knockoutLegs ?? cur.knockoutLegs) === 2 ? 2 : 1,
+      finalLegs: Number(cfg.finalLegs ?? cur.finalLegs) === 2 ? 2 : 1,
+      playersPerTie: Math.max(1, Math.min(30, Math.round(Number(cfg.playersPerTie ?? cur.playersPerTie)))),
+      daysBetweenRounds: Math.max(1, Math.min(30, Math.round(Number(cfg.daysBetweenRounds ?? cur.daysBetweenRounds)))),
+      firstMatchday: cfg.firstMatchday !== undefined ? cfg.firstMatchday || undefined : cur.firstMatchday,
+    };
+    const errs = validateConfig(next, clubs);
+    if (errs.length) throw new ServiceError(errs[0], 400);
+    // Changing the number of groups invalidates an existing draw.
+    if (cur.groups?.length && cur.groupCount !== next.groupCount) next.groups = [];
+    t.competition = next;
+    t.markModified("competition");
+    await t.save();
+    return db.getCompetition(tournamentId);
+  },
+
+  /** Random draw of the approved clubs into groups, or save a draw the admin arranged by hand. */
+  async drawCompetitionGroups(tournamentId: string, manual?: Group[]) {
+    await connectDB();
+    const t = await Tournament.findById(tournamentId);
+    if (!t) throw new ServiceError("Tournament not found", 404);
+    const comp: Competition = { ...DEFAULT_COMPETITION, ...(t.competition || {}) };
+    if (!comp.enabled) throw new ServiceError("Save the competition settings first", 409);
+    if (comp.stage !== "SETUP") throw new ServiceError("The draw is locked once fixtures are generated", 409);
+    const ids = (t.clubParticipants || []).filter((c: any) => c.status === "CONFIRMED").map((c: any) => String(c.clubId));
+    const errs = validateConfig(comp, ids.length);
+    if (errs.length) throw new ServiceError(errs[0], 400);
+    let groups: Group[];
+    if (manual) {
+      const placed = manual.flatMap((g) => g.clubIds);
+      if (manual.length !== comp.groupCount) throw new ServiceError(`There must be ${comp.groupCount} groups`, 400);
+      if (placed.length !== ids.length || new Set(placed).size !== placed.length || placed.some((id) => !ids.includes(id))) {
+        throw new ServiceError("Every approved club must be in exactly one group", 400);
+      }
+      if (manual.some((g) => g.clubIds.length < 2)) throw new ServiceError("Each group needs at least 2 clubs", 400);
+      groups = manual.map((g, i) => ({ name: groupLetter(i), clubIds: g.clubIds }));
+    } else {
+      groups = drawGroups(ids, comp.groupCount);
+    }
+    t.competition = { ...comp, groups, drawnAt: new Date().toISOString() };
+    t.markModified("competition");
+    await t.save();
+    return db.getCompetition(tournamentId);
+  },
+
+  /** Create every group-stage fixture (round-robin, with dates) and start the tournament. */
+  async generateGroupFixtures(tournamentId: string) {
+    await connectDB();
+    const t = await Tournament.findById(tournamentId);
+    if (!t) throw new ServiceError("Tournament not found", 404);
+    const comp: Competition = { ...DEFAULT_COMPETITION, ...(t.competition || {}) };
+    if (comp.stage !== "SETUP") throw new ServiceError("Fixtures were already generated", 409);
+    if (!comp.groups?.length) throw new ServiceError("Draw the groups first", 409);
+    const docs: any[] = [];
+    let matchNo = (await Fixture.countDocuments({ tournamentId, stage: { $in: ["GROUP", "KNOCKOUT"] } })) + 1;
+    // Interleave groups round by round so matchdays mix all groups.
+    const schedules = comp.groups.map((g) => ({ g, rounds: roundRobin(g.clubIds, comp.groupLegs) }));
+    const maxRounds = Math.max(...schedules.map((x) => x.rounds.length));
+    for (let r = 0; r < maxRounds; r++) {
+      const when = roundDate(comp.firstMatchday, r, comp.daysBetweenRounds);
+      for (const { g, rounds } of schedules) {
+        for (const [home, away] of rounds[r] || []) {
+          const legNo = comp.groupLegs === 2 && r >= rounds.length / 2 ? 2 : 1;
+          docs.push({
+            tournamentId,
+            stage: "GROUP",
+            group: g.name,
+            roundNo: r,
+            leg: legNo,
+            matchNo: matchNo++,
+            round: `Group ${g.name} · Round ${r + 1}`,
+            scheduledDate: when,
+            homeClubId: home,
+            awayClubId: away,
+          });
+        }
+      }
+    }
+    await Fixture.insertMany(docs);
+    t.competition = { ...comp, stage: "GROUPS" };
+    t.markModified("competition");
+    if (t.status !== "COMPLETED") t.status = "ONGOING";
+    await t.save();
+    await db.addActivityEvent({
+      type: "TOURNAMENT_STATUS",
+      category: "Tournaments",
+      title: `${t.name}: group stage fixtures are out`,
+      description: `${docs.length} matches across ${comp.groups.length} groups`,
+      targetUrl: `/tournaments/${t.slug}`,
+    });
+    return db.getCompetition(tournamentId);
+  },
+
+  /** Remove every competition fixture and go back to setup (only when no result has been approved). */
+  async resetCompetition(tournamentId: string) {
+    await connectDB();
+    const t = await Tournament.findById(tournamentId);
+    if (!t) throw new ServiceError("Tournament not found", 404);
+    const approved = await Fixture.countDocuments({ tournamentId, stage: { $in: ["GROUP", "KNOCKOUT"] }, "result.status": "APPROVED" });
+    if (approved) throw new ServiceError(`${approved} result(s) are already approved. Roll them back before resetting.`, 409);
+    await Fixture.deleteMany({ tournamentId, stage: { $in: ["GROUP", "KNOCKOUT"] } });
+    const comp: Competition = { ...DEFAULT_COMPETITION, ...(t.competition || {}) };
+    t.competition = { ...comp, stage: "SETUP" };
+    t.markModified("competition");
+    await t.save();
+    return db.getCompetition(tournamentId);
+  },
+
+  /** The data for entering a club-vs-club result: the fixture plus both squads. */
+  async getTieSheet(fixtureId: string) {
+    if (!isId(fixtureId)) return null;
+    await connectDB();
+    const f = await Fixture.findById(fixtureId).lean<any>();
+    if (!f || !f.homeClubId || !f.awayClubId) return null;
+    const [fixture] = await shapeFixtures([f]);
+    const t = f.tournamentId ? await Tournament.findById(f.tournamentId, { competition: 1, name: 1 }).lean<any>() : null;
+    const squad = async (clubId: any) =>
+      (await Player.find({ clubId }, { fullName: 1, username: 1, avatar: 1, konamiId: 1, seat: 1, preferredPosition: 1 }).sort({ seat: 1, fullName: 1 }).lean<any>()).map((p: any) => ({
+        id: String(p._id),
+        fullName: p.fullName,
+        username: p.username,
+        avatar: p.avatar || PLACEHOLDER.avatar,
+        konamiId: p.konamiId || "",
+        seat: p.seat,
+      }));
+    // Players already used in this fixture's saved games stay selectable even if they left the club since.
+    const [homeSquad, awaySquad] = await Promise.all([squad(f.homeClubId), squad(f.awayClubId)]);
+    return { fixture, playersPerTie: (t?.competition?.playersPerTie as number) || DEFAULT_COMPETITION.playersPerTie, homeSquad, awaySquad };
+  },
+
+  /**
+   * Approve a club-vs-club result from its individual games. Internal points, goals and the winner are
+   * calculated here; every game also counts for both players (rating, record, goals) and the clubs' stats.
+   */
+  async approveTieResult(fixtureId: string, data: { games: Game[]; motmPlayerId?: string; decider?: string; notes?: string }, approverId: string) {
+    if (!isId(fixtureId)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findById(fixtureId);
+    if (!f) throw new ServiceError("Fixture not found", 404);
+    if (!f.homeClubId || !f.awayClubId) throw new ServiceError("This is not a club match", 400);
+    if (f.result?.status === "APPROVED") throw new ServiceError("Result already approved. Roll it back first to change it.", 409);
+    const t = f.tournamentId ? await Tournament.findById(f.tournamentId, { competition: 1 }).lean<any>() : null;
+    const max = (t?.competition?.playersPerTie as number) || 30;
+
+    const games = (data.games || [])
+      .filter((g) => g && (g.homePlayerId || g.awayPlayerId))
+      .map((g) => ({ homePlayerId: String(g.homePlayerId || ""), awayPlayerId: String(g.awayPlayerId || ""), homeGoals: Math.max(0, Math.round(Number(g.homeGoals) || 0)), awayGoals: Math.max(0, Math.round(Number(g.awayGoals) || 0)) }));
+    if (!games.length) throw new ServiceError("Add at least one game", 400);
+    if (games.length > max) throw new ServiceError(`At most ${max} games in this match`, 400);
+    if (games.some((g) => !isId(g.homePlayerId) || !isId(g.awayPlayerId))) throw new ServiceError("Pick both players for every game", 400);
+    const homeIds = games.map((g) => g.homePlayerId);
+    const awayIds = games.map((g) => g.awayPlayerId);
+    if (new Set(homeIds).size !== homeIds.length || new Set(awayIds).size !== awayIds.length) throw new ServiceError("A player can only play one game per match", 400);
+    const inSquad = await Player.find({ _id: { $in: [...homeIds, ...awayIds] } }, { clubId: 1, fullName: 1 }).lean<any>();
+    const sq = new Map<string, any>(inSquad.map((p: any) => [String(p._id), p]));
+    for (const id of homeIds) if (String(sq.get(id)?.clubId || "") !== String(f.homeClubId)) throw new ServiceError(`${sq.get(id)?.fullName || "A player"} is not in the home club's squad`, 400);
+    for (const id of awayIds) if (String(sq.get(id)?.clubId || "") !== String(f.awayClubId)) throw new ServiceError(`${sq.get(id)?.fullName || "A player"} is not in the away club's squad`, 400);
+
+    const score = scoreGames(games);
+    const motmId = data.motmPlayerId && isId(data.motmPlayerId) && [...homeIds, ...awayIds].includes(data.motmPlayerId) ? data.motmPlayerId : undefined;
+    const decider = data.decider && [String(f.homeClubId), String(f.awayClubId)].includes(data.decider) ? data.decider : undefined;
+
+    // Apply every game to both players (rating, record, goals); remember the rating change for rollbacks.
+    const stored: any[] = [];
+    for (const g of games) {
+      const [hp, ap] = await Promise.all([Player.findById(g.homePlayerId), Player.findById(g.awayPlayerId)]);
+      if (!hp || !ap) continue;
+      const delta = applyPlayerGame(hp, ap, g.homeGoals, g.awayGoals, motmId);
+      await Promise.all([hp.save(), ap.save()]);
+      stored.push({ ...g, ratingDelta: delta });
+    }
+
+    f.games = stored as any;
+    f.markModified("games");
+    f.result = {
+      homeScore: score.homePoints,
+      awayScore: score.awayPoints,
+      homeGoals: score.homeGoals,
+      awayGoals: score.awayGoals,
+      decider,
+      motmPlayerId: motmId,
+      notes: data.notes || "",
+      status: "APPROVED",
+      submittedBy: approverId,
+      approvedBy: approverId,
+    } as any;
+    f.status = "FINISHED";
+    f.liveScore = { home: score.homePoints, away: score.awayPoints } as any;
+    await f.save();
+
+    // Club records: a tie is won on internal points.
+    const homeWon = score.homePoints > score.awayPoints;
+    const awayWon = score.awayPoints > score.homePoints;
+    const [hc, ac] = await Promise.all([Club.findById(f.homeClubId), Club.findById(f.awayClubId)]);
+    for (const [c, won, lost, gf, ga] of [
+      [hc, homeWon, awayWon, score.homeGoals, score.awayGoals],
+      [ac, awayWon, homeWon, score.awayGoals, score.homeGoals],
+    ] as const) {
+      if (!c) continue;
+      const s: any = c.stats;
+      s.matches += 1;
+      s.goalsScored += gf;
+      s.goalsConceded += ga;
+      if (won) {
+        s.wins += 1;
+        c.points += 3;
+      } else if (!lost) {
+        s.draws += 1;
+        c.points += 1;
+      } else s.losses += 1;
+      c.formHistory = updateFormHistory(c.formHistory || "", won ? "W" : lost ? "L" : "D");
+      await c.save();
+    }
+
+    const [shaped] = await shapeFixtures([f.toObject()]);
+    const home = shaped.homeClub?.name || "Home";
+    const away = shaped.awayClub?.name || "Away";
+    await db.addActivityEvent({
+      type: "MATCH_RESULT",
+      category: "Matches",
+      title: homeWon || awayWon ? `${homeWon ? home : away} beat ${homeWon ? away : home} ${Math.max(score.homePoints, score.awayPoints)} - ${Math.min(score.homePoints, score.awayPoints)}` : `${home} and ${away} drew ${score.homePoints} - ${score.awayPoints}`,
+      description: [shaped.tournamentName, shaped.round].filter(Boolean).join(" · "),
+      avatar: (homeWon ? shaped.homeClub?.logo : shaped.awayClub?.logo) || shaped.homeClub?.logo,
+      targetUrl: `/matches/${shaped.id}`,
+    });
+    return shaped;
+  },
+
+  /** Undo an approved club-vs-club result (stats, ratings and records) so it can be entered again. */
+  async rollbackTieResult(fixtureId: string) {
+    if (!isId(fixtureId)) throw new ServiceError("Invalid fixture id", 400);
+    await connectDB();
+    const f = await Fixture.findById(fixtureId);
+    if (!f || f.result?.status !== "APPROVED" || !f.games?.length) throw new ServiceError("No approved club result to roll back", 409);
+    // A knockout result can't change once the next round has been drawn from it; group results once the knockout started.
+    if (f.stage === "GROUP" && (await Fixture.exists({ tournamentId: f.tournamentId, stage: "KNOCKOUT" }))) {
+      throw new ServiceError("The knockout has already been drawn from the group tables", 409);
+    }
+    if (f.stage === "KNOCKOUT" && (await Fixture.exists({ tournamentId: f.tournamentId, stage: "KNOCKOUT", roundNo: { $gt: f.roundNo } }))) {
+      throw new ServiceError("The next knockout round has already been drawn", 409);
+    }
+    const t = await Tournament.findById(f.tournamentId, { competition: 1 }).lean<any>();
+    if (t?.competition?.stage === "COMPLETED") throw new ServiceError("The tournament is already finished", 409);
+    const motmId = f.result.motmPlayerId ? String(f.result.motmPlayerId) : undefined;
+    for (const g of f.games as any[]) {
+      const [hp, ap] = await Promise.all([Player.findById(g.homePlayerId), Player.findById(g.awayPlayerId)]);
+      if (hp && ap) {
+        undoPlayerGame(hp, ap, g.homeGoals, g.awayGoals, g.ratingDelta, motmId);
+        await Promise.all([hp.save(), ap.save()]);
+      }
+    }
+    const hs = f.result.homeScore ?? 0;
+    const as = f.result.awayScore ?? 0;
+    const [hc, ac] = await Promise.all([Club.findById(f.homeClubId), Club.findById(f.awayClubId)]);
+    for (const [c, won, lost, gf, ga] of [
+      [hc, hs > as, as > hs, f.result.homeGoals ?? 0, f.result.awayGoals ?? 0],
+      [ac, as > hs, hs > as, f.result.awayGoals ?? 0, f.result.homeGoals ?? 0],
+    ] as const) {
+      if (!c) continue;
+      const s: any = c.stats;
+      s.matches = Math.max(0, s.matches - 1);
+      s.goalsScored = Math.max(0, s.goalsScored - gf);
+      s.goalsConceded = Math.max(0, s.goalsConceded - ga);
+      if (won) {
+        s.wins = Math.max(0, s.wins - 1);
+        c.points = Math.max(0, c.points - 3);
+      } else if (!lost) {
+        s.draws = Math.max(0, s.draws - 1);
+        c.points = Math.max(0, c.points - 1);
+      } else s.losses = Math.max(0, s.losses - 1);
+      c.formHistory = (c.formHistory || "").split(",").filter(Boolean).slice(0, -1).join(",");
+      await c.save();
+    }
+    f.games = undefined as any;
+    f.result = undefined as any;
+    f.status = "SCHEDULED";
+    f.liveScore = { home: 0, away: 0 } as any;
+    await f.save();
+    return db.getFixtureById(fixtureId);
+  },
+
+  /** Start the knockout from the group tables, draw the next round from the winners, or crown the champion. */
+  async advanceCompetition(tournamentId: string) {
+    const data = await db.getCompetition(tournamentId);
+    if (!data) throw new ServiceError("Tournament not found", 404);
+    const { competition: comp, tables, knockout, nextAction } = data;
+    const t = await Tournament.findById(tournamentId);
+    if (!t) throw new ServiceError("Tournament not found", 404);
+
+    let pairs: [string, string][] = [];
+    let roundNo = 0;
+    if (nextAction === "START_KNOCKOUT") {
+      pairs = firstKnockoutPairs(
+        tables.map((x: any) => ({ name: x.name, rows: x.rows })),
+        comp.advancePerGroup
+      );
+    } else if (nextAction === "NEXT_ROUND") {
+      const last = knockout[knockout.length - 1];
+      const winners = last.ties.map((x: any) => x.winnerId as string);
+      for (let i = 0; i < winners.length; i += 2) pairs.push([winners[i], winners[i + 1]]);
+      roundNo = last.roundNo + 1;
+    } else if (nextAction === "FINISH") {
+      const final = knockout[knockout.length - 1].ties[0];
+      t.winnerClubId = final.winnerId as any;
+      t.status = "COMPLETED";
+      t.competition = { ...comp, stage: "COMPLETED" };
+      t.markModified("competition");
+      await t.save();
+      const champ = await Club.findById(final.winnerId);
+      if (champ) {
+        champ.trophiesCount = (champ.trophiesCount || 0) + 1;
+        await champ.save();
+        await db.addActivityEvent({
+          type: "TOURNAMENT_STATUS",
+          category: "Tournaments",
+          title: `${champ.name} win ${t.name}!`,
+          description: "Champions",
+          avatar: champ.logo,
+          targetUrl: `/tournaments/${t.slug}`,
+        });
+      }
+      return db.getCompetition(tournamentId);
+    } else {
+      const why: Record<string, string> = {
+        PLAY_GROUPS: "Every group match needs an approved result first.",
+        PLAY_KNOCKOUT: "Every tie in this round needs a result (and a winner) first.",
+        DONE: "The tournament is already finished.",
+      };
+      throw new ServiceError(why[nextAction] || "Nothing to generate yet", 409);
+    }
+
+    const name = knockoutRoundName(pairs.length * 2);
+    const legs = pairs.length === 1 ? comp.finalLegs : comp.knockoutLegs;
+    const lastDate = await Fixture.findOne({ tournamentId }).sort({ scheduledDate: -1 }).lean<any>();
+    const base = lastDate ? new Date(lastDate.scheduledDate) : new Date();
+    let matchNo = (await Fixture.countDocuments({ tournamentId, stage: { $in: ["GROUP", "KNOCKOUT"] } })) + 1;
+    const docs: any[] = [];
+    pairs.forEach(([a, b], i) => {
+      for (let leg = 1; leg <= legs; leg++) {
+        const when = new Date(base);
+        when.setDate(when.getDate() + comp.daysBetweenRounds * leg);
+        docs.push({
+          tournamentId,
+          stage: "KNOCKOUT",
+          roundNo,
+          leg,
+          matchNo: matchNo++,
+          tieKey: `${roundNo}-${i}`,
+          round: legs > 1 ? `${name} · Leg ${leg}` : name,
+          scheduledDate: when,
+          homeClubId: leg === 1 ? a : b,
+          awayClubId: leg === 1 ? b : a,
+        });
+      }
+    });
+    await Fixture.insertMany(docs);
+    t.competition = { ...comp, stage: "KNOCKOUT" };
+    t.markModified("competition");
+    await t.save();
+    await db.addActivityEvent({
+      type: "TOURNAMENT_STATUS",
+      category: "Tournaments",
+      title: `${t.name}: ${name} draw is out`,
+      description: `${pairs.length} tie${pairs.length === 1 ? "" : "s"}`,
+      targetUrl: `/tournaments/${t.slug}`,
+    });
+    return db.getCompetition(tournamentId);
   },
 
   // ----- Tournaments -----

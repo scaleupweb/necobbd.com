@@ -18,6 +18,7 @@ import {
   Scale,
 } from "lucide-react";
 import { formatTime, formatDate } from "@/lib/utils";
+import { GamesList } from "@/components/competition/views";
 
 export default function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -250,7 +251,10 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
 
-          {me && match.status !== "FINISHED" && match.status !== "CANCELLED" && (
+          {match.stage && match.status !== "FINISHED" && (
+            <span className="text-[11px] text-slate-500">Results of club matches are entered game by game by the organisers.</span>
+          )}
+          {me && !match.stage && match.status !== "FINISHED" && match.status !== "CANCELLED" && (
             <button
               onClick={() => setScoreModalOpen(true)}
               className="px-4 py-2 rounded-xl bg-black text-white font-bold text-xs shadow-sm hover:bg-zinc-800 transition-all"
@@ -260,6 +264,20 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
       </div>
+
+      {/* Club match: individual games */}
+      {match.games?.length > 0 && (
+        <div className="rounded-3xl bg-white border border-slate-200 p-5 sm:p-6 space-y-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-black text-black uppercase tracking-wider">Game by game</div>
+            <div className="text-[11px] font-bold text-slate-500">
+              Game points {match.result?.homeScore} - {match.result?.awayScore} · Goals {match.result?.homeGoals ?? 0} - {match.result?.awayGoals ?? 0}
+            </div>
+          </div>
+          <GamesList games={match.games} motmId={match.result?.motmPlayerId} />
+          <p className="text-[10px] text-slate-500">Each game: win 3 points, draw 1. The club with more game points wins the match.</p>
+        </div>
+      )}
 
       {/* Embedded Live Video Stream */}
       {match.isOnStream && (

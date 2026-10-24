@@ -8,6 +8,7 @@ import { formatDate, formatTime } from "@/lib/utils";
 import { JoinButton } from "@/components/ui/JoinButton";
 import { DeadlineCountdown } from "@/components/ui/DeadlineCountdown";
 import { FitImage } from "@/components/ui/FitImage";
+import { PublicCompetition } from "@/components/competition/PublicCompetition";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,10 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   }
   const roundList = [...rounds.entries()].sort((a, b) => +new Date(a[1][0].scheduledDate) - +new Date(b[1][0].scheduledDate));
   const winner = t.winnerPlayerId ? participants.find((p) => p.id === t.winnerPlayerId) : null;
+  // Group + knockout competition (shown once the groups are drawn). Game-by-game details stay on the match pages.
+  const compData = (t as any).competition?.enabled && (t as any).competition?.groups?.length ? await db.getCompetition(t.id) : null;
+  const comp = compData ? { ...compData, fixtures: compData.fixtures.map(({ games, ...f }: any) => f) } : null;
+  const championClub = comp?.champion || null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -81,6 +86,11 @@ export default async function TournamentDetailPage({ params }: { params: Promise
               <Info icon={Ticket} label="Entry fee" value={t.entryFee || "Free"} />
               <Info icon={Gamepad2} label="Platform" value={t.platform} />
             </div>
+            {championClub && (
+              <Link href={`/clubs/${championClub.slug}`} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-bold">
+                <Trophy className="w-4 h-4" /> Champions: {championClub.name}
+              </Link>
+            )}
             {winner && (
               <Link href={`/players/${winner.username}`} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-bold">
                 <Trophy className="w-4 h-4" /> Champion: {winner.fullName}
@@ -127,7 +137,10 @@ export default async function TournamentDetailPage({ params }: { params: Promise
         </div>
       </div>
 
-      {/* Bracket / rounds */}
+      {comp && <PublicCompetition data={comp} />}
+
+      {/* Bracket / rounds (tournaments run without the competition setup) */}
+      {!comp && (
       <section className="space-y-4">
         <h2 className="text-sm font-black text-black uppercase tracking-wider flex items-center gap-2">
           <GitFork className="w-4 h-4" /> {t.format.includes("ELIMINATION") ? "Bracket" : "Rounds & fixtures"}
@@ -151,6 +164,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
           </div>
         )}
       </section>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Participants */}

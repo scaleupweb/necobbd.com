@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Crown, Download, Swords, UserMinus, UserPlus, ExternalLink, Check, X, Copy } from "lucide-react";
+import { Users, Crown, Trophy, Download, Swords, UserMinus, UserPlus, ExternalLink, Check, X, Copy } from "lucide-react";
 import { ResourceManager, FieldDef } from "@/components/admin/ResourceManager";
 import { api, Badge, Button, Empty, Modal, Notice, statusTone } from "@/components/admin/ui";
 import { toast, confirmDialog } from "@/lib/feedback";
@@ -94,6 +94,9 @@ export default function AdminTournamentsPage() {
             <Button small variant="secondary" onClick={() => setParticipantsOf(r)} title="Participants">
               <Users className="w-3.5 h-3.5" /> Players
             </Button>
+            <Link href={`/admin/tournaments/${r.id}/competition`} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-black text-white hover:bg-zinc-800" title="Groups, fixtures, tables and knockout">
+              <Trophy className="w-3.5 h-3.5 text-amber-400" /> Competition
+            </Link>
             <Link href={`/admin/fixtures?tournament=${r.id}`} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border border-slate-200 bg-white hover:border-black">
               <Swords className="w-3.5 h-3.5" /> Fixtures
             </Link>

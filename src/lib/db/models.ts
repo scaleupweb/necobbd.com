@@ -192,6 +192,8 @@ const TournamentSchema = new Schema<any>(
     },
     winnerPlayerId: { type: ObjectId, ref: "Player" },
     winnerClubId: { type: ObjectId, ref: "Club" },
+    // Club competition (groups → knockout): settings, stage and the group draw. See src/lib/competition.ts.
+    competition: { type: Mixed },
     legacy: { type: Mixed },
   },
   opts
@@ -201,6 +203,16 @@ const FixtureSchema = new Schema<any>(
   {
     tournamentId: { type: ObjectId, ref: "Tournament" },
     round: { type: String, default: "Regular Season" },
+    // Competition fixtures: GROUP or KNOCKOUT stage, group letter, round index, leg (1/2),
+    // match number and the knockout tie they belong to.
+    stage: String,
+    group: String,
+    roundNo: Number,
+    leg: Number,
+    matchNo: Number,
+    tieKey: String,
+    // Club-vs-club match made of individual 1v1 games: { homePlayerId, awayPlayerId, homeGoals, awayGoals, ratingDelta }.
+    games: { type: [Mixed], default: undefined },
     scheduledDate: { type: Date, required: true },
     venue: { type: String, default: "Online" },
     status: { type: String, enum: ["SCHEDULED", "LIVE", "FINISHED", "POSTPONED", "CANCELLED"], default: "SCHEDULED" },
@@ -222,6 +234,11 @@ const FixtureSchema = new Schema<any>(
       awayScore: Number,
       homePenalties: Number,
       awayPenalties: Number,
+      // Club ties: homeScore/awayScore hold internal points; these hold the goal totals.
+      homeGoals: Number,
+      awayGoals: Number,
+      // Knockout tie level on points and goals: the club the official sent through.
+      decider: { type: ObjectId, ref: "Club" },
       motmPlayerId: { type: ObjectId, ref: "Player" },
       motmReason: String,
       status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"] },
