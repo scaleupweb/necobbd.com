@@ -58,7 +58,7 @@ export default function AdminOverviewPage() {
   const attention = [
     { label: "Transfer requests", value: ins.transfers.pendingSigning + ins.transfers.pendingOffers, hint: "Signings & offers waiting", href: "/admin/transfers", icon: ArrowRightLeft, tone: "amber" },
     { label: "Club approvals", value: ins.clubs.pending.length, hint: "New clubs to review", href: "/admin/clubs", icon: Shield, tone: "sky" },
-    { label: "Tournament entries", value: pendingClubEntries.length, hint: "Club registrations to approve", href: "/admin/tournaments", icon: Trophy, tone: "amber" },
+    { label: "Tournament entries", value: pendingClubEntries.length, hint: "Club registrations to approve", href: "#tournament-entries", icon: Trophy, tone: "amber" },
     { label: "Match results", value: pendingResults.length, hint: "Reported scores to confirm", href: "/admin/fixtures", icon: ClipboardCheck, tone: "violet" },
     { label: "Contracts ending", value: ins.contractsEnding.length, hint: "End within 30 days", href: "/transfer-market", icon: Hourglass, tone: "rose" },
     { label: "Player verification", value: p.pendingVerification, hint: "Accounts waiting to be verified", href: "/admin/players", icon: BadgeCheck, tone: "emerald" },
@@ -124,6 +124,9 @@ export default function AdminOverviewPage() {
           })}
         </div>
       </section>
+
+      {/* ================= Tournament registrations ================= */}
+      {pendingClubEntries.length > 0 && <TournamentEntries entries={pendingClubEntries} onDone={load} />}
 
       {/* ================= KPIs ================= */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -239,14 +242,6 @@ export default function AdminOverviewPage() {
             ))
           ) : (
             <Empty>No clubs waiting for approval.</Empty>
-          )}
-        </Panel>
-
-        <Panel title="Tournament registrations waiting for approval" href="/admin/tournaments" link="Open tournaments">
-          {pendingClubEntries.length ? (
-            pendingClubEntries.map((e: any) => <PendingEntryRow key={`${e.tournamentId}-${e.clubId}`} entry={e} onDone={load} />)
-          ) : (
-            <Empty>No tournament registrations waiting.</Empty>
           )}
         </Panel>
 
@@ -502,5 +497,85 @@ function PendingEntryRow({ entry: e, onDone }: { entry: any; onDone: () => void 
         <X className="w-3.5 h-3.5" />
       </button>
     </div>
+  );
+}
+
+/** Club registrations waiting for approval, grouped by tournament, with one-click approve. */
+function TournamentEntries({ entries, onDone }: { entries: any[]; onDone: () => void }) {
+  const [bulk, setBulk] = useState("");
+  const groups = new Map<string, { name: string; slug: string; list: any[] }>();
+  for (const e of entries) {
+    if (!groups.has(e.tournamentId)) groups.set(e.tournamentId, { name: e.tournament, slug: e.tournamentSlug, list: [] });
+    groups.get(e.tournamentId)!.list.push(e);
+  }
+  const approveAll = async (tid: string, g: { name: string; list: any[] }) => {
+    if (!(await confirmDialog({ title: `Approve all ${g.list.length} for ${g.name}?`, text: "Check their Facebook posts first. Each club manager is notified.", confirmText: "Approve all" }))) return;
+    setBulk(tid);
+    let n = 0;
+    try {
+      for (const e of g.list) {
+        await api(`/api/admin/tournaments/${tid}/participants`, { method: "PATCH", json: { clubId: e.clubId, action: "APPROVE" } });
+        n++;
+      }
+      toast.success(`${n} club${n === 1 ? "" : "s"} approved`);
+    } catch (err: any) {
+      toast.error(`${n} approved, then: ${err.message}`);
+    } finally {
+      setBulk("");
+      onDone();
+    }
+  };
+  return (
+    <section id="tournament-entries" className="scroll-mt-6 rounded-3xl overflow-hidden border border-amber-300 bg-white shadow-sm">
+      <div className="relative px-5 py-4 bg-gradient-to-r from-[#0B0C0F] to-zinc-800 text-white flex flex-wrap items-center justify-between gap-3">
+        <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_at_100%_0%,rgba(245,158,11,0.35),transparent_55%)]" />
+        <div className="relative flex items-center gap-3">
+          <span className="relative w-10 h-10 rounded-2xl bg-amber-500 text-black flex items-center justify-center">
+            <Trophy className="w-5 h-5" />
+            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-[#0B0C0F]">{entries.length}</span>
+          </span>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400">Needs your approval</div>
+            <div className="text-base font-black">Tournament registrations</div>
+          </div>
+        </div>
+        <span className="relative text-[11px] text-white/60">Open the club&apos;s Facebook post, check it, then approve.</span>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {[...groups.entries()].map(([tid, g]) => (
+          <div key={tid} className="p-4 sm:p-5 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Link href={`/tournaments/${g.slug}`} target="_blank" className="text-sm font-black text-slate-950 hover:underline truncate">
+                  {g.name}
+                </Link>
+                <Badge tone="amber">{g.list.length} waiting</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/admin/tournaments" className="text-[11px] font-bold text-slate-500 hover:text-black">
+                  All participants →
+                </Link>
+                {g.list.length > 1 && (
+                  <button
+                    onClick={() => approveAll(tid, g)}
+                    disabled={!!bulk}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-black text-white text-[11px] font-black hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {bulk === tid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 text-emerald-400" />} Approve all
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-2">
+              {g.list.map((e) => (
+                <div key={e.clubId} className="rounded-2xl border border-amber-200 bg-amber-50/40 px-3">
+                  <PendingEntryRow entry={e} onDone={onDone} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

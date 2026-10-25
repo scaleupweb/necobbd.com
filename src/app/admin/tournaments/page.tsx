@@ -115,6 +115,9 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
   const [list, setList] = useState<any[] | null>(null);
   const [error, setError] = useState("");
   const [winner, setWinner] = useState<string>(tournament.winnerPlayerId || "");
+  const [view, setView] = useState<"ALL" | "PENDING" | "APPROVED" | "REMOVED">("ALL");
+  const [q, setQ] = useState("");
+  const [bulk, setBulk] = useState(false);
 
   useEffect(() => {
     api<any[]>(`/api/admin/tournaments/${tournament.id}/participants`).then(setList).catch((e) => setError(e.message));
@@ -165,6 +168,35 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
 
   const active = (list || []).filter((p) => p.status !== "REMOVED");
   const pendingCount = active.filter((p) => p.status === "PENDING").length;
+  const kindOf = (p: any) => (p.status === "REMOVED" ? "REMOVED" : p.status === "PENDING" ? "PENDING" : "APPROVED");
+  const counts = { ALL: (list || []).length, PENDING: pendingCount, APPROVED: active.length - pendingCount, REMOVED: (list || []).length - active.length };
+  // Pending first (they need action), then approved, removed last.
+  const rank = { PENDING: 0, APPROVED: 1, REMOVED: 2 } as const;
+  const needle = q.trim().toLowerCase();
+  const shown = (list || [])
+    .filter((p) => view === "ALL" || kindOf(p) === view)
+    .filter((p) => !needle || [p.fullName, p.username, p.managerName, p.email].some((v) => String(v || "").toLowerCase().includes(needle)))
+    .sort((a, b) => rank[kindOf(a)] - rank[kindOf(b)]);
+
+  const approveAll = async () => {
+    const pend = active.filter((p) => p.status === "PENDING");
+    if (!pend.length) return;
+    if (!(await confirmDialog({ title: `Approve all ${pend.length} waiting club${pend.length === 1 ? "" : "s"}?`, text: "Each club manager is notified.", confirmText: "Approve all" }))) return;
+    setBulk(true);
+    let done = 0;
+    try {
+      for (const p of pend) {
+        setList(await api(`/api/admin/tournaments/${tournament.id}/participants`, { method: "PATCH", json: { clubId: p.clubId, action: "APPROVE" } }));
+        done++;
+      }
+      toast.success(`${done} club${done === 1 ? "" : "s"} approved`);
+    } catch (e: any) {
+      toast.error(`${done} approved, then: ${e.message}`);
+    } finally {
+      setBulk(false);
+      onChanged();
+    }
+  };
 
   /** A numbered plain-text list to paste into Facebook / Messenger (no emails). */
   const copyList = async () => {
@@ -210,14 +242,51 @@ function ParticipantsModal({ tournament, onClose, onChanged }: { tournament: any
             </Button>
           </div>
         </div>
+        {list !== null && list.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex gap-1 p-1 rounded-xl bg-slate-100 overflow-x-auto">
+              {(
+                [
+                  ["ALL", "All", "bg-black text-white"],
+                  ["PENDING", "Pending", "bg-amber-500 text-black"],
+                  ["APPROVED", "Approved", "bg-emerald-600 text-white"],
+                  ["REMOVED", "Removed", "bg-slate-500 text-white"],
+                ] as const
+              ).map(([k, label, on]) => (
+                <button
+                  key={k}
+                  onClick={() => setView(k)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black transition-colors ${view === k ? on : "text-slate-600 hover:bg-white"}`}
+                >
+                  {k === "PENDING" && counts.PENDING > 0 && view !== k && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />}
+                  {label}
+                  <span className={`px-1.5 rounded-md text-[10px] ${view === k ? "bg-white/25" : "bg-white text-slate-500"}`}>{counts[k]}</span>
+                </button>
+              ))}
+            </div>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search club, manager…" className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-black" />
+          </div>
+        )}
+        {isClub && pendingCount > 0 && (view === "ALL" || view === "PENDING") && (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <span className="text-xs font-bold text-amber-900">
+              {pendingCount} club{pendingCount === 1 ? " is" : "s are"} waiting. Check the Facebook post, then approve.
+            </span>
+            <Button small variant="success" onClick={approveAll} disabled={bulk}>
+              <Check className="w-3.5 h-3.5" /> {bulk ? "Approving…" : "Approve all"}
+            </Button>
+          </div>
+        )}
         {list === null ? (
           <div className="py-8 text-center text-xs text-slate-500 animate-pulse">Loading…</div>
         ) : list.length === 0 ? (
           <Empty>No one has joined yet.</Empty>
+        ) : shown.length === 0 ? (
+          <Empty>{needle ? "No match for that search." : view === "PENDING" ? "No one is waiting for approval. 🎉" : "Nothing here."}</Empty>
         ) : (
           <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
-            {list.map((p) => (
-              <div key={p.userId || p.clubId} className={`flex items-center gap-3 p-3 text-xs ${p.status === "REMOVED" ? "opacity-50" : ""}`}>
+            {shown.map((p) => (
+              <div key={p.userId || p.clubId} className={`flex items-center gap-3 p-3 text-xs ${p.status === "REMOVED" ? "opacity-50" : p.status === "PENDING" ? "bg-amber-50/60 border-l-4 border-l-amber-400" : ""}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.avatar} alt="" className="w-8 h-8 rounded-lg object-cover" />
                 <div className="flex-1 min-w-0">
