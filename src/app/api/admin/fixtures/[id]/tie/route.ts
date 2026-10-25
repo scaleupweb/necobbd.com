@@ -25,13 +25,22 @@ export const POST = handle(async (req: NextRequest, { params }: Ctx) => {
   return ok(fixture);
 });
 
-/** body: { scheduledDate?, judge?, groupLink? } — reschedule / announcement details. */
+/** body: { scheduledDate?, judge?, groupLink?, lineup?, homeCaptainId?, awayCaptainId?, newCode?, clearClaim? } — match setup. */
 export const PATCH = handle(async (req: NextRequest, { params }: Ctx) => {
   const { id } = await params;
   const session = await requireRole(TOURNAMENT_STAFF);
   const body = (await req.json()) || {};
   const pick = (k: string) => (typeof body[k] === "string" ? body[k] : undefined);
-  const fixture = await db.updateCompetitionFixture(id, { scheduledDate: pick("scheduledDate"), judge: pick("judge"), groupLink: pick("groupLink") });
+  const fixture = await db.updateCompetitionFixture(id, {
+    scheduledDate: pick("scheduledDate"),
+    judge: pick("judge"),
+    groupLink: pick("groupLink"),
+    homeCaptainId: pick("homeCaptainId"),
+    awayCaptainId: pick("awayCaptainId"),
+    lineup: body.lineup === null || (body.lineup && typeof body.lineup === "object") ? body.lineup : undefined,
+    newCode: body.newCode === true,
+    clearClaim: body.clearClaim === true,
+  });
   await audit(req, session, "COMPETITION_FIXTURE_UPDATE", `Fixture ${id}`, Object.keys(body).join(", "));
   return ok(fixture);
 });

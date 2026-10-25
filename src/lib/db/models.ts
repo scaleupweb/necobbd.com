@@ -217,6 +217,13 @@ const FixtureSchema = new Schema<any>(
     // Group match against a BYE (empty slot): automatic win for homeClubId, nothing to play.
     walkover: { type: Boolean, default: undefined },
     judge: { type: String, default: "" },
+    // Match centre: secret code for the two captains, captains, lineup (1v1 pairs in time slots) and the
+    // result the captains submitted with the code (waits for an admin to approve).
+    matchCode: { type: String, index: true },
+    homeCaptainId: { type: ObjectId, ref: "Player" },
+    awayCaptainId: { type: ObjectId, ref: "Player" },
+    lineup: { type: Mixed },
+    claim: { type: Mixed },
     groupLink: { type: String, default: "" },
     scheduledDate: { type: Date, required: true },
     venue: { type: String, default: "Online" },

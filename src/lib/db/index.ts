@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes, timingSafeEqual } from "crypto";
 import { Types } from "mongoose";
 import { connectDB } from "./mongo";
 import {
@@ -373,6 +374,38 @@ const formatKonamiId = (v: unknown) => {
   const k = konamiKey(v);
   return KONAMI_RE.test(k) ? `${k.slice(0, 4)}-${k.slice(4, 7)}-${k.slice(7, 10)}-${k.slice(10)}` : String(v ?? "").trim();
 };
+
+
+// ----- Match centre helpers -----
+
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+/** A 6-character match code without look-alike characters (no 0/O, 1/I). */
+function newMatchCode() {
+  const bytes = randomBytes(6);
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+}
+
+const sameCode = (a: string, b: string) => {
+  const x = Buffer.from(String(a || "").trim().toUpperCase());
+  const y = Buffer.from(String(b || "").trim().toUpperCase());
+  return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
+};
+
+type LineupSlot = { id: string; label: string; time: string };
+type LineupRow = { homePlayerId: string; awayPlayerId: string; host: "HOME" | "AWAY" | ""; slotId: string };
+type Lineup = { slots: LineupSlot[]; rows: LineupRow[]; minutes: number };
+
+/** Public player card for a match page (no phone). */
+const matchPlayer = (p: any) => ({
+  id: String(p._id),
+  fullName: p.fullName,
+  username: p.username,
+  avatar: p.avatar || PLACEHOLDER.avatar,
+  konamiId: p.konamiId || "",
+  deviceModel: p.deviceModel || "",
+  facebook: p.facebookProfile || "",
+  seat: p.seat,
+});
 
 // ----- Club-tie games: one 1v1 game counts for both players like a normal match -----
 
@@ -1154,7 +1187,15 @@ export const db = {
       if (comp.stage === "COMPLETED") rollbackLock = "The tournament is finished";
       else if (r.stage === "GROUP" && hasKnockout) rollbackLock = "The knockout was already drawn from the group tables";
       else if (r.stage === "KNOCKOUT" && (r.roundNo ?? 0) < lastKoRound) rollbackLock = "The next knockout round was already drawn";
-      return { ...f, judge: r.judge || "", groupLink: r.groupLink || "", rollbackLock: r.walkover ? "" : rollbackLock, walkover: !!r.walkover };
+      return {
+        ...f,
+        judge: r.judge || "",
+        groupLink: r.groupLink || "",
+        rollbackLock: r.walkover ? "" : rollbackLock,
+        walkover: !!r.walkover,
+        claimSubmitted: !!r.claim && r.result?.status !== "APPROVED",
+        hasLineup: !!r.lineup?.rows?.length,
+      };
     });
 
     const tieOf = (f: any) =>
@@ -1358,6 +1399,7 @@ export const db = {
             round: `Group ${g.name} · Round ${r + 1}`,
             scheduledDate: when,
             homeClubId: home,
+            matchCode: newMatchCode(),
             awayClubId: away,
           });
         }
@@ -1378,8 +1420,107 @@ export const db = {
     return db.getCompetition(tournamentId);
   },
 
+  // ----- Match centre (public match page, captains' code, lineup) -----
+
+  /** Everything the public match page shows for a competition match. Never includes the code or phones. */
+  async getMatchCenter(fixtureId: string) {
+    if (!isId(fixtureId)) return null;
+    await connectDB();
+    const f = await Fixture.findById(fixtureId).lean<any>();
+    if (!f || !f.stage) return null;
+    const [fixture] = await shapeFixtures([f]);
+    const t = await Tournament.findById(f.tournamentId, { name: 1, slug: 1, logo: 1, season: 1, competition: 1 }).lean<any>();
+    const clubIds = [f.homeClubId, f.awayClubId].filter(Boolean);
+    const players = await Player.find({ clubId: { $in: clubIds } }, { fullName: 1, username: 1, avatar: 1, konamiId: 1, deviceModel: 1, facebookProfile: 1, seat: 1, clubId: 1 })
+      .sort({ seat: 1, fullName: 1 })
+      .lean<any>();
+    const byId = new Map<string, any>(players.map((p: any) => [String(p._id), p]));
+    const clubs = await Club.find({ _id: { $in: clubIds } }, { captainId: 1 }).lean<any>();
+    const captainOf = (clubId: any, override: any) => {
+      const id = override ? String(override) : String(clubs.find((c: any) => String(c._id) === String(clubId))?.captainId || "");
+      const p = byId.get(id);
+      return p ? matchPlayer(p) : null;
+    };
+    const lineup: Lineup | null = f.lineup?.rows?.length ? f.lineup : null;
+    const mini = (id: string) => {
+      const p = byId.get(String(id));
+      return p ? { id: String(p._id), fullName: p.fullName, username: p.username, avatar: p.avatar || PLACEHOLDER.avatar } : null;
+    };
+    const approved = f.result?.status === "APPROVED";
+    const games: any[] = approved ? f.games || [] : [];
+    const total = lineup?.rows.length || (t?.competition?.playersPerTie as number) || 0;
+    return {
+      fixture: { ...fixture, games: approved ? fixture.games : [], walkover: !!f.walkover },
+      tournament: t ? { name: t.name, slug: t.slug, logo: t.logo || "", season: t.season || "" } : null,
+      judge: f.judge || "",
+      hasGroupLink: !!f.groupLink,
+      captains: { home: captainOf(f.homeClubId, f.homeCaptainId), away: captainOf(f.awayClubId, f.awayCaptainId) },
+      squads: {
+        home: players.filter((p: any) => String(p.clubId) === String(f.homeClubId)).map(matchPlayer),
+        away: players.filter((p: any) => String(p.clubId) === String(f.awayClubId)).map(matchPlayer),
+      },
+      lineup: lineup
+        ? {
+            minutes: lineup.minutes || 10,
+            slots: lineup.slots || [],
+            rows: lineup.rows.map((r) => ({ ...r, homePlayer: mini(r.homePlayerId), awayPlayer: mini(r.awayPlayerId) })),
+          }
+        : null,
+      counts: {
+        total,
+        remaining: approved ? 0 : total,
+        homeWins: games.filter((g) => g.homeGoals > g.awayGoals).length,
+        awayWins: games.filter((g) => g.awayGoals > g.homeGoals).length,
+      },
+      claimSubmitted: !!f.claim && !approved,
+    };
+  },
+
+  /** Captains' view: unlocked with the match code. Adds the chat link, phone numbers and the submitted result. */
+  async unlockMatch(fixtureId: string, code: string) {
+    if (!isId(fixtureId)) throw new ServiceError("Match not found", 404);
+    await connectDB();
+    const f = await Fixture.findById(fixtureId, { matchCode: 1, groupLink: 1, homeClubId: 1, awayClubId: 1, claim: 1, stage: 1 }).lean<any>();
+    if (!f || !f.stage || !f.matchCode || !sameCode(f.matchCode, code)) throw new ServiceError("Wrong match code", 403, "BAD_CODE");
+    const players = await Player.find({ clubId: { $in: [f.homeClubId, f.awayClubId].filter(Boolean) } }, { phone: 1 }).lean<any>();
+    const phones: Record<string, string> = {};
+    for (const p of players) if (p.phone) phones[String(p._id)] = p.phone;
+    return { groupLink: f.groupLink || "", phones, claim: f.claim || null };
+  },
+
+  /** Captains submit the game scores with the code; an admin approves them later. */
+  async submitMatchClaim(fixtureId: string, code: string, data: { games: Game[]; proof?: string; notes?: string; by?: string }) {
+    if (!isId(fixtureId)) throw new ServiceError("Match not found", 404);
+    await connectDB();
+    const f = await Fixture.findById(fixtureId);
+    if (!f || !f.stage || !f.matchCode || !sameCode(f.matchCode, code)) throw new ServiceError("Wrong match code", 403, "BAD_CODE");
+    if (f.walkover) throw new ServiceError("This match is a BYE — nothing to play", 409);
+    if (f.result?.status === "APPROVED") throw new ServiceError("The result is already approved", 409);
+    const games = (data.games || [])
+      .filter((g) => g && g.homePlayerId && g.awayPlayerId)
+      .slice(0, 30)
+      .map((g) => ({ homePlayerId: String(g.homePlayerId), awayPlayerId: String(g.awayPlayerId), homeGoals: Math.max(0, Math.min(99, Math.round(Number(g.homeGoals) || 0))), awayGoals: Math.max(0, Math.min(99, Math.round(Number(g.awayGoals) || 0))) }));
+    if (!games.length) throw new ServiceError("Add at least one game", 400);
+    const ids = [...games.map((g) => g.homePlayerId), ...games.map((g) => g.awayPlayerId)];
+    if (ids.some((id) => !isId(id))) throw new ServiceError("Pick both players for every game", 400);
+    const ps = await Player.find({ _id: { $in: ids } }, { clubId: 1 }).lean<any>();
+    const club = new Map(ps.map((p: any) => [String(p._id), String(p.clubId || "")]));
+    if (games.some((g) => club.get(g.homePlayerId) !== String(f.homeClubId) || club.get(g.awayPlayerId) !== String(f.awayClubId))) {
+      throw new ServiceError("Every game needs a home player from the home club and an away player from the away club", 400);
+    }
+    const proof = String(data.proof || "").trim().slice(0, 500);
+    if (proof && !/^https?:\/\//i.test(proof)) throw new ServiceError("The proof link must start with http:// or https://", 400);
+    f.claim = { games, proof, notes: String(data.notes || "").slice(0, 500), by: String(data.by || "").slice(0, 60), at: new Date().toISOString() };
+    f.markModified("claim");
+    await f.save();
+    return { ok: true };
+  },
+
   /** Reschedule a competition match and set its judge / captains' chat link. */
-  async updateCompetitionFixture(fixtureId: string, data: { scheduledDate?: string; judge?: string; groupLink?: string }) {
+  async updateCompetitionFixture(
+    fixtureId: string,
+    data: { scheduledDate?: string; judge?: string; groupLink?: string; lineup?: Lineup | null; homeCaptainId?: string; awayCaptainId?: string; newCode?: boolean; clearClaim?: boolean }
+  ) {
     if (!isId(fixtureId)) throw new ServiceError("Invalid fixture id", 400);
     await connectDB();
     const f = await Fixture.findById(fixtureId);
@@ -1393,6 +1534,53 @@ export const db = {
       if (f.status === "POSTPONED") f.status = "SCHEDULED";
     }
     if (data.judge !== undefined) f.judge = String(data.judge).trim().slice(0, 80);
+    if (data.newCode || !f.matchCode) f.matchCode = newMatchCode();
+    if (data.clearClaim) f.claim = undefined;
+    // Captains must belong to their club ("" = the club's own captain).
+    for (const [key, clubId] of [
+      ["homeCaptainId", f.homeClubId],
+      ["awayCaptainId", f.awayClubId],
+    ] as const) {
+      const v = (data as any)[key];
+      if (v === undefined) continue;
+      if (!v) {
+        (f as any)[key] = undefined;
+        continue;
+      }
+      const p = isId(v) ? await Player.findById(v, { clubId: 1 }).lean<any>() : null;
+      if (!p || String(p.clubId) !== String(clubId)) throw new ServiceError("The captain must be in that club's squad", 400);
+      (f as any)[key] = v;
+    }
+    if (data.lineup !== undefined) {
+      if (!data.lineup || !data.lineup.rows?.length) f.lineup = undefined;
+      else {
+        const slots = (data.lineup.slots || []).slice(0, 12).map((x, i) => {
+          const d = new Date(x.time);
+          if (isNaN(d.getTime())) throw new ServiceError(`Slot ${i + 1} needs a valid time`, 400);
+          return { id: String(x.id || `s${i + 1}`).slice(0, 20), label: String(x.label || "").trim().slice(0, 40), time: d.toISOString() };
+        });
+        const slotIds = new Set(slots.map((x) => x.id));
+        const rows = data.lineup.rows.slice(0, 30).map((r) => ({
+          homePlayerId: String(r.homePlayerId || ""),
+          awayPlayerId: String(r.awayPlayerId || ""),
+          host: (r.host === "HOME" || r.host === "AWAY" ? r.host : "") as LineupRow["host"],
+          slotId: slotIds.has(String(r.slotId)) ? String(r.slotId) : slots[0]?.id || "",
+        }));
+        const ids = [...rows.map((r) => r.homePlayerId), ...rows.map((r) => r.awayPlayerId)].filter(Boolean);
+        if (ids.some((id) => !isId(id))) throw new ServiceError("Invalid player in the lineup", 400);
+        const ps = await Player.find({ _id: { $in: ids } }, { clubId: 1 }).lean<any>();
+        const club = new Map(ps.map((p: any) => [String(p._id), String(p.clubId || "")]));
+        for (const r of rows) {
+          if (r.homePlayerId && club.get(r.homePlayerId) !== String(f.homeClubId)) throw new ServiceError("A home player is not in the home club", 400);
+          if (r.awayPlayerId && club.get(r.awayPlayerId) !== String(f.awayClubId)) throw new ServiceError("An away player is not in the away club", 400);
+        }
+        const h = rows.map((r) => r.homePlayerId).filter(Boolean);
+        const a = rows.map((r) => r.awayPlayerId).filter(Boolean);
+        if (new Set(h).size !== h.length || new Set(a).size !== a.length) throw new ServiceError("A player can only be in one pair", 400);
+        f.lineup = { slots, rows, minutes: Math.max(1, Math.min(120, Math.round(Number(data.lineup.minutes) || 10))) };
+      }
+      f.markModified("lineup");
+    }
     if (data.groupLink !== undefined) {
       const link = String(data.groupLink).trim().slice(0, 300);
       if (link && !/^https?:\/\//i.test(link)) throw new ServiceError("The group link must start with http:// or https://", 400);
@@ -1436,7 +1624,26 @@ export const db = {
       }));
     // Players already used in this fixture's saved games stay selectable even if they left the club since.
     const [homeSquad, awaySquad] = await Promise.all([squad(f.homeClubId), squad(f.awayClubId)]);
-    return { fixture, playersPerTie: (t?.competition?.playersPerTie as number) || DEFAULT_COMPETITION.playersPerTie, homeSquad, awaySquad };
+    let matchCode = f.matchCode;
+    if (f.stage && !matchCode) {
+      matchCode = newMatchCode();
+      await Fixture.updateOne({ _id: f._id }, { $set: { matchCode } });
+    }
+    const clubs = await Club.find({ _id: { $in: [f.homeClubId, f.awayClubId] } }, { captainId: 1 }).lean<any>();
+    const clubCaptain = (id: any) => String(clubs.find((c: any) => String(c._id) === String(id))?.captainId || "");
+    return {
+      fixture,
+      tournament: t ? { name: t.name } : null,
+      playersPerTie: (t?.competition?.playersPerTie as number) || DEFAULT_COMPETITION.playersPerTie,
+      homeSquad,
+      awaySquad,
+      matchCode: matchCode || "",
+      judge: f.judge || "",
+      groupLink: f.groupLink || "",
+      lineup: f.lineup || null,
+      claim: f.result?.status === "APPROVED" ? null : f.claim || null,
+      captains: { home: f.homeCaptainId ? String(f.homeCaptainId) : "", away: f.awayCaptainId ? String(f.awayCaptainId) : "", homeDefault: clubCaptain(f.homeClubId), awayDefault: clubCaptain(f.awayClubId) },
+    };
   },
 
   /**
@@ -1483,6 +1690,7 @@ export const db = {
 
     f.games = stored as any;
     f.markModified("games");
+    f.claim = undefined;
     f.result = {
       homeScore: score.homePoints,
       awayScore: score.awayPoints,
@@ -1661,6 +1869,7 @@ export const db = {
           round: legs > 1 ? `${name} · Leg ${leg}` : name,
           scheduledDate: when,
           homeClubId: leg === 1 ? a : b,
+          matchCode: newMatchCode(),
           awayClubId: leg === 1 ? b : a,
         });
       }

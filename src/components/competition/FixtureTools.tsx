@@ -3,8 +3,9 @@
 // Admin fixtures toolkit for a competition: status/round filters, reschedule, announcement text and posters.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, Megaphone, ImageDown, Lock, Copy, Download, Loader2, Trophy, Star, Check, Pencil, PlayCircle } from "lucide-react";
-import { api, Button, Modal, Notice, inputCls, toLocalInput, fromLocalInput } from "@/components/admin/ui";
+import { Settings2, Megaphone, ImageDown, Lock, Copy, Download, Loader2, Trophy, Star, Check, Pencil, PlayCircle } from "lucide-react";
+import { api, Button, Modal, Notice, inputCls } from "@/components/admin/ui";
+import { MatchSetupModal } from "./MatchSetup";
 import { toast } from "@/lib/feedback";
 import { FixtureRounds, ClubLogo } from "./views";
 import { THEMES, PosterTheme, renderMatchPoster, renderMotmPoster, resultSummary } from "./posters";
@@ -97,6 +98,12 @@ export function FixturesPanel({ data, onOpenTie, reload }: { data: any; onOpenTi
                   </div>
                 )}
                 {!done && <div className="text-[10px] font-bold text-slate-500">{when(f.scheduledDate)}</div>}
+                {!done && (f.claimSubmitted || f.hasLineup) && (
+                  <div className="flex flex-wrap gap-1">
+                    {f.claimSubmitted && <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[9px] font-black animate-pulse">● Result submitted · review</span>}
+                    {f.hasLineup && <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[9px] font-black">✓ Lineup set</span>}
+                  </div>
+                )}
                 <div className="flex gap-1">
                   <button
                     onClick={() => onOpenTie(f)}
@@ -110,15 +117,13 @@ export function FixturesPanel({ data, onOpenTie, reload }: { data: any; onOpenTi
                       </>
                     ) : (
                       <>
-                        <PlayCircle className="w-3 h-3" /> Enter result
+                        <PlayCircle className="w-3 h-3" /> {f.claimSubmitted ? "Review result" : "Enter result"}
                       </>
                     )}
                   </button>
-                  {!done && (
-                    <button onClick={() => setScheduleOf(f)} title="Reschedule, judge, group link" className="px-2 rounded-lg border border-slate-200 text-slate-600 hover:border-black">
-                      <CalendarClock className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button onClick={() => setScheduleOf(f)} title="Match setup: time, captains, lineup, code & text" className="px-2 rounded-lg border border-slate-200 text-slate-600 hover:border-black">
+                    <Settings2 className="w-3.5 h-3.5" />
+                  </button>
                   {done && (
                     <button onClick={() => setPosterOf(f)} title="Result posters" className="px-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
                       <ImageDown className="w-3.5 h-3.5" />
@@ -138,78 +143,10 @@ export function FixturesPanel({ data, onOpenTie, reload }: { data: any; onOpenTi
         <div className="rounded-3xl border border-dashed border-slate-300 p-10 text-center text-xs text-slate-500">No matches in this filter.</div>
       )}
 
-      {scheduleOf && <ScheduleModal f={scheduleOf} onClose={() => setScheduleOf(null)} onSaved={reload} />}
+      {scheduleOf && <MatchSetupModal fixtureId={scheduleOf.id} onClose={() => setScheduleOf(null)} onSaved={reload} />}
       {posterOf && <PosterModal f={posterOf} tournament={data.tournament} onClose={() => setPosterOf(null)} />}
       {announce && <AnnouncementModal fixtures={fixtures} tournament={data.tournament} onClose={() => setAnnounce(false)} />}
     </div>
-  );
-}
-
-/* ---------- Reschedule ---------- */
-
-function ScheduleModal({ f, onClose, onSaved }: { f: any; onClose: () => void; onSaved: () => void }) {
-  const [date, setDate] = useState(toLocalInput(f.scheduledDate));
-  const [judge, setJudge] = useState(f.judge || "");
-  const [link, setLink] = useState(f.groupLink || "");
-  const [busy, setBusy] = useState(false);
-  const save = async () => {
-    setBusy(true);
-    try {
-      await api(`/api/admin/fixtures/${f.id}/tie`, { method: "PATCH", json: { scheduledDate: fromLocalInput(date), judge, groupLink: link } });
-      toast.success("Match updated");
-      onSaved();
-      onClose();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const shift = (days: number) => {
-    const d = new Date(date || f.scheduledDate);
-    d.setDate(d.getDate() + days);
-    setDate(toLocalInput(d.toISOString()));
-  };
-  return (
-    <Modal open onClose={onClose} title="Reschedule match">
-      <div className="space-y-4">
-        <div className="flex items-center justify-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200">
-          <ClubLogo club={f.homeClub} size={30} />
-          <span className="text-xs font-black truncate">{f.homeClub?.name}</span>
-          <span className="text-[10px] font-black text-slate-400">VS</span>
-          <span className="text-xs font-black truncate">{f.awayClub?.name}</span>
-          <ClubLogo club={f.awayClub} size={30} />
-        </div>
-        <label className="block space-y-1">
-          <span className="text-xs font-bold text-slate-700">Date & time</span>
-          <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-          <span className="flex flex-wrap gap-1.5 pt-1">
-            {[1, 2, 3, 7].map((d) => (
-              <button key={d} type="button" onClick={() => shift(d)} className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-600">
-                +{d} day{d > 1 ? "s" : ""}
-              </button>
-            ))}
-          </span>
-        </label>
-        <label className="block space-y-1">
-          <span className="text-xs font-bold text-slate-700">Judge (optional)</span>
-          <input value={judge} onChange={(e) => setJudge(e.target.value)} placeholder="Who checks this match" className={inputCls} />
-        </label>
-        <label className="block space-y-1">
-          <span className="text-xs font-bold text-slate-700">Captains&apos; group link (optional)</span>
-          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://m.me/j/…" className={inputCls} />
-          <span className="block text-[10px] text-slate-400">Only admins see this. It goes into the announcement text.</span>
-        </label>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={busy || !date}>
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save
-          </Button>
-        </div>
-      </div>
-    </Modal>
   );
 }
 

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { formatTime, formatDate } from "@/lib/utils";
 import { GamesList } from "@/components/competition/views";
+import { MatchCenter } from "@/components/competition/MatchCenter";
 
 export default function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -114,6 +115,9 @@ export default function MatchDetailPage({ params }: { params: Promise<{ id: stri
       </div>
     );
   }
+
+  // Club competition matches get the match centre (lineup, squads, captains' area).
+  if (match.stage) return <MatchCenter fixtureId={id} />;
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">

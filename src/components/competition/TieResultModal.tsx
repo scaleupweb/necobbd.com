@@ -31,7 +31,16 @@ export function TieResultModal({ fixtureId, lockReason, onClose, onDone }: { fix
           homeGoals: String(g.homeGoals ?? ""),
           awayGoals: String(g.awayGoals ?? ""),
         }));
-        setRows([...old, ...Array.from({ length: Math.max(0, d.playersPerTie - old.length) }, emptyRow)]);
+        // Nothing to edit: start from what the captains submitted, or from the lineup's pairs.
+        let start = old;
+        if (!prefill && d.fixture?.result?.status !== "APPROVED") {
+          if (d.claim?.games?.length)
+            start = d.claim.games.map((g: any) => ({ homePlayerId: g.homePlayerId, awayPlayerId: g.awayPlayerId, homeGoals: String(g.homeGoals), awayGoals: String(g.awayGoals) }));
+          else if (d.lineup?.rows?.length)
+            start = d.lineup.rows.filter((r: any) => r.homePlayerId && r.awayPlayerId).map((r: any) => ({ homePlayerId: r.homePlayerId, awayPlayerId: r.awayPlayerId, homeGoals: "", awayGoals: "" }));
+          if (d.claim?.notes) setNotes(d.claim.notes);
+        }
+        setRows([...start, ...Array.from({ length: Math.max(0, d.playersPerTie - start.length) }, emptyRow)]);
         if (prefill) {
           setMotm(prefill.result?.motmPlayerId || "");
           setDecider(prefill.result?.decider || "");
@@ -160,6 +169,17 @@ export function TieResultModal({ fixtureId, lockReason, onClose, onDone }: { fix
             {approved && <div className="mt-3 text-center text-[11px] font-bold text-emerald-300">✓ Approved</div>}
           </div>
 
+          {!approved && sheet.claim && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="font-black">Submitted with the match code{sheet.claim.by ? ` by ${sheet.claim.by}` : ""} · {new Date(sheet.claim.at).toLocaleString()}</div>
+              <div>The games below are filled in from it. Check the proof, fix anything wrong, then approve.</div>
+              {sheet.claim.proof && (
+                <a href={sheet.claim.proof} target="_blank" rel="noopener noreferrer nofollow" className="inline-block font-bold text-blue-700 underline break-all">
+                  Open proof
+                </a>
+              )}
+            </div>
+          )}
           {approved ? (
             <>
               <GamesList games={f.games} motmId={f.result.motmPlayerId} />
