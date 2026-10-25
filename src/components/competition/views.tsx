@@ -74,6 +74,7 @@ export function GroupTables({
                 <div className="text-sm font-black text-black">Group {t.name}</div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                   {t.played}/{t.total} matches played
+                  {t.byes ? <span className="ml-1.5 normal-case text-violet-700">· {t.byes} BYE{t.byes === 1 ? "" : "s"} (auto win)</span> : null}
                 </div>
               </div>
             </div>
@@ -163,6 +164,28 @@ export function GroupTables({
 
 /** One club-vs-club match as a compact card. */
 export function TieCard({ f, action, href }: { f: any; action?: ReactNode; href?: string }) {
+  if (f.walkover)
+    return (
+      <div className="rounded-2xl border-2 border-dashed border-violet-200 bg-violet-50/40 p-3 space-y-2">
+        <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+          <span className="inline-flex items-center gap-1">
+            {f.group && <GroupBadge name={f.group} size={16} />}
+            {f.matchNo ? `#${f.matchNo}` : ""}
+          </span>
+          <span className="text-violet-700">{formatDate(f.scheduledDate)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <ClubLogo club={f.homeClub} size={26} />
+          <span className="flex-1 truncate text-xs font-black text-black">{f.homeClub?.name}</span>
+          <span className="px-2 py-0.5 rounded-md bg-violet-600 text-white text-[10px] font-black">W/O</span>
+        </div>
+        <div className="flex items-center gap-2 opacity-70">
+          <span className="w-[26px] h-[26px] rounded-lg border-2 border-dashed border-violet-300 text-violet-600 text-[8px] font-black flex items-center justify-center">BYE</span>
+          <span className="flex-1 text-xs font-bold text-violet-700">BYE (empty slot)</span>
+        </div>
+        <div className="text-[10px] font-bold text-violet-700 text-center pt-1 border-t border-violet-100">Automatic win · 3 points</div>
+      </div>
+    );
   const done = f.result?.status === "APPROVED";
   const hp = f.result?.homeScore;
   const ap = f.result?.awayScore;
@@ -218,7 +241,7 @@ export function FixtureRounds({ fixtures, renderAction, linkMatches }: { fixture
   return (
     <div className="space-y-6">
       {[...blocks.entries()].map(([key, b]) => {
-        const played = b.list.filter((f) => f.result?.status === "APPROVED").length;
+        const played = b.list.filter((f) => f.result?.status === "APPROVED" || f.walkover).length;
         return (
           <section key={key} className="space-y-3">
             <div className="flex items-center gap-3">

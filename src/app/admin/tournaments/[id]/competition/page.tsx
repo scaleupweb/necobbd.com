@@ -23,9 +23,9 @@ import {
   Info,
   SlidersHorizontal,
 } from "lucide-react";
-import { api, Button, Empty, Notice, inputCls } from "@/components/admin/ui";
+import { api, Button, Empty, Notice, Toggle, inputCls } from "@/components/admin/ui";
 import { toast, confirmDialog } from "@/lib/feedback";
-import { autoBestPlaced, groupLetter, groupSizes, isPowerOfTwo, knockoutRoundName, knockoutSize, matchesPerClub, ordinal, sizesFor, suggestFormats, validateConfig } from "@/lib/competition";
+import { autoBestPlaced, byeSplit, groupLetter, groupSizes, isBye, isPowerOfTwo, knockoutRoundName, knockoutSize, matchesPerClub, ordinal, sizesFor, suggestFormats, validateConfig } from "@/lib/competition";
 import { Bracket, ClubLogo, FixtureRounds, GroupBadge, GroupTables } from "@/components/competition/views";
 import { TieResultModal } from "@/components/competition/TieResultModal";
 import { FixturesPanel } from "@/components/competition/FixtureTools";
@@ -133,9 +133,10 @@ export default function CompetitionAdminPage() {
 
       {comp.stage === "SETUP" && (
         <>
-          <SettingsPanel comp={comp} clubCount={clubs.length} busy={busy} onSave={(cfg) => run("save", () => api(`/api/admin/tournaments/${id}/competition`, { method: "PATCH", json: cfg }), "Format saved")} />
+          <SettingsPanel comp={comp} clubCount={clubs.length} maxSlots={tournament.maxParticipants} busy={busy} onSave={(cfg) => run("save", () => api(`/api/admin/tournaments/${id}/competition`, { method: "PATCH", json: cfg }), "Format saved")} />
           {comp.enabled && (
             <DrawPanel
+              byes={data.byes || 0}
               comp={comp}
               clubs={clubs}
               busy={busy}
@@ -244,8 +245,13 @@ export default function CompetitionAdminPage() {
 
 /* ---------------- Format settings ---------------- */
 
-function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount: number; busy: string; onSave: (cfg: any) => void }) {
-  const suggestions = useMemo(() => suggestFormats(clubCount), [clubCount]);
+function SettingsPanel({ comp, clubCount, maxSlots, busy, onSave }: { comp: any; clubCount: number; maxSlots?: number; busy: string; onSave: (cfg: any) => void }) {
+  // Empty slots can be filled with BYEs: clubs drawn against one win automatically.
+  const [byeOn, setByeOn] = useState<boolean>(!!comp.useByes);
+  const [slots, setSlots] = useState<number>(comp.slots || maxSlots || clubCount);
+  const byes = byeOn ? Math.max(0, slots - clubCount) : 0;
+  const entrants = clubCount + byes;
+  const suggestions = useMemo(() => suggestFormats(entrants), [entrants]);
   // Before the first save, start from the best fit for this many clubs (groups of 4–6, top 2 advance).
   const best = (() => {
     if (comp.enabled) return null;
@@ -269,8 +275,15 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
   const [custom, setCustom] = useState(() => !isPreset(cfg));
   const set = (k: string, v: any) => setCfg((c) => ({ ...c, [k]: v }));
 
-  const errors = clubCount >= 2 ? validateConfig({ ...comp, ...cfg }, clubCount) : [];
-  const sizes = clubCount >= 2 && cfg.groupCount >= 1 ? sizesFor(cfg, clubCount) : [];
+  const errors = clubCount >= 2 ? validateConfig({ ...comp, ...cfg, useByes: byeOn, slots }, clubCount) : [];
+  const sizes = clubCount >= 2 && cfg.groupCount >= 1 ? sizesFor(cfg, entrants) : [];
+  // Changing the BYEs changes how many places the groups need, so custom sizes are re-split.
+  const changeByes = (on: boolean, n: number) => {
+    setByeOn(on);
+    setSlots(n);
+    const total = clubCount + (on ? Math.max(0, n - clubCount) : 0);
+    setCfg((c) => (c.groupSizes.length ? { ...c, groupSizes: groupSizes(total, c.groupCount) } : c));
+  };
   const placed = sizes.reduce((a, b) => a + b, 0);
   const groupMatches = sizes.reduce((s, n) => s + ((n * (n - 1)) / 2) * cfg.groupLegs, 0);
   const koSize = knockoutSize(cfg);
@@ -279,9 +292,9 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
   const nextPlace = ordinal(cfg.advancePerGroup + 1);
 
   // Custom: changing the number of groups re-splits the clubs evenly; sizes can then be edited one by one.
-  const setGroupCount = (n: number) => setCfg((c) => ({ ...c, groupCount: n, groupSizes: groupSizes(clubCount, n), bestPlaced: Math.min(c.bestPlaced, Math.max(0, n - 1)) }));
+  const setGroupCount = (n: number) => setCfg((c) => ({ ...c, groupCount: n, groupSizes: groupSizes(entrants, n), bestPlaced: Math.min(c.bestPlaced, Math.max(0, n - 1)) }));
   const setAllSizes = (n: number) => setCfg((c) => ({ ...c, groupSizes: Array.from({ length: c.groupCount }, () => n) }));
-  const setSize = (i: number, n: number) => setCfg((c) => ({ ...c, groupSizes: (c.groupSizes.length ? c.groupSizes : groupSizes(clubCount, c.groupCount)).map((x, j) => (j === i ? n : x)) }));
+  const setSize = (i: number, n: number) => setCfg((c) => ({ ...c, groupSizes: (c.groupSizes.length ? c.groupSizes : groupSizes(entrants, c.groupCount)).map((x, j) => (j === i ? n : x)) }));
 
   return (
     <section className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">
@@ -290,9 +303,29 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
         <h2 className="text-sm font-black">1 · Competition format</h2>
       </div>
       <div className="p-5 space-y-5">
+        <div className={`rounded-2xl border p-4 flex flex-col md:flex-row md:items-center gap-4 ${byeOn ? "border-violet-300 bg-violet-50/60" : "border-slate-200 bg-slate-50/60"}`}>
+          <div className="flex-1 space-y-1">
+            <Toggle checked={byeOn} onChange={(v) => changeByes(v, slots)} label="Fill empty slots with BYEs" />
+            <p className="text-[11px] text-slate-600">
+              {byeOn ? (
+                <>
+                  <b>{slots}</b> slots − <b>{clubCount}</b> clubs = <b className="text-violet-700">{byes} BYE{byes === 1 ? "" : "s"}</b>. BYEs go into the groups at the draw; a club
+                  drawn against a BYE wins that match automatically (3 points) — pure luck.
+                </>
+              ) : (
+                <>Off: the groups are made from the {clubCount} approved clubs only (groups can be different sizes).</>
+              )}
+            </p>
+          </div>
+          {byeOn && (
+            <div className="w-44">
+              <Num label="Total slots" value={slots} onChange={(v) => changeByes(true, Math.max(clubCount, v))} min={clubCount} max={256} hint={maxSlots ? `Tournament max: ${maxSlots}` : undefined} />
+            </div>
+          )}
+        </div>
         <div className="space-y-2">
           <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Suggested for {clubCount} clubs
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Suggested for {clubCount} clubs{byes ? ` + ${byes} BYEs` : ""}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {suggestions.map((s) => {
@@ -318,7 +351,7 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
             <button
               onClick={() => {
                 setCustom(true);
-                setCfg((c) => ({ ...c, groupSizes: c.groupSizes.length ? c.groupSizes : groupSizes(clubCount, c.groupCount) }));
+                setCfg((c) => ({ ...c, groupSizes: c.groupSizes.length ? c.groupSizes : groupSizes(entrants, c.groupCount) }));
               }}
               className={`text-left p-3 rounded-2xl border-2 border-dashed transition-all ${custom ? "border-amber-500 bg-amber-50 shadow-lg" : "border-slate-300 hover:border-amber-400 bg-white"}`}
             >
@@ -337,7 +370,7 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
               <SlidersHorizontal className="w-4 h-4" /> Custom format
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Num label="Number of groups" value={cfg.groupCount} onChange={setGroupCount} min={1} max={Math.max(1, Math.min(26, Math.floor(clubCount / 2)))} />
+              <Num label="Number of groups" value={cfg.groupCount} onChange={setGroupCount} min={1} max={Math.max(1, Math.min(26, Math.floor(entrants / 2)))} />
               <Num
                 label="Clubs in every group"
                 value={sizes.length ? Math.round(placed / sizes.length) : 2}
@@ -362,12 +395,12 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Clubs per group</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${placed === clubCount ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-700"}`}>
-                    {placed === clubCount ? "✓ " : ""}
-                    {placed} / {clubCount} clubs
-                    {placed < clubCount ? ` · ${clubCount - placed} left` : placed > clubCount ? ` · ${placed - clubCount} too many` : ""}
+                  <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${placed === entrants ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-700"}`}>
+                    {placed === entrants ? "✓ " : ""}
+                    {placed} / {entrants} places
+                    {placed < entrants ? ` · ${entrants - placed} left` : placed > entrants ? ` · ${placed - entrants} too many` : ""}
                   </span>
-                  <button type="button" onClick={() => setCfg((c) => ({ ...c, groupSizes: groupSizes(clubCount, c.groupCount) }))} className="text-[11px] font-bold text-slate-600 hover:text-black underline">
+                  <button type="button" onClick={() => setCfg((c) => ({ ...c, groupSizes: groupSizes(entrants, c.groupCount) }))} className="text-[11px] font-bold text-slate-600 hover:text-black underline">
                     Split evenly
                   </button>
                 </div>
@@ -445,6 +478,8 @@ function SettingsPanel({ comp, clubCount, busy, onSave }: { comp: any; clubCount
               onSave({
                 ...cfg,
                 groupSizes: custom ? sizes : [],
+                useByes: byeOn,
+                slots,
                 firstMatchday: cfg.firstMatchday ? new Date(cfg.firstMatchday + "T18:00:00").toISOString() : "",
               })
             }
@@ -506,6 +541,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 /* ---------------- Group draw ---------------- */
 
 function DrawPanel({
+  byes,
   comp,
   clubs,
   busy,
@@ -519,6 +555,7 @@ function DrawPanel({
   onRandom: () => void;
   onSaveManual: (groups: { name: string; clubIds: string[] }[]) => void;
   onGenerate: () => void;
+  byes: number;
 }) {
   const byId = useMemo(() => new Map(clubs.map((c) => [c.id, c])), [clubs]);
   const [groups, setGroups] = useState<{ name: string; clubIds: string[] }[]>(comp.groups || []);
@@ -530,13 +567,35 @@ function DrawPanel({
   const placed = new Set(groups.flatMap((g) => g.clubIds));
   const unplaced = clubs.filter((c) => !placed.has(c.id));
 
-  const startManual = () => setGroups(Array.from({ length: comp.groupCount }, (_, i) => ({ name: groupLetter(i), clubIds: [] })));
+  // Arrange by hand: BYEs are placed evenly first, clubs then go where the admin drops them.
+  const startManual = () => {
+    let n = 0;
+    const split = byeSplit(sizesFor(comp, clubs.length + byes), byes);
+    setGroups(Array.from({ length: comp.groupCount }, (_, i) => ({ name: groupLetter(i), clubIds: Array.from({ length: split[i] || 0 }, () => `BYE-${++n}`) })));
+  };
   const moveTo = (clubId: string, gi: number) =>
     setGroups((gs) => gs.map((g, i) => ({ ...g, clubIds: i === gi ? [...g.clubIds.filter((x) => x !== clubId), clubId] : g.clubIds.filter((x) => x !== clubId) })));
   const removeFrom = (clubId: string) => setGroups((gs) => gs.map((g) => ({ ...g, clubIds: g.clubIds.filter((x) => x !== clubId) })));
 
   const chip = (clubId: string) => {
     const c = byId.get(clubId);
+    if (isBye(clubId))
+      return (
+        <div
+          key={clubId}
+          draggable
+          onDragStart={() => setDragging(clubId)}
+          onDragEnd={() => setDragging(null)}
+          onClick={() => setPicked(picked === clubId ? null : clubId)}
+          title="Empty slot: the club drawn against it wins automatically"
+          className={`flex items-center gap-2 px-2 py-1.5 rounded-xl border-2 border-dashed cursor-grab select-none ${
+            picked === clubId ? "border-amber-500 bg-amber-50" : "border-violet-300 bg-violet-50 text-violet-700"
+          }`}
+        >
+          <span className="w-[22px] h-[22px] rounded-lg bg-violet-200 text-violet-800 text-[9px] font-black flex items-center justify-center">BYE</span>
+          <span className="text-[11px] font-black flex-1">BYE · auto win</span>
+        </div>
+      );
     return (
       <div
         key={clubId}
@@ -613,7 +672,9 @@ function DrawPanel({
                       <GroupBadge name={g.name} size={26} />
                       <span className="text-xs font-black">Group {g.name}</span>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-500">{g.clubIds.length} clubs</span>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      {g.clubIds.filter((x) => !isBye(x)).length} clubs{g.clubIds.some(isBye) ? ` + ${g.clubIds.filter(isBye).length} BYE` : ""}
+                    </span>
                   </div>
                   <div className="space-y-1.5">{g.clubIds.map(chip)}</div>
                 </div>

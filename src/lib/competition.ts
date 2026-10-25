@@ -19,6 +19,10 @@ export type CompetitionConfig = {
   groupSizes?: number[];
   /** Extra qualifiers: the best clubs finishing just below the qualifying places (e.g. best 3rd-placed). */
   bestPlaced?: number;
+  /** Fill empty slots with BYEs: a club drawn against a BYE wins that match automatically (3 points). */
+  useByes?: boolean;
+  /** Total slots when BYEs are on (e.g. 64); BYEs = slots − approved clubs. */
+  slots?: number;
 };
 
 export type Group = { name: string; clubIds: string[] };
@@ -68,6 +72,23 @@ export function groupSizes(clubs: number, groups: number) {
 /** Matches one club plays in a group of `size` (every other club, once or twice). */
 export const matchesPerClub = (size: number, legs: number) => (size - 1) * legs;
 
+/** BYE placeholders in a group draw look like "BYE-1", "BYE-2"… */
+export const isBye = (id: string) => /^BYE-\d+$/.test(id);
+
+/** How many BYEs fill the empty slots (0 when BYEs are off or the slots are full). */
+export const byeCount = (c: Pick<CompetitionConfig, "useByes" | "slots">, clubs: number) => (c.useByes ? Math.max(0, Math.round(c.slots || 0) - clubs) : 0);
+
+/** Clubs + BYEs: everyone who takes a place in the groups. */
+export const entrantsFor = (c: Pick<CompetitionConfig, "useByes" | "slots">, clubs: number) => clubs + byeCount(c, clubs);
+
+/** BYEs per group, spread as evenly as possible (bigger groups first). */
+export function byeSplit(sizes: number[], byes: number) {
+  const out = sizes.map(() => 0);
+  const order = sizes.map((n, i) => [n, i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
+  for (let k = 0; k < byes; k++) out[order[k % order.length]]++;
+  return out;
+}
+
 /** The group sizes a config uses: the custom sizes when set, otherwise an even split. */
 export function sizesFor(c: Pick<CompetitionConfig, "groupCount" | "groupSizes">, clubs: number) {
   if (c.groupSizes?.length) return c.groupSizes;
@@ -114,16 +135,19 @@ export function suggestFormats(clubs: number): FormatOption[] {
 }
 
 /** Problems with a config for this many clubs (empty when it's usable). */
-export function validateConfig(c: CompetitionConfig, clubs: number): string[] {
+export function validateConfig(c: CompetitionConfig, realClubs: number): string[] {
   const errs: string[] = [];
-  if (clubs < 2) errs.push("At least 2 approved clubs are needed.");
+  if (realClubs < 2) errs.push("At least 2 approved clubs are needed.");
+  const byes = byeCount(c, realClubs);
+  if (c.useByes && (c.slots || 0) < realClubs) errs.push(`Slots (${c.slots || 0}) are fewer than the ${realClubs} approved clubs.`);
+  const clubs = realClubs + byes;
   if (c.groupCount < 1) errs.push("Choose at least 1 group.");
   if (c.groupCount > clubs / 2) errs.push(`${c.groupCount} groups is too many for ${clubs} clubs (each group needs 2+).`);
   const sizes = sizesFor(c, clubs);
   if (c.groupSizes?.length) {
     if (c.groupSizes.length !== c.groupCount) errs.push(`Set a size for each of the ${c.groupCount} groups.`);
     const total = c.groupSizes.reduce((a, b) => a + b, 0);
-    if (total !== clubs) errs.push(`The groups hold ${total} clubs but ${clubs} are approved. Make them add up to ${clubs}.`);
+    if (total !== clubs) errs.push(`The groups hold ${total} places but there are ${clubs} (${realClubs} clubs${byes ? ` + ${byes} BYEs` : ""}). Make them add up to ${clubs}.`);
     if (c.groupSizes.some((n) => n < 2)) errs.push("Each group needs at least 2 clubs.");
   }
   const minSize = Math.min(...sizes);
@@ -131,6 +155,12 @@ export function validateConfig(c: CompetitionConfig, clubs: number): string[] {
   if (c.advancePerGroup >= minSize) errs.push(`Only ${minSize - 1} club(s) can advance from the smallest group (${minSize} clubs).`);
   if (best && best >= c.groupCount) errs.push(`Best-placed qualifiers must be fewer than the number of groups (${c.groupCount}).`);
   else if (best && c.advancePerGroup + 1 > minSize) errs.push(`The smallest group has no ${ordinal(c.advancePerGroup + 1)} place for best-placed qualifiers.`);
+  if (byes) {
+    const split = byeSplit(sizes, byes);
+    const minReal = Math.min(...sizes.map((n, i) => n - split[i]));
+    if (minReal < c.advancePerGroup + 1)
+      errs.push(`With ${byes} BYEs a group would have only ${minReal} real club(s); ${c.advancePerGroup + 1} are needed so ${c.advancePerGroup} can go through. Use fewer slots or groups.`);
+  }
   const ko = knockoutSize(c);
   if (!isPowerOfTwo(ko)) {
     const hint = autoBestPlaced(c.groupCount, c.advancePerGroup);
@@ -154,9 +184,15 @@ export function shuffle<T>(items: T[], rand: () => number = Math.random) {
 }
 
 /** Random group draw: clubs dealt round-robin into groups A, B, C…, each filled up to its size. */
-export function drawGroups(clubIds: string[], groupCount: number, rand?: () => number, sizes?: number[]): Group[] {
-  const cap = sizes?.length === groupCount ? sizes : groupSizes(clubIds.length, groupCount);
+export function drawGroups(clubIds: string[], groupCount: number, rand?: () => number, sizes?: number[], byes = 0): Group[] {
+  const cap = sizes?.length === groupCount ? sizes : groupSizes(clubIds.length + byes, groupCount);
   const groups: Group[] = Array.from({ length: groupCount }, (_, i) => ({ name: groupLetter(i), clubIds: [] }));
+  // BYEs take their places first (spread evenly); clubs are then drawn at random into the rest,
+  // so which clubs meet a BYE is pure luck.
+  let b = 0;
+  byeSplit(cap, byes).forEach((n, i) => {
+    for (let k = 0; k < n; k++) groups[i].clubIds.push(`BYE-${++b}`);
+  });
   let g = 0;
   for (const id of shuffle(clubIds, rand)) {
     let tries = 0;
@@ -231,10 +267,21 @@ export type StandingRow = {
 };
 
 /** Group table, sorted: league points → internal point difference → goal difference → goals scored. */
-export function standings(clubIds: string[], results: TieResult[]): StandingRow[] {
+export function standings(clubIds: string[], results: TieResult[], walkovers: string[] = []): StandingRow[] {
   const rows = new Map<string, StandingRow>(
-    clubIds.map((id) => [id, { clubId: id, played: 0, won: 0, drawn: 0, lost: 0, pointsFor: 0, pointsAgainst: 0, goalsFor: 0, goalsAgainst: 0, points: 0, form: [] }])
+    clubIds
+      .filter((id) => !isBye(id))
+      .map((id) => [id, { clubId: id, played: 0, won: 0, drawn: 0, lost: 0, pointsFor: 0, pointsAgainst: 0, goalsFor: 0, goalsAgainst: 0, points: 0, form: [] }])
   );
+  // A match against a BYE: automatic win, 3 points, no game points or goals.
+  for (const id of walkovers) {
+    const r = rows.get(id);
+    if (!r) continue;
+    r.played++;
+    r.won++;
+    r.points += TIE_WIN_POINTS;
+    r.form.push("W");
+  }
   for (const r of results) {
     const h = rows.get(r.homeClubId);
     const a = rows.get(r.awayClubId);

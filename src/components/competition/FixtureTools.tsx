@@ -13,7 +13,7 @@ import { downloadCanvas } from "@/components/club-hub/canvas";
 type Status = "ALL" | "ONGOING" | "UPCOMING" | "FINISHED";
 
 export function fixtureState(f: any): Exclude<Status, "ALL"> {
-  if (f.result?.status === "APPROVED") return "FINISHED";
+  if (f.result?.status === "APPROVED" || f.walkover) return "FINISHED";
   if (f.status === "LIVE" || new Date(f.scheduledDate).getTime() <= Date.now()) return "ONGOING";
   return "UPCOMING";
 }
@@ -86,6 +86,7 @@ export function FixturesPanel({ data, onOpenTie, reload }: { data: any; onOpenTi
         <FixtureRounds
           fixtures={shown}
           renderAction={(f) => {
+            if (f.walkover) return null;
             const done = f.result?.status === "APPROVED";
             return (
               <div className="space-y-1.5 mt-1">
@@ -215,11 +216,11 @@ function ScheduleModal({ f, onClose, onSaved }: { f: any; onClose: () => void; o
 /* ---------- Announcement text ---------- */
 
 function AnnouncementModal({ fixtures, tournament, onClose }: { fixtures: any[]; tournament: any; onClose: () => void }) {
-  const notPlayed = fixtures.filter((f) => f.result?.status !== "APPROVED");
+  const notPlayed = fixtures.filter((f) => f.result?.status !== "APPROVED" && !f.walkover);
   const lists = {
     ONGOING: notPlayed.filter((f) => fixtureState(f) === "ONGOING"),
     UPCOMING: notPlayed.filter((f) => fixtureState(f) === "UPCOMING"),
-    ALL: fixtures,
+    ALL: fixtures.filter((f) => !f.walkover),
   };
   const [tab, setTab] = useState<keyof typeof lists>(lists.ONGOING.length ? "ONGOING" : "UPCOMING");
   const list = lists[tab];

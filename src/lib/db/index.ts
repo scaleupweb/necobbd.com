@@ -28,6 +28,8 @@ import { calculateNewRating, updateFormHistory } from "../ranking/engine";
 import { calculatePlayerMarketValue } from "../valuation/engine";
 import {
   bestAtPlace,
+  byeCount,
+  isBye,
   DEFAULT_COMPETITION,
   drawGroups,
   firstKnockoutPairs,
@@ -318,7 +320,7 @@ async function shapeFixtures(list: any[]) {
 
 async function tournamentProgress(ids: string[]) {
   const agg = await Fixture.aggregate([
-    { $match: { tournamentId: { $in: ids.map(oid) } } },
+    { $match: { tournamentId: { $in: ids.map(oid) }, walkover: { $ne: true } } },
     {
       $group: {
         _id: "$tournamentId",
@@ -739,7 +741,7 @@ export const db = {
   // ----- Clubs -----
   async getClubs(filter: { status?: string; search?: string } = {}) {
     await connectDB();
-    const q: any = {};
+    const q: any = { walkover: { $ne: true } };
     if (filter.status && filter.status !== "ALL") q.status = filter.status;
     if (filter.search) q.name = new RegExp(escapeRegex(filter.search), "i");
     const clubs = await Club.find(q).sort({ points: -1, name: 1 }).lean();
@@ -1152,7 +1154,7 @@ export const db = {
       if (comp.stage === "COMPLETED") rollbackLock = "The tournament is finished";
       else if (r.stage === "GROUP" && hasKnockout) rollbackLock = "The knockout was already drawn from the group tables";
       else if (r.stage === "KNOCKOUT" && (r.roundNo ?? 0) < lastKoRound) rollbackLock = "The next knockout round was already drawn";
-      return { ...f, judge: r.judge || "", groupLink: r.groupLink || "", rollbackLock };
+      return { ...f, judge: r.judge || "", groupLink: r.groupLink || "", rollbackLock: r.walkover ? "" : rollbackLock, walkover: !!r.walkover };
     });
 
     const tieOf = (f: any) =>
@@ -1160,21 +1162,29 @@ export const db = {
         ? { homeClubId: String(f.homeClubId), awayClubId: String(f.awayClubId), homePoints: f.result.homeScore ?? 0, awayPoints: f.result.awayScore ?? 0, homeGoals: f.result.homeGoals ?? 0, awayGoals: f.result.awayGoals ?? 0, decider: f.result.decider ? String(f.result.decider) : undefined }
         : null;
 
+    // Matches against a BYE are walkovers (no result to enter). They count from their matchday on,
+    // or as soon as every real group match is done.
+    const groupFixtures = raw.filter((f: any) => f.stage === "GROUP" && !f.walkover);
+    const groupsDone = groupFixtures.length > 0 && groupFixtures.every((f: any) => f.result?.status === "APPROVED");
+    const now = Date.now();
+    const walkoverDue = (f: any) => f.walkover && (groupsDone || new Date(f.scheduledDate).getTime() <= now);
+
     // Group tables
     const tables = (comp.groups || []).map((g) => {
-      const results = raw.filter((f: any) => f.stage === "GROUP" && f.group === g.name).map(tieOf).filter(Boolean) as any[];
-      const groupFixtures = raw.filter((f: any) => f.stage === "GROUP" && f.group === g.name);
+      const inGroup = raw.filter((f: any) => f.stage === "GROUP" && f.group === g.name);
+      const results = inGroup.map(tieOf).filter(Boolean) as any[];
+      const walkovers = inGroup.filter(walkoverDue).map((f: any) => String(f.homeClubId));
+      const real = inGroup.filter((f: any) => !f.walkover);
       return {
         name: g.name,
-        rows: standings(g.clubIds, results).map((r) => ({ ...r, club: clubById.get(r.clubId) || null })),
-        played: groupFixtures.filter((f: any) => f.result?.status === "APPROVED").length,
-        total: groupFixtures.length,
+        byes: g.clubIds.filter(isBye).length,
+        rows: standings(g.clubIds, results, walkovers).map((r) => ({ ...r, club: clubById.get(r.clubId) || null })),
+        played: real.filter((f: any) => f.result?.status === "APPROVED").length,
+        total: real.length,
       };
     });
     // Clubs currently holding a best-placed qualifying spot (e.g. best 3rd-placed).
     const bestPlacedIds = comp.bestPlaced ? bestAtPlace(tables, comp.advancePerGroup, comp.bestPlaced).map((x) => x.row.clubId) : [];
-    const groupFixtures = raw.filter((f: any) => f.stage === "GROUP");
-    const groupsDone = groupFixtures.length > 0 && groupFixtures.every((f: any) => f.result?.status === "APPROVED");
 
     // Knockout rounds and ties
     const koRaw = raw.filter((f: any) => f.stage === "KNOCKOUT");
@@ -1214,9 +1224,10 @@ export const db = {
     else if (comp.stage === "KNOCKOUT") nextAction = last?.done ? (last.ties.length === 1 ? "FINISH" : "NEXT_ROUND") : "PLAY_KNOCKOUT";
 
     return {
-      tournament: { id: String(t._id), name: t.name, slug: t.slug, status: t.status, banner: t.banner || "", logo: t.logo || "", season: t.season || "", winnerClubId: t.winnerClubId ? String(t.winnerClubId) : undefined },
+      tournament: { id: String(t._id), name: t.name, slug: t.slug, status: t.status, banner: t.banner || "", logo: t.logo || "", season: t.season || "", maxParticipants: t.maxParticipants || 0, winnerClubId: t.winnerClubId ? String(t.winnerClubId) : undefined },
       competition: comp,
       clubs,
+      byes: byeCount(comp, clubs.length),
       tables,
       bestPlacedIds,
       fixtures,
@@ -1248,12 +1259,18 @@ export const db = {
       firstMatchday: cfg.firstMatchday !== undefined ? cfg.firstMatchday || undefined : cur.firstMatchday,
       groupSizes: Array.isArray(cfg.groupSizes) ? cfg.groupSizes.map((n) => Math.max(0, Math.round(Number(n) || 0))).slice(0, 32) : cur.groupSizes,
       bestPlaced: cfg.bestPlaced !== undefined ? Math.max(0, Math.round(Number(cfg.bestPlaced) || 0)) : cur.bestPlaced || 0,
+      useByes: cfg.useByes !== undefined ? !!cfg.useByes : !!cur.useByes,
+      slots: cfg.slots !== undefined ? Math.max(0, Math.min(256, Math.round(Number(cfg.slots) || 0))) : cur.slots || t.maxParticipants || 0,
     };
     if (!next.groupSizes?.length) delete next.groupSizes;
     const errs = validateConfig(next, clubs);
     if (errs.length) throw new ServiceError(errs[0], 400);
     // Changing the number or sizes of groups invalidates an existing draw.
-    if (cur.groups?.length && (cur.groupCount !== next.groupCount || JSON.stringify(cur.groupSizes || []) !== JSON.stringify(next.groupSizes || []))) next.groups = [];
+    if (
+      cur.groups?.length &&
+      (cur.groupCount !== next.groupCount || JSON.stringify(cur.groupSizes || []) !== JSON.stringify(next.groupSizes || []) || byeCount(cur, clubs) !== byeCount(next, clubs))
+    )
+      next.groups = [];
     t.competition = next;
     t.markModified("competition");
     await t.save();
@@ -1272,18 +1289,22 @@ export const db = {
     const errs = validateConfig(comp, ids.length);
     if (errs.length) throw new ServiceError(errs[0], 400);
     let groups: Group[];
+    const byes = byeCount(comp, ids.length);
     if (manual) {
-      const placed = manual.flatMap((g) => g.clubIds);
+      const all = manual.flatMap((g) => g.clubIds);
+      const placed = all.filter((id) => !isBye(id));
+      const placedByes = all.filter(isBye);
       if (manual.length !== comp.groupCount) throw new ServiceError(`There must be ${comp.groupCount} groups`, 400);
       if (placed.length !== ids.length || new Set(placed).size !== placed.length || placed.some((id) => !ids.includes(id))) {
         throw new ServiceError("Every approved club must be in exactly one group", 400);
       }
-      if (manual.some((g) => g.clubIds.length < 2)) throw new ServiceError("Each group needs at least 2 clubs", 400);
+      if (placedByes.length !== byes || new Set(placedByes).size !== placedByes.length) throw new ServiceError(`All ${byes} BYEs must be placed in the groups`, 400);
+      if (manual.some((g) => g.clubIds.filter((id) => !isBye(id)).length < 2)) throw new ServiceError("Each group needs at least 2 real clubs", 400);
       const need = comp.advancePerGroup + 1;
-      if (manual.some((g) => g.clubIds.length < need)) throw new ServiceError(`Each group needs at least ${need} clubs for this format`, 400);
+      if (manual.some((g) => g.clubIds.filter((id) => !isBye(id)).length < need)) throw new ServiceError(`Each group needs at least ${need} real clubs for this format`, 400);
       groups = manual.map((g, i) => ({ name: groupLetter(i), clubIds: g.clubIds }));
     } else {
-      groups = drawGroups(ids, comp.groupCount, undefined, comp.groupSizes);
+      groups = drawGroups(ids, comp.groupCount, undefined, comp.groupSizes, byes);
     }
     t.competition = { ...comp, groups, drawnAt: new Date().toISOString() };
     t.markModified("competition");
@@ -1309,6 +1330,24 @@ export const db = {
       for (const { g, rounds } of schedules) {
         for (const [home, away] of rounds[r] || []) {
           const legNo = comp.groupLegs === 2 && r >= rounds.length / 2 ? 2 : 1;
+          if (isBye(home) && isBye(away)) continue;
+          if (isBye(home) || isBye(away)) {
+            // Drawn against a BYE: automatic win, nothing to play.
+            docs.push({
+              tournamentId,
+              stage: "GROUP",
+              group: g.name,
+              roundNo: r,
+              leg: legNo,
+              matchNo: matchNo++,
+              round: `Group ${g.name} · Round ${r + 1}`,
+              scheduledDate: when,
+              homeClubId: isBye(home) ? away : home,
+              walkover: true,
+              status: "FINISHED",
+            });
+            continue;
+          }
           docs.push({
             tournamentId,
             stage: "GROUP",
@@ -1345,6 +1384,7 @@ export const db = {
     await connectDB();
     const f = await Fixture.findById(fixtureId);
     if (!f || !f.stage) throw new ServiceError("Competition match not found", 404);
+    if (f.walkover) throw new ServiceError("This is a BYE (automatic win) — there is nothing to schedule", 409);
     if (data.scheduledDate !== undefined) {
       const d = new Date(data.scheduledDate);
       if (isNaN(d.getTime())) throw new ServiceError("Invalid date", 400);
@@ -1666,7 +1706,7 @@ export const db = {
 
   async _tournamentDetail(t: any) {
     const prog = await tournamentProgress([String(t._id)]);
-    const fixtures = await shapeFixtures(await Fixture.find({ tournamentId: t._id }).sort({ scheduledDate: 1 }).lean());
+    const fixtures = await shapeFixtures(await Fixture.find({ tournamentId: t._id, walkover: { $ne: true } }).sort({ scheduledDate: 1 }).lean());
     const active = (t.participants || []).filter((p: any) => p.status !== "REMOVED");
     const players = await Player.find({ userId: { $in: active.map((p: any) => p.userId) } }).lean();
     const playerClubs = await clubMap(players.map((p: any) => p.clubId));
@@ -3218,7 +3258,7 @@ export const db = {
     const [players, clubs, finished, live, activeTourn, refs, transfers, goals, users, pendingResults] = await Promise.all([
       Player.countDocuments({}),
       Club.countDocuments({ status: "ACTIVE" }),
-      Fixture.countDocuments({ status: "FINISHED" }),
+      Fixture.countDocuments({ status: "FINISHED", walkover: { $ne: true } }),
       Fixture.countDocuments({ status: "LIVE" }),
       Tournament.countDocuments({ status: { $in: ["ONGOING", "REGISTRATION_OPEN"] } }),
       Referee.countDocuments({}),
