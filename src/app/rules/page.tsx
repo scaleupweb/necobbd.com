@@ -5,6 +5,11 @@ import { RANKING_FORMULA_CONFIG } from "@/lib/constants";
 import { SQUAD_LIMIT, CONTRACT_DAYS, FREEZE_DAYS } from "@/lib/squad";
 import { sanitizeRichText, isRichTextEmpty } from "@/lib/rich-text";
 import { RULEBOOK, QUICK_FACTS, RuleItem, RuleSection } from "@/lib/rulebook";
+import { RULEBOOK_BN, QUICK_FACTS_BN } from "@/lib/rulebook-bn";
+import Link from "next/link";
+import { Hind_Siliguri } from "next/font/google";
+
+const bangla = Hind_Siliguri({ subsets: ["bengali", "latin"], weight: ["400", "500", "600", "700"], display: "swap" });
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Rules", description: "Official match rules, fair play and tournament regulations." };
@@ -54,7 +59,14 @@ function Item({ item, n }: { item: RuleItem; n: string }) {
   );
 }
 
-export default async function RulesPage() {
+export default async function RulesPage({ searchParams }: { searchParams: Promise<{ lang?: string }> }) {
+  const { lang } = await searchParams;
+  const en = lang === "en";
+  const book = en ? RULEBOOK : RULEBOOK_BN;
+  const facts = en ? QUICK_FACTS : QUICK_FACTS_BN;
+  const T = en
+    ? { badge: "Official rulebook", title: "Rules", sub: "& Fair Play", lead: "How official matches are played, timed, proven and judged. Captains and players are expected to know these rules before every matchday.", contents: "Contents", section: "Section", foot: "may update these rules; the version on this page is the one in force. Match operations and admins decide anything the rules don't cover." }
+    : { badge: "অফিসিয়াল নিয়মাবলি", title: "নিয়মাবলি", sub: "ও ফেয়ার প্লে", lead: "অফিসিয়াল ম্যাচ কীভাবে খেলা হবে, সময়, প্রমাণ ও বিচার — সব এখানে। প্রতিটি ম্যাচডে-র আগে ক্যাপ্টেন ও প্লেয়ারদের এই নিয়মগুলো জানা বাধ্যতামূলক।", contents: "সূচিপত্র", section: "সেকশন", foot: "অ্যাডমিনরা এই নিয়ম পরিবর্তন করতে পারে; এই পেজের সংস্করণটিই কার্যকর। নিয়মে না থাকা যেকোনো বিষয়ে ম্যাচ অপারেশনস ও অ্যাডমিনদের সিদ্ধান্ত চূড়ান্ত।" };
   const { pages, brand } = await getSiteSettings();
   // Rulebook from the admin rich-text editor; older plain-text rules are the fallback; else the built-in rulebook.
   const html = isRichTextEmpty(pages.rulesHtml || "") ? "" : sanitizeRichText(pages.rulesHtml);
@@ -62,22 +74,34 @@ export default async function RulesPage() {
   const site = brand.siteName.trim();
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 ${en ? "" : `${bangla.className} rules-bn`}`}>
       {/* Header */}
       <section className="relative overflow-hidden rounded-[2rem] bg-[#0B0C0F] text-white p-6 sm:p-10">
         <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_at_100%_0%,rgba(245,158,11,0.3),transparent_50%),radial-gradient(ellipse_at_0%_100%,rgba(99,102,241,0.2),transparent_45%)]" />
         <div className="relative space-y-3">
-          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-amber-400">
-            <Scale className="w-4 h-4" /> Official rulebook
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400">
+              <Scale className="w-4 h-4" /> {T.badge}
+            </div>
+            {!html && !custom && (
+              <div className="inline-flex p-1 rounded-xl bg-white/10 text-xs font-bold">
+                <Link href="/rules" className={`px-3 py-1.5 rounded-lg ${!en ? "bg-amber-500 text-black" : "text-white/70 hover:text-white"}`}>
+                  বাংলা
+                </Link>
+                <Link href="/rules?lang=en" className={`px-3 py-1.5 rounded-lg ${en ? "bg-amber-500 text-black" : "text-white/70 hover:text-white"}`}>
+                  English
+                </Link>
+              </div>
+            )}
           </div>
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight">
-            {site} Rules <span className="text-white/40">&amp; Fair Play</span>
+          <h1 className="text-3xl sm:text-5xl font-bold tracking-tight leading-tight">
+            {site} {T.title} <span className="text-white/40">{T.sub}</span>
           </h1>
-          <p className="text-sm text-white/60 max-w-2xl">How official matches are played, timed, proven and judged. Captains and players are expected to know these rules before every matchday.</p>
+          <p className="text-sm sm:text-base text-white/70 max-w-2xl leading-relaxed">{T.lead}</p>
         </div>
         {!html && !custom && (
           <div className="relative mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            {QUICK_FACTS.map((q) => (
+            {facts.map((q) => (
               <div key={q.label} className="rounded-2xl bg-white/5 border border-white/10 px-3 py-2.5">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-white/50">{q.label}</div>
                 <div className="text-lg font-black text-amber-400">{q.value}</div>
@@ -107,9 +131,9 @@ export default async function RulesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-start">
           {/* Contents */}
           <nav className="lg:sticky lg:top-24 rounded-3xl bg-white border border-slate-200 p-4 shadow-sm">
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Contents</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">{T.contents}</div>
             <ol className="grid grid-cols-2 lg:grid-cols-1 gap-0.5">
-              {RULEBOOK.map((s, i) => (
+              {book.map((s, i) => (
                 <li key={s.id}>
                   <a href={`#${s.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-black">
                     <span className="w-5 text-[10px] font-mono text-amber-600">{i + 1}.</span>
@@ -121,8 +145,8 @@ export default async function RulesPage() {
           </nav>
 
           {/* Sections */}
-          <div className="space-y-5 text-slate-700 text-[13px] sm:text-sm leading-relaxed">
-            {RULEBOOK.map((s, si) => {
+          <div className={`space-y-5 text-slate-700 leading-relaxed ${en ? "text-[13px] sm:text-sm" : "text-[14px] sm:text-[15px]"}`}>
+            {book.map((s, si) => {
               const Icon = ICONS[s.icon];
               let n = 0;
               return (
@@ -132,7 +156,9 @@ export default async function RulesPage() {
                       <Icon className="w-5 h-5" />
                     </span>
                     <div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Section {si + 1}</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-600">
+                        {T.section} {si + 1}
+                      </div>
                       <h2 className="text-base sm:text-lg font-black text-slate-950">{s.title}</h2>
                     </div>
                   </div>
@@ -145,7 +171,7 @@ export default async function RulesPage() {
                       return (
                         <div key={bi} className={tone ? `rounded-2xl border p-4 space-y-3 ${tone}` : "space-y-3"}>
                           {b.title && (
-                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-1.5">
+                            <h3 className={`font-bold text-slate-900 flex items-center gap-1.5 ${en ? "text-xs uppercase tracking-widest" : "text-[15px]"}`}>
                               {b.tone && <ToneIcon className="w-4 h-4" />} {b.title}
                             </h3>
                           )}
@@ -175,6 +201,7 @@ export default async function RulesPage() {
                               </table>
                             </div>
                           )}
+                          {b.note && <p className="text-xs text-slate-500">ℹ️ {b.note}</p>}
                           {b.items && (
                             <ul className="space-y-2.5">
                               {b.items.map((it, ii) => (
@@ -190,7 +217,7 @@ export default async function RulesPage() {
               );
             })}
             <p className="text-center text-[11px] text-slate-400">
-              The {site} admins may update these rules; the version on this page is the one in force. Match operations and admins decide anything the rules don&apos;t cover.
+              {en ? `The ${site} admins ${T.foot}` : T.foot}
             </p>
           </div>
         </div>

@@ -416,3 +416,14 @@
 .rich-content .ProseMirror-selectednode img, .rich-content img.ProseMirror-selectednode { outline: 3px solid #c79a3b; }
 .rich-content.ProseMirror p.is-editor-empty:first-child::before,
 .rich-content[data-placeholder]:has(> p:only-child:empty)::before { content: attr(data-placeholder); color: #94a3b8; float: left; height: 0; pointer-events: none; }
+
+/* Bangla rulebook: headings use the Bangla font too (the heading font has no Bengali letters). */
+.rules-bn h1,
+.rules-bn h2,
+.rules-bn h3 {
+  font-family: inherit;
+}
+/* Letter-spacing splits Bengali conjuncts apart. */
+.rules-bn * {
+  letter-spacing: normal !important;
+}
