@@ -1219,6 +1219,11 @@ export const db = {
       return {
         name: g.name,
         byes: g.clubIds.filter(isBye).length,
+        // BYE rows shown at the bottom of the table: every walkover so far is a "loss" for a BYE.
+        byeRows: g.clubIds.filter(isBye).map((id, i, all) => {
+          const lost = Math.floor(walkovers.length / all.length) + (i < walkovers.length % all.length ? 1 : 0);
+          return { id, played: lost, lost };
+        }),
         rows: standings(g.clubIds, results, walkovers).map((r) => ({ ...r, club: clubById.get(r.clubId) || null })),
         played: real.filter((f: any) => f.result?.status === "APPROVED").length,
         total: real.length,

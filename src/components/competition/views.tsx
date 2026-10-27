@@ -143,6 +143,30 @@ export function GroupTables({
                     </tr>
                   );
                 })}
+                {(t.byeRows || []).map((b: any) => (
+                  <tr key={b.id} className="border-t border-dashed border-violet-200 bg-violet-50/40 text-violet-700">
+                    <td className="pl-4 pr-1 py-2.5 font-mono font-black text-violet-300">–</td>
+                    <td className="px-2 py-2.5">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-lg border-2 border-dashed border-violet-300 text-[7px] font-black flex items-center justify-center shrink-0">BYE</span>
+                        <span className="min-w-0">
+                          <span className="block font-black">BYE</span>
+                          <span className="block text-[9px] font-bold text-violet-500 truncate">Empty slot · opponents win automatically</span>
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-1.5 text-center font-mono">{b.played}</td>
+                    <td className="px-1.5 text-center font-mono">0</td>
+                    <td className="px-1.5 text-center font-mono">0</td>
+                    <td className="px-1.5 text-center font-mono">{b.lost}</td>
+                    <td className="px-1.5 text-center font-mono hidden sm:table-cell">–</td>
+                    <td className="px-1.5 text-center font-mono">–</td>
+                    <td className="px-1.5 text-center hidden md:table-cell text-[10px] font-bold">W/O</td>
+                    <td className="pl-1.5 pr-4 text-center">
+                      <span className="inline-block min-w-[28px] px-1.5 py-0.5 rounded-md border border-dashed border-violet-300 font-mono font-black">0</span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

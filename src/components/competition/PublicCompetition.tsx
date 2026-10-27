@@ -64,6 +64,12 @@ export function PublicCompetition({ data }: { data: any }) {
                     <span className="text-[11px] font-bold truncate">{r.club?.name}</span>
                   </div>
                 ))}
+                {(g.byeRows || []).map((b: any) => (
+                  <div key={b.id} className="flex items-center gap-2 text-violet-700">
+                    <span className="w-[22px] h-[22px] rounded-lg border-2 border-dashed border-violet-300 text-[7px] font-black flex items-center justify-center">BYE</span>
+                    <span className="text-[11px] font-black">BYE · auto win</span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
